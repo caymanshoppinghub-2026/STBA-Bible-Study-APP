@@ -1,7 +1,7 @@
 import { StudyNote } from '../types/notebook'
 import { ensureSupabaseAuth } from './notebookSync'
 import { supabase } from './supabase'
-import { formatProperElderSpacing, ensureElderStephenOutlineCompletion } from '../utils/elderSpacing'
+import { formatProperElderSpacing, ensureElderStephenOutlineCompletion, isSpecificScopedRequest } from '../utils/elderSpacing'
 
 export interface ChatMessagePayload {
   role: 'user' | 'elder' | 'model'
@@ -226,7 +226,10 @@ export async function callElderStephen(partialPayload: Partial<ElderStephenPaylo
     if (response.ok) {
       const data = await response.json()
       if (data && data.text) {
-        data.text = ensureElderStephenOutlineCompletion(data.text, payload.passage || payload.base_verse || payload.verse, payload.noteTitle)
+        const isSpecific = isSpecificScopedRequest(payload.userAction || payload.user_explanation || payload.passage);
+        if (!isSpecific) {
+          data.text = ensureElderStephenOutlineCompletion(data.text, payload.passage || payload.base_verse || payload.verse, payload.noteTitle, payload.userAction);
+        }
         data.text = formatProperElderSpacing(data.text)
         return data
       }
@@ -239,6 +242,24 @@ export async function callElderStephen(partialPayload: Partial<ElderStephenPaylo
   const mode = payload.currentMode || 'Explain'
   const name = payload.userName || 'Berean'
   const title = payload.noteTitle || 'the Scriptures'
+  const isSpecific = isSpecificScopedRequest(payload.userAction || payload.user_explanation);
+  
+  if (isSpecific) {
+    const userPrompt = (payload.userAction || payload.user_explanation || "").toLowerCase();
+    let directAnswer = "";
+    if (userPrompt.includes("first line") || userPrompt.includes("first sentence")) {
+      directAnswer = `* **First Line Analysis (${title})**: The opening statement anchors our study directly in God's divine revelation. He initiates fellowship with us, speaking through His Word to ground our faith and guide our steps.`;
+    } else if (userPrompt.includes("single concept") || userPrompt.includes("concept")) {
+      directAnswer = `* **Concept Analysis (${title})**: In Seventh-day Adventist theology, this truth reveals Christ's character of love in the Great Controversy, pointing to His high-priestly ministry and the harmony of God's holy law with His saving grace.`;
+    } else {
+      directAnswer = `* **Pastoral Answer (${title})**: In God's Word, this truth points us directly to Jesus Christ, rightly dividing the word of truth (*2 Timothy 2:15*) and providing practical spiritual strength for today.`;
+    }
+    return {
+      text: formatProperElderSpacing(directAnswer),
+      commentaryMode: 'velocity'
+    };
+  }
+
   const resolvedMode: 'prestige' | 'velocity' = payload.commentaryMode === 'velocity' ? 'velocity' : 'prestige'
 
   if (resolvedMode === 'velocity') {

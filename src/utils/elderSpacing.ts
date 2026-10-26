@@ -59,6 +59,23 @@ export function extractScriptureReference(text: string): string | null {
 }
 
 /**
+ * Detects if the user requested a specific, narrow, or bounded task
+ * (e.g. analyzing just the first line, detailing a single concept, or requesting exact info without extra content).
+ */
+export function isSpecificScopedRequest(text?: string): boolean {
+  if (!text || typeof text !== "string") return false;
+  const t = text.toLowerCase().trim();
+  const patterns = [
+    /\b(just (the )?(first|1st|second|2nd|last|opening|closing) (line|sentence|verse|phrase|part)|only (the )?(first|1st|second|2nd|last) (line|sentence|verse|phrase)|analyze (just|only) (the )?(first|1st|second|2nd|last)?\s*(line|sentence|verse|phrase))\b/i,
+    /\b(detail a single concept|detail (this|the) concept|single concept|single idea|explain (only|just) (this|the) concept|focus (only|solely|just) on)\b/i,
+    /\b(without extra (content|information|headers|sections|outline)|no extra (content|information|headers|sections)|exact information (requested)?|only answer (the|this)|just answer|just tell me)\b/i,
+    /\b(in one sentence|in 1 sentence|in two sentences|in 2 sentences|in one paragraph|in 1 paragraph|briefly|concisely|short answer|quick answer)\b/i,
+    /\b(what does .* mean|meaning of .* only|define .* only|translate .* only)\b/i
+  ];
+  return patterns.some((p) => p.test(t));
+}
+
+/**
  * Ensures Elder Stephen Exegetical Outlines (6-part / 5-numbered structure) are completely finished.
  * Specifically checks if Point 5 ("### 5. Theological Meaning & Application") was cut off or missing,
  * repairs any truncated citations/sentences at the end of Point 4, and appends a complete,
@@ -67,10 +84,16 @@ export function extractScriptureReference(text: string): string | null {
 export function ensureElderStephenOutlineCompletion(
   raw: string,
   passageRef?: string,
-  docTitle?: string
+  docTitle?: string,
+  userPrompt?: string
 ): string {
   if (!raw || typeof raw !== "string") return raw;
   let text = raw.trim();
+
+  // If the user made a specific/bounded request, do NOT force outline completion or append Section 5
+  if (userPrompt && isSpecificScopedRequest(userPrompt)) {
+    return text;
+  }
 
   // Check if this is an Elder Stephen structured outline (has ### 1. / ### 2. / ### 3. / ### 4.)
   const hasNumberedOutline =

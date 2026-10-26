@@ -468,23 +468,6 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
                               No detailed content loaded for this day.
                             </p>
                           )}
-
-                          {/* Ellen G. White Notes (Lato font & clean structure) */}
-                          {egwParagraphs && egwParagraphs.length > 0 && (
-                            <div className={`mt-4 p-4 rounded-xl border ${
-                              isLight ? "bg-amber-50/70 border-amber-300/80 text-amber-950" : "bg-neutral-950/85 border-amber-500/25 text-amber-200/90"
-                            } space-y-2 text-left`}>
-                              <div className="flex items-center gap-2 text-xs font-mono font-bold uppercase tracking-wider text-amber-500">
-                                <Quote size={13} />
-                                <span>Ellen G. White Notes</span>
-                              </div>
-                              {egwParagraphs.map((note, nIdx) => (
-                                <p key={nIdx} className="text-sm italic leading-relaxed border-l-2 border-amber-500/50 pl-3">
-                                  {note}
-                                </p>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       );
                     })()}

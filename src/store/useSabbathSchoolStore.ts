@@ -18,6 +18,7 @@ import {
 } from "../api/sabbathSchoolApi";
 import { askElderStephen, ElderStephenMessage } from "../api/elderStephenApi";
 import { notifyLiveSectionUpdate } from "../utils/contentUpdatesWatcher";
+import { separateLessonAndEgwNotes } from "../utils/sabbathUtils";
 
 export interface EGWDayTimestamp {
   dayIndex: number;
@@ -263,11 +264,15 @@ const loadPersistedState = (): SabbathSchoolState => {
               egwNotes = defaultDay.egwNotes;
             }
           }
+
+          // Strictly separate and sanitize content so NO Ellen White quote remains in daily lesson exposition
+          const { mainParagraphs, egwParagraphs } = separateLessonAndEgwNotes(content, egwNotes);
+
           return {
             ...defaultDay,
             ...d,
-            content,
-            egwNotes
+            content: mainParagraphs.join("\n\n"),
+            egwNotes: egwParagraphs
           };
         });
       }
@@ -546,16 +551,22 @@ export const useSabbathSchoolStore = () => {
       if (payload && (payload.dailyLessons || payload.quarterlyTitle)) {
         let mappedDailyLessons: DailyLesson[] = globalStateStore.dailyLessons;
         if (Array.isArray(payload.dailyLessons) && payload.dailyLessons.length > 0) {
-          mappedDailyLessons = payload.dailyLessons.map((d: any) => ({
-            label: `${d.dayName} (${d.dateString})`,
-            title: d.title || d.dayName,
-            status: "Not Started",
-            content: Array.isArray(d.lessonContent) ? d.lessonContent.join("\n\n") : (d.lessonContent || ""),
-            egwNotes: d.egwNotes || [],
-            egwVideoUrl: d.egwVideoUrl || "",
-            egwTimestampText: d.egwTimestampText || "",
-            egwTimestampSeconds: d.egwTimestampSeconds || 0
-          }));
+          mappedDailyLessons = payload.dailyLessons.map((d: any) => {
+            const rawContent = Array.isArray(d.lessonContent)
+              ? d.lessonContent.join("\n\n")
+              : (d.lessonContent || d.content || "");
+            const { mainParagraphs, egwParagraphs } = separateLessonAndEgwNotes(rawContent, d.egwNotes);
+            return {
+              label: `${d.dayName} (${d.dateString})`,
+              title: d.title || d.dayName,
+              status: "Not Started",
+              content: mainParagraphs.join("\n\n"),
+              egwNotes: egwParagraphs,
+              egwVideoUrl: d.egwVideoUrl || "",
+              egwTimestampText: d.egwTimestampText || "",
+              egwTimestampSeconds: d.egwTimestampSeconds || 0
+            };
+          });
         }
 
         const upcomingSabbathDate = "2026-10-17";

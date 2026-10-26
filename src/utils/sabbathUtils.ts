@@ -318,17 +318,63 @@ export function separateLessonAndEgwNotes(
     "counsels on diet and foods",
     "counsels on stewardship",
     "counsels to writers and editors",
-    "thoughts from the mount of blessing"
+    "thoughts from the mount of blessing",
+    "conflict and courage",
+    "christ triumphant",
+    "this day with god",
+    "the upward look",
+    "that i may know him",
+    "in heavenly places",
+    "to be like jesus",
+    "our high calling",
+    "the faith i live by",
+    "the sanctified life",
+    "life sketches",
+    "medical ministry",
+    "welfare ministry",
+    "christian service",
+    "testimonies to ministers",
+    "fundamentals of christian education"
   ];
 
   rawParagraphs.forEach((p) => {
-    const trimmed = p.trim();
+    let trimmed = p.trim();
     if (!trimmed) return;
 
-    const lower = trimmed.toLowerCase();
+    let lower = trimmed.toLowerCase();
 
-    if (lower.includes("quotations are taken from ellen g. white notes") || lower.includes("quotations are taken from ellen white notes")) {
-      return; // Skip standard publisher disclaimer
+    // Skip publisher disclaimers
+    if (
+      lower.includes("quotations are taken from ellen g. white notes") ||
+      lower.includes("quotations are taken from ellen white notes") ||
+      lower.includes("published by pacific press publishing association")
+    ) {
+      return;
+    }
+
+    // Check for mixed paragraph: lesson thought followed by inline EGW quote
+    // E.g. "It is also amazing to reflect on God’s restoring power... Indeed, “God’s healing power...” —Ellen G. White, Education, p. 113."
+    const mixedQuoteMatch = trimmed.match(
+      /^(.*?)(?:(?:\s+Indeed,\s*|\s+As Ellen G\. White wrote,\s*|\s+She noted,\s*)([“"][^"”]+[”"].*?(?:—|–|-|\()\s*(?:Ellen G\. White|Ellen White|[A-Z][a-zA-Z\s']+,\s*p[p]?\.\s*\d+).*))$/s
+    );
+
+    if (mixedQuoteMatch && mixedQuoteMatch[1]?.trim() && mixedQuoteMatch[2]?.trim()) {
+      const lessonPart = mixedQuoteMatch[1].trim();
+      const quotePart = mixedQuoteMatch[2].trim();
+
+      if (lessonPart) {
+        const reformatted = reformatParagraphText(lessonPart);
+        mainParagraphs.push(...reformatted);
+      }
+
+      const { quote, source } = formatEgwNoteSentenceStructure(quotePart);
+      if (quote) {
+        const fullNote = source !== "Ellen G. White" ? `${quote} —${source}` : quote;
+        if (!egwParagraphs.includes(fullNote)) {
+          egwParagraphs.push(fullNote);
+        }
+      }
+      return;
     }
 
     // Check if this paragraph contains Ellen G. White quotation or book attribution
@@ -339,11 +385,22 @@ export function separateLessonAndEgwNotes(
         lower.includes(`–${book}`) ||
         lower.includes(`-${book}`) ||
         lower.includes(`(${book}`) ||
-        lower.includes(`from ${book}`)
+        lower.includes(`from ${book}`) ||
+        lower.includes(`in ${book}`)
       );
     });
 
-    const isEgw = hasAuthor || hasBookCitation || trimmed.startsWith("Supplemental EGW Notes");
+    const isQuoteCitation =
+      /(?:—|–|-)\s*(?:Steps to Christ|Desire of Ages|Great Controversy|Patriarchs|Prophets|Education|Selected Messages|Ministry of Healing|Conflict and Courage|Christ Triumphant|Testimonies)/i.test(
+        trimmed
+      );
+
+    const isEgw =
+      hasAuthor ||
+      hasBookCitation ||
+      isQuoteCitation ||
+      trimmed.startsWith("Supplemental EGW Notes") ||
+      trimmed.startsWith("This Day With God, “Let Christ Guide,”");
 
     if (isEgw) {
       const { quote, source } = formatEgwNoteSentenceStructure(trimmed);
@@ -354,7 +411,7 @@ export function separateLessonAndEgwNotes(
         }
       }
     } else {
-      // Reformat lesson exposition into clear, readable paragraphs
+      // Reformat pure lesson exposition into clear, readable paragraphs
       const reformatted = reformatParagraphText(trimmed);
       mainParagraphs.push(...reformatted);
     }

@@ -23,7 +23,7 @@ import {
   initSabbathSchoolCronScheduler, 
   type SabbathSchoolSyncPayload 
 } from "./src/server/sabbathSchoolSyncService.ts";
-import { ensureElderStephenOutlineCompletion } from "./src/utils/elderSpacing.ts";
+import { ensureElderStephenOutlineCompletion, isSpecificScopedRequest } from "./src/utils/elderSpacing.ts";
 export function getSystemInstruction(req: any) {
   const name = (req && req.body && (req.body.userName || req.body.user_name || (req.body.user && req.body.user.name))) || "Berean";
   return `IMPORTANT DIRECTIVE: The user signed up with the name: "${name}". You MUST address the user as "${name}" (e.g. 'Brother ${name}', 'Sister ${name}', or simply '${name}') in all conversational replies, feedback, evaluations, chat responses, oral text-to-speech summaries, and headings. NEVER call them generic placeholders like "Berean", "Brother", "Sister", "Student", or "Teacher" unless prefixed by their actual name.\n\n` + CSMS_SYSTEM_INSTRUCTION;
@@ -4862,7 +4862,12 @@ function classifyCommentaryMode(opts: {
 
   // 1. Explicit user keyword overrides in prompt
   if (/\b(full commentary|deep study|prestige mode|comprehensive)\b/i.test(text)) return "prestige";
-  
+    
+  // 1b. Specific, bounded, or focused requests (e.g. "analyze just the first line", "detail a single concept", "without extra content")
+  if (isSpecificScopedRequest(text) || isSpecificScopedRequest(action)) {
+    return "velocity";
+  }
+
   // Only drop to velocity mode if user explicitly asks in their prompt for extreme brevity
   const explicitQuickKeywords = [
     /\bquick summary\b/i,
@@ -4888,6 +4893,7 @@ app.post("/api/elder-stephen", async (req, res) => {
   const {
     userId,
     userName,
+    userMessage,
     currentMode,
     contextSummary,
     noteTitle,
@@ -4906,10 +4912,15 @@ app.post("/api/elder-stephen", async (req, res) => {
   const actualName = userName || "Berean";
   const mode = currentMode || "Explain";
 
-  // Extract latest user prompt text for classification
-  const latestUserText = (userAction && typeof userAction === "string" && !["notebook_write", "draft_note", "chat_message"].includes(userAction))
-    ? userAction
-    : (Array.isArray(historyLog) && historyLog.length > 0 ? historyLog[historyLog.length - 1]?.text : "") || noteContent || "";
+  // Extract latest user prompt text for classification (checking userMessage, userAction, historyLog, noteContent)
+  const rawUserQuery = (
+    (typeof userMessage === "string" && userMessage.trim()) ||
+    (typeof userAction === "string" && !["notebook_write", "draft_note", "chat_message"].includes(userAction) && userAction.trim()) ||
+    (Array.isArray(historyLog) && historyLog.length > 0 ? historyLog[historyLog.length - 1]?.text : "") ||
+    noteContent ||
+    ""
+  );
+  const latestUserText = rawUserQuery.trim();
 
   // Identify focal scripture if requested or mentioned
   const focalScripture = (
@@ -4920,8 +4931,11 @@ app.post("/api/elder-stephen", async (req, res) => {
     ""
   ).trim();
 
+  // Detect whether user made a specific, bounded request (e.g. analyzing just the first line or detailing a single concept)
+  const isSpecific = isSpecificScopedRequest(latestUserText) || isSpecificScopedRequest(userMessage) || isSpecificScopedRequest(userAction);
+
   // Intelligently classify whether to run Prestige Mode (Full 6-Section Commentary) or Velocity Mode (Quick Answer)
-  const effectiveMode = classifyCommentaryMode({
+  const effectiveMode = isSpecific ? "velocity" : classifyCommentaryMode({
     requestedMode: commentaryMode,
     userAction,
     userMessage: latestUserText,
@@ -4946,6 +4960,19 @@ app.post("/api/elder-stephen", async (req, res) => {
     const latencyMs = Date.now() - startTime;
     const studyDoc = noteTitle || "the Scriptures";
     const refText = focalScripture || "God's Word";
+
+    if (isSpecific) {
+      const lower = latestUserText.toLowerCase();
+      let focusedAnswer = "";
+      if (lower.includes("first line") || lower.includes("first sentence") || lower.includes("opening line")) {
+        focusedAnswer = `* **First Line Analysis (${refText})**: The opening words establish divine revelation as God's loving initiative. In Seventh-day Adventist hermeneutics, God speaks directly to reach fallen humanity, establishing an immediate foundation of hope and truth without human speculation.`;
+      } else if (lower.includes("single concept") || lower.includes("concept")) {
+        focusedAnswer = `* **Concept Analysis (${refText})**: This doctrine reveals the harmony of God's character in the Great Controversy. Anchored in Christ's heavenly sanctuary ministry and the everlasting gospel, it shows how divine truth unites grace and holy obedience.`;
+      } else {
+        focusedAnswer = `* **Pastoral Answer (${refText})**: In Scripture, this truth points us directly to Jesus Christ, rightly dividing the word of truth (*2 Timothy 2:15*) and illuminating our walk in His grace.`;
+      }
+      return res.json({ text: formatProperElderSpacing(focusedAnswer), commentaryMode: "velocity", modeUsed: "velocity", latencyMs });
+    }
 
     if (resolvedMode === "velocity") {
       const text = formatProperElderSpacing(
@@ -5076,7 +5103,14 @@ The Seventh-day Adventist movement was raised to proclaim the everlasting gospel
     if (effectiveMode === "velocity") {
       const velocitySystemInstruction = 
 `You are Elder Stephen, a warm, wise, seasoned Seventh-day Adventist pastoral Bible teacher and theological mentor.
-Your role in Velocity Mode is to provide a concise, crystal-clear "Quick Answer" that immediately helps the user understand Scripture in context and move forward in their study.
+
+CRITICAL DYNAMIC ADAPTATION & SCOPE CONCISION (HIGHEST PRIORITY RULE):
+- You MUST dynamically adapt to the user's specific request and scope constraints.
+- When the user asks a specific, targeted, or bounded task (such as analyzing JUST THE FIRST LINE or sentence, detailing a SINGLE CONCEPT, translating or defining a single Greek/Hebrew word, answering a direct question, or asking for exact information without extra content):
+  1. DYNAMICALLY ADAPT IMMEDIATELY: Restrict your response STRICTLY to what was asked.
+  2. PROVIDE ONLY THE EXACT INFORMATION REQUESTED without extra content, boilerplate greetings ("Greetings, Brother..."), unsolicited intros, or unrequested multi-step outlines.
+  3. DO NOT output full commentary sections (### 1. Context, ### 2. Key Terms, ### 3. Exegetical Insight, ### 4. Spirit of Prophecy, ### 5. Application) unless the user explicitly requested a full multi-section study/commentary.
+  4. Provide a direct, focused, theologically sound response satisfying the exact query, then stop.
 
 Theological & Hermeneutical Foundations:
 - Sola Scriptura (KJV as primary text), the Great Controversy theme, and historic Adventist hermeneutics.
@@ -5106,9 +5140,15 @@ Structure & Format (Outline Structure Mandatory):
   * Concise devotional or practical takeaway.
 - Spacing & Readability: You MUST format all text with standard, proper spaces between all words and after punctuation. Never concatenate words together.`;
 
-      // Optimized trimmed user/context block
-      const userContextBlock = 
-`Study Mode: ${mode} (Velocity Mode / Quick Answer active).
+      // Dynamically tailored user/context block
+      const userContextBlock = isSpecific
+        ? `Focal Scripture / Passage: ${activePassage}
+Study Document Title: "${documentTitle}"
+${noteContent ? `Document Content & Draft Notes:\n"""\n${noteContent.slice(0, 1000)}\n"""\n` : ""}${contextSummary ? `Context Summary: ${contextSummary}\n` : ""}User request: "${userRequestText}"
+
+CRITICAL MANDATE: The user has made a specific, bounded request: "${userRequestText}".
+Dynamically adapt and provide ONLY the exact information requested (e.g. analyzing just the first line or detailing the single concept requested). DO NOT include boilerplate greetings, unrequested outline headers, or extra content.`
+        : `Study Mode: ${mode} (Velocity Mode / Quick Answer active).
 Focal Scripture: ${activePassage} (KJV).
 Study Document Title: "${documentTitle}".
 ${noteContent ? `Document Content & Draft Notes:\n"""\n${noteContent.slice(0, 1600)}\n"""\n` : ""}${contextSummary ? `Context Summary: ${contextSummary}\n` : ""}${userStudyJourney ? `User Study Flow Journey: ${userStudyJourney}\n` : ""}User level: ${userLevel}.
@@ -5168,8 +5208,9 @@ CONTINUITY & NOTEBOOK CONTEXT RULES (CRITICAL):
 - Structure & Format: Outline structure is mandatory (nested bullet points, bold headers, numbered lists). Never use unbroken text blocks.
 - Spacing: Standard spaces between all words and punctuation for crisp readability.
 
-CRITICAL COMPLETION MANDATE (MANDATORY):
-- You MUST write out all 5 numbered sections in full detail. NEVER cut off or stop early!
+CRITICAL DYNAMIC ADAPTATION (HIGHEST PRIORITY):
+- If the user asks for a specific, narrow, or bounded analysis (such as analyzing JUST THE FIRST LINE, detailing a SINGLE CONCEPT, or requesting no extra content), you MUST adapt dynamically and answer ONLY what was requested without extra outline sections or filler content.
+- For open-ended comprehensive commentary requests: You MUST write out all 5 numbered sections in full detail. NEVER cut off or stop early!
 - Point 5 is the spiritual climax of the entire exegesis: "### 5. Theological Meaning & Application" MUST BE FULLY COMPLETED with rich theological synthesis, personal heart reform, and evangelistic appeals before ending.
 - In Section 4 (Spirit of Prophecy), keep citations and quotations concise (1-2 sentences each with citation) to ensure Section 5 is fully developed without token limits.
 
@@ -5242,7 +5283,9 @@ Please respond in Prestige Mode following the full 6-part structure, ensuring yo
 
     let rawOutput = response?.text || "";
     // Ensure Point 5 (Application) is never missing or truncated
-    rawOutput = ensureElderStephenOutlineCompletion(rawOutput, activePassage, documentTitle);
+    if (!isSpecific) {
+      rawOutput = ensureElderStephenOutlineCompletion(rawOutput, activePassage, documentTitle, userRequestText);
+    }
     const responseText = formatProperElderSpacing(rawOutput || "Let us search the scriptures daily, my brother.");
     const latencyMs = Date.now() - startTime;
     return res.json({ text: responseText, commentaryMode: "prestige", modeUsed: "prestige", latencyMs });

@@ -568,7 +568,23 @@ async function scrapeOfficialLesson(targetDateStr?: string): Promise<{
               const isQuote = /^<blockquote/i.test(block);
               let clean = block.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
               if (clean && !clean.includes("Memory Text:") && !clean.includes("Read for This Week’s Study")) {
-                if (clean.includes("Supplemental EGW Notes") || clean.includes("—Sons and Daughters of God") || clean.includes("—Testimonies")) {
+                const lowerClean = clean.toLowerCase();
+                if (
+                  lowerClean.includes("quotations are taken from ellen") ||
+                  lowerClean.includes("published by pacific press")
+                ) {
+                  return; // Skip publisher disclaimer
+                }
+
+                const isEgwCitation =
+                  clean.includes("Supplemental EGW Notes") ||
+                  clean.includes("Ellen G. White") ||
+                  clean.includes("Ellen White") ||
+                  /(?:—|–|-)\s*(?:Steps to Christ|Desire of Ages|Great Controversy|Patriarchs|Prophets|Education|Selected Messages|Ministry of Healing|Conflict and Courage|Christ Triumphant|Testimonies|Sons and Daughters)/i.test(
+                    clean
+                  );
+
+                if (isEgwCitation) {
                   egwNotes.push(clean.replace(/^Supplemental EGW Notes\s*/i, "").trim());
                 } else {
                   if (isHeading) {

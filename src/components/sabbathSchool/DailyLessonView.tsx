@@ -204,23 +204,6 @@ export const DailyLessonView: React.FC = () => {
           )}
         </div>
 
-        {/* Ellen G. White Notes for this Day (Lato Font & Clean Sentence Structure) */}
-        {egwParagraphs.length > 0 && (
-          <div className="mt-6 mb-6 p-5 sm:p-6 rounded-2xl border border-amber-500/25 bg-neutral-950/70 relative z-10 space-y-3">
-            <div className="flex items-center gap-2 text-xs font-mono text-amber-400 font-bold uppercase tracking-wider">
-              <Quote size={14} className="text-amber-500 shrink-0" />
-              <span>Ellen G. White Notes · Day Reflection</span>
-            </div>
-            <div className="space-y-3 font-lato font-['Lato',sans-serif] text-sm text-neutral-200 leading-relaxed text-left">
-              {egwParagraphs.map((egw, eIdx) => (
-                <p key={eIdx} className="border-l-2 border-amber-500/50 pl-3.5 py-0.5 italic text-neutral-300">
-                  {egw}
-                </p>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-neutral-800 relative z-10">
           <button
             id="btn-ask-stephen-day"

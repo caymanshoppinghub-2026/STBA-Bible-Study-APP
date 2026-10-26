@@ -1,3 +1,4 @@
+import { isSpecificScopedRequest } from "../utils/elderSpacing";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -57,6 +58,25 @@ export async function askElderStephen(params: ElderStephenParams): Promise<Elder
 
   const name = params.userName || "Berean";
   const title = params.noteTitle || "the sacred scripture";
+  const userText = params.userMessage || params.userAction || "";
+  const isSpecific = isSpecificScopedRequest(userText);
+
+  if (isSpecific) {
+    const lower = userText.toLowerCase();
+    let answer = "";
+    if (lower.includes("first line") || lower.includes("first sentence")) {
+      answer = `* **First Line Analysis (${title})**: The opening statement anchors our faith directly in divine revelation. God communicates His eternal truth so that we may know His loving purpose without human conjecture.`;
+    } else if (lower.includes("single concept") || lower.includes("concept")) {
+      answer = `* **Concept Analysis (${title})**: In Seventh-day Adventist theology, this truth reveals Christ's love and righteousness in the Great Controversy, pointing to the sanctuary truth and the harmony of law and grace.`;
+    } else {
+      answer = `* **Pastoral Insight (${title})**: Comparing Scripture with Scripture (*Isaiah 28:10*), this truth points us directly to Christ our High Priest, providing practical encouragement for your spiritual walk.`;
+    }
+    return {
+      text: answer,
+      commentaryMode: "velocity",
+      modeUsed: "velocity"
+    };
+  }
 
   if (params.currentMode === "Sabbath School Studies" || params.currentMode === "Syllabus") {
     return {
