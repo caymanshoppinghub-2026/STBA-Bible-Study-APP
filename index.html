@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StudyToBeApproved.com — Master Scripture & Doctrine</title>
+    <!-- Prevent Vite HMR WebSocket connection failure in proxy / iframe environment -->
+    <script>
+      (function() {
+        if (typeof window === 'undefined') return;
+        var OrigWS = window.WebSocket;
+        if (OrigWS) {
+          window.WebSocket = function(url, protocols) {
+            var urlStr = String(url || '');
+            var isViteHmr = (protocols === 'vite-hmr') ||
+              (Array.isArray(protocols) && protocols.indexOf('vite-hmr') !== -1) ||
+              urlStr.indexOf('token=') !== -1 ||
+              urlStr.indexOf('@vite') !== -1;
+            if (isViteHmr) {
+              var listeners = {};
+              return {
+                readyState: 1, // OPEN
+                OPEN: 1,
+                CONNECTING: 0,
+                CLOSING: 2,
+                CLOSED: 3,
+                url: urlStr,
+                protocol: 'vite-hmr',
+                extensions: '',
+                bufferedAmount: 0,
+                binaryType: 'blob',
+                send: function() {},
+                close: function() {},
+                addEventListener: function(type, fn) {
+                  listeners[type] = listeners[type] || [];
+                  listeners[type].push(fn);
+                  if (type === 'open') {
+                    setTimeout(function() {
+                      try { fn({ type: 'open' }); } catch(e) {}
+                    }, 0);
+                  }
+                },
+                removeEventListener: function(type, fn) {
+                  if (!listeners[type]) return;
+                  listeners[type] = listeners[type].filter(function(l) { return l !== fn; });
+                },
+                dispatchEvent: function() { return true; }
+              };
+            }
+            return new OrigWS(url, protocols);
+          };
+          window.WebSocket.prototype = OrigWS.prototype;
+          window.WebSocket.CONNECTING = 0;
+          window.WebSocket.OPEN = 1;
+          window.WebSocket.CLOSING = 2;
+          window.WebSocket.CLOSED = 3;
+        }
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (event && event.reason && typeof event.reason.message === 'string' &&
+              (event.reason.message.indexOf('WebSocket closed without opened') !== -1 ||
+               event.reason.message.indexOf('vite:ws') !== -1)) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        });
+        window.addEventListener('error', function(event) {
+          if (event && event.message && typeof event.message === 'string' &&
+              (event.message.indexOf('WebSocket closed without opened') !== -1 ||
+               event.message.indexOf('vite:ws') !== -1)) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        });
+      })();
+    </script>
+    <!-- Favicons & Brand Assets -->
+    <link rel="icon" type="image/png" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_200,w_200/Full_STBA_LOGO_pdwdz3" />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_32,w_32/Full_STBA_LOGO_pdwdz3" />
+    <link rel="icon" type="image/png" sizes="64x64" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_64,w_64/Full_STBA_LOGO_pdwdz3" />
+    <link rel="icon" type="image/png" sizes="128x128" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_128,w_128/Full_STBA_LOGO_pdwdz3" />
+    <link rel="shortcut icon" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_64,w_64/Full_STBA_LOGO_pdwdz3" />
+    <link rel="apple-touch-icon" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_180,w_180/Full_STBA_LOGO_pdwdz3" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#06162c" />
+    <meta name="description" content="Master Scripture through active recall, spaced repetition, and AI-powered teaching." />
+    <meta property="og:title" content="StudyToBeApproved.com" />
+    <meta property="og:description" content="Master Scripture through active recall, spaced repetition, and AI-powered teaching." />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="STBA" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400;1,700&family=Noto+Serif:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Outfit:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

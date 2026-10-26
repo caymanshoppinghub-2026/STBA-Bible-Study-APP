@@ -1,0 +1,416 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-bible: "Noto Serif", Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-cinzel: "Cinzel", Georgia, serif;
+  --font-lato: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-apple: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "San Francisco", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  
+  --color-cream: #F5F2EB;
+  --color-dark-bg: #06162c;
+  --color-navy: #0d3060;
+  --color-navy-dark: #0a2246;
+  --color-navy-deep: #06162c;
+  --color-gold: #E5B842;
+  --color-gold-bright: #F3CF65;
+  --color-gold-deep: #C9973A;
+  --color-teal: #2A9D8F;
+  --color-text-primary: #FFFFFF;
+  --color-text-muted: #94A3B8;
+}
+
+body {
+  background-color: #06162c;
+  color: #F8FAFC;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Lato Typography Utility for Sabbath School & Elder Stephen panels */
+.font-lato {
+  font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+}
+
+.font-sabbath-body,
+.sabbath-lesson-body,
+.egw-notes-body {
+  font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Apple-inspired Typography for Elder Stephen Interface */
+.font-apple-system {
+  font-family: "Lato", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  letter-spacing: 0.15px;
+  word-spacing: 0.08em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.elder-stephen-output,
+.elder-stephen-text {
+  font-family: "Lato", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif !important;
+  letter-spacing: 0.15px !important;
+  word-spacing: 0.08em !important;
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.elder-stephen-output p,
+.elder-stephen-output span,
+.elder-stephen-output div,
+.elder-stephen-output li,
+.elder-stephen-output strong,
+.elder-stephen-output em,
+.elder-stephen-output blockquote,
+.elder-stephen-text p,
+.elder-stephen-text span,
+.elder-stephen-text div,
+.elder-stephen-text li,
+.elder-stephen-text strong,
+.elder-stephen-text em,
+.elder-stephen-text blockquote {
+  font-family: "Lato", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif !important;
+  letter-spacing: 0.15px;
+  word-spacing: 0.08em;
+}
+
+/* Bible Scripture Typography ('Noto Serif' with 0.5px letter-spacing) */
+.font-bible {
+  font-family: "Noto Serif", Georgia, Cambria, "Times New Roman", Times, serif;
+  letter-spacing: 0.5px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* SDA Bible Commentary Body Typography - Professional Serif Family (Strictly Non-Italic) */
+.font-commentary-body,
+.sdabc-body-serif,
+.sdabc-body-text,
+.sdabc-commentary-paragraph,
+.sdabc-commentary-body,
+.sdabc-linguistic-analysis,
+.sdabc-pillar-connection {
+  font-family: "Noto Serif", Georgia, Cambria, "Times New Roman", Times, serif;
+  font-style: normal !important;
+  letter-spacing: 0.2px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 1. Remove ALL italic styling globally across commentary body, linguistic analysis, commentary text, and pillar connections */
+.font-commentary-body,
+.font-commentary-body *,
+.font-commentary-body em,
+.font-commentary-body i,
+.font-commentary-body cite,
+.font-commentary-body blockquote,
+.sdabc-commentary-paragraph,
+.sdabc-commentary-paragraph *,
+.sdabc-commentary-paragraph em,
+.sdabc-commentary-paragraph i,
+.sdabc-commentary-paragraph cite,
+.sdabc-commentary-paragraph blockquote,
+.sdabc-body-text,
+.sdabc-body-text *,
+.sdabc-body-text em,
+.sdabc-body-text i,
+.sdabc-commentary-body,
+.sdabc-commentary-body *,
+.sdabc-commentary-body em,
+.sdabc-commentary-body i,
+.sdabc-linguistic-analysis,
+.sdabc-linguistic-analysis *,
+.sdabc-linguistic-analysis em,
+.sdabc-linguistic-analysis i,
+.sdabc-pillar-connection,
+.sdabc-pillar-connection *,
+.sdabc-pillar-connection em,
+.sdabc-pillar-connection i {
+  font-style: normal !important;
+}
+
+/* 2. Maintain proper sentence and paragraph breaks throughout */
+.sdabc-commentary-paragraph,
+.sdabc-commentary-body,
+.sdabc-body-text {
+  white-space: pre-line;
+  word-break: break-word;
+  line-height: 1.7;
+}
+
+.sdabc-commentary-paragraph p,
+.sdabc-commentary-body p,
+.sdabc-body-text p {
+  margin-bottom: 0.85em;
+  line-height: 1.7;
+}
+
+.sdabc-linguistic-analysis {
+  white-space: pre-line;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+.sdabc-pillar-connection {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+/* 3. Structural headers strictly maintain fixed sizing and hierarchy without altering with commentary font sizing */
+.sdabc-header,
+.sdabc-section-title,
+.sdabc-linguistic-header,
+.sdabc-pillar-header,
+.sdabc-lemma-headword,
+.sdabc-container h1,
+.sdabc-container h2,
+.sdabc-container h3,
+.sdabc-container h4,
+.sdabc-container strong.font-mono {
+  font-style: normal !important;
+}
+
+.bible-text {
+  font-family: "Noto Serif", Georgia, Cambria, "Times New Roman", Times, serif !important;
+  letter-spacing: 0.5px !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.bible-text p,
+.bible-text span,
+.bible-text div,
+.bible-text blockquote {
+  font-family: "Noto Serif", Georgia, Cambria, "Times New Roman", Times, serif;
+  letter-spacing: 0.5px;
+}
+
+/* Glassy Card & Brushed Gold Styling */
+.glass-card {
+  background: linear-gradient(135deg, rgba(13, 48, 96, 0.45) 0%, rgba(10, 34, 70, 0.6) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(229, 184, 66, 0.22);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+}
+
+.glass-card-hover {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card-hover:hover {
+  transform: translateY(-3px);
+  border-color: rgba(243, 207, 101, 0.6);
+  box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.5), 0 0 20px 0 rgba(229, 184, 66, 0.22), inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+}
+
+.gold-glow-border {
+  border: 1px solid rgba(229, 184, 66, 0.35);
+  box-shadow: 0 0 25px rgba(229, 184, 66, 0.12);
+}
+
+.gold-glow-border-hover:hover {
+  border-color: rgba(243, 207, 101, 0.7);
+  box-shadow: 0 0 35px rgba(243, 207, 101, 0.25);
+}
+
+.gold-gradient-text {
+  background: linear-gradient(135deg, #FFF6D6 0%, #F3CF65 45%, #E5B842 80%, #C9973A 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-metallic-btn {
+  background: linear-gradient(135deg, #F3CF65 0%, #E5B842 50%, #C9973A 100%);
+  color: #06162c;
+  font-weight: 700;
+  box-shadow: 0 4px 15px rgba(229, 184, 66, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: all 0.25s ease-out;
+}
+
+.gold-metallic-btn:hover {
+  background: linear-gradient(135deg, #FFF0A8 0%, #F3CF65 50%, #E5B842 100%);
+  box-shadow: 0 6px 22px rgba(243, 207, 101, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transform: translateY(-1.5px);
+}
+
+.gold-metallic-btn:active {
+  transform: translateY(0px) scale(0.98);
+}
+
+.sheen-overlay {
+  position: relative;
+  overflow: hidden;
+}
+
+.sheen-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -150%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  transform: skewX(-20deg);
+  transition: 0.75s;
+  pointer-events: none;
+}
+
+.sheen-overlay:hover::after {
+  left: 150%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-bg {
+  background: linear-gradient(90deg, #06162c 25%, #0d3060 50%, #06162c 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+/* Hide scrollbars globally but preserve scrolling functionality */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  background: transparent; /* Chrome, Safari, Opera */
+}
+
+/* Explicit visible custom scrollbar for scrollable cards and widgets */
+.notebook-card-scroll {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(223, 197, 123, 0.5) rgba(6, 22, 44, 0.7) !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.notebook-card-scroll::-webkit-scrollbar {
+  width: 5px !important;
+  height: 5px !important;
+  background: rgba(6, 22, 44, 0.7) !important;
+}
+
+.notebook-card-scroll::-webkit-scrollbar-track {
+  background: rgba(6, 22, 44, 0.7) !important;
+  border-radius: 8px !important;
+}
+
+.notebook-card-scroll::-webkit-scrollbar-thumb {
+  background: rgba(223, 197, 123, 0.5) !important;
+  border-radius: 8px !important;
+}
+
+.notebook-card-scroll::-webkit-scrollbar-thumb:hover {
+  background: #f3cf65 !important;
+}
+
+/* Notification Bell Animation */
+@keyframes bell-ring {
+  0% { transform: rotate(0deg); }
+  10% { transform: rotate(18deg) scale(1.15); }
+  20% { transform: rotate(-16deg) scale(1.15); }
+  30% { transform: rotate(14deg) scale(1.12); }
+  40% { transform: rotate(-12deg) scale(1.09); }
+  50% { transform: rotate(9deg) scale(1.06); }
+  60% { transform: rotate(-6deg) scale(1.03); }
+  70% { transform: rotate(4deg) scale(1.01); }
+  80% { transform: rotate(-2deg) scale(1); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+.animate-bell-ring {
+  animation: bell-ring 1.8s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  transform-origin: top center;
+}
+
+@keyframes bell-pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(243, 207, 101, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(243, 207, 101, 0);
+  }
+}
+
+.animate-bell-glow {
+  animation: bell-pulse-glow 1.8s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}
+
+/* Smooth Slide-Up Reflection Overlay for Video Player */
+@keyframes slide-up-reflection {
+  0% {
+    opacity: 0;
+    transform: translateY(32px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-slide-up-reflection {
+  animation: slide-up-reflection 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slide-up-fullscreen {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up-fullscreen {
+  animation: slide-up-fullscreen 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Subtle Occasional Nudge Animation for Tucked Quick Note Button */
+@keyframes quick-note-nudge {
+  0%, 72%, 100% {
+    transform: translateX(0);
+  }
+  77% {
+    transform: translateX(-10px);
+  }
+  82% {
+    transform: translateX(-2px);
+  }
+  87% {
+    transform: translateX(-7px);
+  }
+  93% {
+    transform: translateX(0);
+  }
+}
+
+.animate-quick-note-nudge {
+  animation: quick-note-nudge 5.5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+/* Sabbath School Quarterly Cover Image Component - Vertical Padding Safeguard */
+#ssq-quarterly-book-cover {
+  padding-top: clamp(3.25rem, 8vw, 5rem) !important;
+  padding-bottom: clamp(3.25rem, 8vw, 5rem) !important;
+}
+
+

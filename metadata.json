@@ -1,0 +1,6 @@
+{
+  "name": "StudyToBeApproved.com",
+  "description": "Master Scripture through active recall, spaced repetition, and AI-powered teaching.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
