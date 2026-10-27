@@ -9,7 +9,7 @@ import { CollapsibleContainer } from "./CollapsibleContainer";
 import { useSabbathSchoolStore } from "../../store/useSabbathSchoolStore";
 import { WeeklyNotebookDrawer } from "./WeeklyNotebookDrawer";
 import { VerseModal } from "../VerseModal";
-import { separateLessonAndEgwNotes, reformatParagraphText, getScriptureRegex } from "../../utils/sabbathUtils";
+import { separateLessonAndEgwNotes, reformatParagraphText, getScriptureRegex, formatStandardReference } from "../../utils/sabbathUtils";
 import { useLessonNarrator } from "../../hooks/useLessonNarrator";
 
 export const CollapsibleDailyLessonsSection: React.FC = () => {
@@ -116,7 +116,11 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
   }, [openDays, selectedDayIndex, dailyLessons]);
 
   const handleOpenVerseModal = (ref: string) => {
-    const normalized = ref.replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+    const normalized = ref
+      .replace(/\u00A0/g, " ")
+      .replace(/[–—\u2013\u2014\u2212]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim();
     setSelectedVerseRef(normalized);
     setIsVerseModalOpen(true);
   };
@@ -194,14 +198,10 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
               e.stopPropagation();
               handleOpenVerseModal(fullMatch);
             }}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 mx-0.5 rounded-md font-mono font-bold transition-all cursor-pointer shadow-2xs ${getScriptureBadgeFontSizeClass(readingFontSize)} ${
-              isLight
-                ? "bg-[#FEF9C3] hover:bg-[#FEF08A] text-[#78350F] border border-[#FACC15] underline decoration-[#CA8A04]/60 hover:decoration-[#A16207]"
-                : "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/50 underline decoration-amber-400/60 hover:decoration-amber-300"
-            }`}
-            title={`Click to read ${fullMatch} passage`}
+            className="rounded-full inline-flex items-center gap-1 font-mono font-bold text-xs px-2.5 py-0.5 bg-[#FEF9C3] text-[#78350F] border border-[#FACC15] shadow-2xs hover:bg-[#FEF08A] hover:border-[#EAB308] cursor-pointer transition-all no-underline hover:no-underline tracking-normal"
+            title={`Click to read ${formatStandardReference(fullMatch)} passage`}
           >
-            <span>{fullMatch}</span>
+            <span className="no-underline tracking-normal">{formatStandardReference(fullMatch)}</span>
           </button>
         );
 
@@ -607,6 +607,7 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
       <VerseModal
         isOpen={isVerseModalOpen}
         reference={selectedVerseRef}
+        theme={isLight ? "light" : "dark"}
         onClose={() => setIsVerseModalOpen(false)}
       />
     </>

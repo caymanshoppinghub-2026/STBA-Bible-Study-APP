@@ -1,6 +1,13 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState, useEffect } from "react";
 import { X, BookOpen, Loader2, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useSabbathSchoolStore } from "../store/useSabbathSchoolStore";
+import { formatStandardReference } from "../utils/sabbathUtils";
 
 export type TranslationVersion = "KJV" | "NKJV" | "ESV" | "NASB";
 
@@ -8,6 +15,7 @@ export interface VerseModalProps {
   isOpen: boolean;
   reference: string | null;
   initialVersion?: TranslationVersion;
+  theme?: "light" | "dark";
   onClose: () => void;
   onStudyDeeper?: (reference: string, version: TranslationVersion) => void;
 }
@@ -23,10 +31,15 @@ export const VerseModal: React.FC<VerseModalProps> = ({
   isOpen,
   reference,
   initialVersion = "KJV",
+  theme,
   onClose,
   onStudyDeeper,
 }) => {
   const navigate = useNavigate();
+  const { readingTheme } = useSabbathSchoolStore();
+  const isLight = theme ? theme === "light" : readingTheme === "light";
+  const displayReference = formatStandardReference(reference);
+
   const [version, setVersion] = useState<TranslationVersion>(initialVersion);
   const [verseText, setVerseText] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
@@ -49,7 +62,12 @@ export const VerseModal: React.FC<VerseModalProps> = ({
       return;
     }
 
-    let cleanRef = reference.replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+    let cleanRef = reference
+      .replace(/\u00A0/g, " ")
+      .replace(/[–—\u2013\u2014\u2212]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim();
+
     let queryVersion = version;
 
     // Check if the reference includes an embedded translation suffix e.g. "1 Corinthians 12:4-6, NKJV"
@@ -115,12 +133,16 @@ export const VerseModal: React.FC<VerseModalProps> = ({
 
   const handleStudyDeeper = () => {
     if (!reference) return;
+    const targetRef = reference
+      .replace(/\u00A0/g, " ")
+      .replace(/[–—\u2013\u2014\u2212]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim();
 
-    const targetRef = reference.trim();
-
-    // Persist pending search reference and tool for Bible Study app module
+    // Persist pending search reference and visual tool into localStorage
     localStorage.setItem("stba_pending_search_ref", targetRef);
     localStorage.setItem("stba_pending_search_tool", "visual");
+    localStorage.setItem("stba_last_read_passage", targetRef);
     localStorage.removeItem("stba_pending_search_topic");
 
     if (onStudyDeeper) {
@@ -133,34 +155,59 @@ export const VerseModal: React.FC<VerseModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent pointer-events-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent backdrop-blur-none pointer-events-auto"
       onClick={onClose}
       aria-modal="true"
       role="dialog"
     >
       <div
-        className="relative w-full max-w-lg bg-[#161B22] border border-neutral-750 rounded-2xl shadow-2xl overflow-hidden transform transition-all text-neutral-100 ring-1 ring-black/40"
+        className={`relative w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-200 ease-out border ${
+          isLight
+            ? "bg-white border-stone-200 text-stone-900 ring-1 ring-black/5"
+            : "bg-[#14181F] border-neutral-800 text-neutral-100 ring-1 ring-black/40"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-[#0D1117]/90 border-b border-neutral-800">
+        <div
+          className={`flex items-center justify-between px-6 py-4 border-b ${
+            isLight ? "bg-stone-50 border-stone-200" : "bg-[#0D1117]/95 border-neutral-800"
+          }`}
+        >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center">
-              <BookOpen size={18} />
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                isLight
+                  ? "bg-amber-100/90 border-amber-300 text-amber-800"
+                  : "bg-amber-500/15 border-amber-500/30 text-amber-400"
+              }`}
+            >
+              <BookOpen size={20} />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-bold text-amber-400 font-serif tracking-tight">
-                {reference}
+              <h3
+                className={`text-lg sm:text-xl font-bold font-serif tracking-normal no-underline select-text ${
+                  isLight ? "text-amber-900" : "text-amber-400"
+                }`}
+              >
+                {displayReference}
               </h3>
-              <p className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest mt-0.5">
+              <p
+                className={`text-[10px] font-mono font-medium uppercase tracking-widest mt-0.5 ${
+                  isLight ? "text-stone-500" : "text-neutral-400"
+                }`}
+              >
                 Scripture Reference Explorer
               </p>
             </div>
           </div>
-
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full text-neutral-400 hover:text-white bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 flex items-center justify-center transition cursor-pointer"
+            className={`w-9 h-9 rounded-full border flex items-center justify-center transition cursor-pointer ${
+              isLight
+                ? "bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-900 border-stone-300"
+                : "bg-neutral-850 hover:bg-neutral-800 text-neutral-400 hover:text-white border-neutral-750"
+            }`}
             aria-label="Close scripture modal"
           >
             <X size={16} />
@@ -168,7 +215,11 @@ export const VerseModal: React.FC<VerseModalProps> = ({
         </div>
 
         {/* Translation Selector Tabs */}
-        <div className="px-6 pt-4 pb-2 bg-[#12161D] border-b border-neutral-800 flex items-center justify-between gap-2 overflow-x-auto">
+        <div
+          className={`px-6 pt-3.5 pb-2 border-b flex items-center justify-between gap-2 overflow-x-auto ${
+            isLight ? "bg-stone-100/70 border-stone-200" : "bg-[#12161D] border-neutral-800"
+          }`}
+        >
           <div className="flex items-center gap-2 w-full">
             {TRANSLATIONS.map((trans) => {
               const isActive = version === trans.id;
@@ -177,10 +228,12 @@ export const VerseModal: React.FC<VerseModalProps> = ({
                   key={trans.id}
                   onClick={() => setVersion(trans.id)}
                   title={trans.description}
-                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-mono font-bold tracking-wider transition-all duration-150 cursor-pointer border ${
+                  className={`flex-1 py-2 px-3 sm:px-4 rounded-xl text-xs font-mono font-bold tracking-wider transition-all duration-150 cursor-pointer border ${
                     isActive
-                      ? "bg-[#F59E0B] text-stone-950 border-amber-400 shadow-sm"
-                      : "bg-neutral-850 text-neutral-300 border-neutral-750 hover:text-white hover:bg-neutral-800"
+                      ? "bg-[#F59E0B] text-black border-amber-400 shadow-sm"
+                      : isLight
+                      ? "bg-white text-stone-700 border-stone-300 hover:text-stone-950 hover:bg-stone-50"
+                      : "bg-[#1E232B] text-neutral-300 border-neutral-800 hover:text-white hover:bg-neutral-850"
                   }`}
                 >
                   {trans.label}
@@ -193,22 +246,52 @@ export const VerseModal: React.FC<VerseModalProps> = ({
         {/* Modal Body / Verse Content */}
         <div className="p-6 min-h-[160px] max-h-[60vh] overflow-y-auto custom-scroll flex flex-col justify-between space-y-4">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-10 space-y-3 text-neutral-400">
+            <div
+              className={`flex flex-col items-center justify-center py-10 space-y-3 ${
+                isLight ? "text-stone-500" : "text-neutral-400"
+              }`}
+            >
               <Loader2 size={28} className="animate-spin text-amber-500" />
-              <p className="text-xs font-mono text-neutral-400">Loading {version} translation...</p>
+              <p className="text-xs font-mono">Loading {version} translation...</p>
             </div>
           ) : error ? (
-            <div className="p-4 bg-red-950/30 border border-red-800/40 rounded-xl text-red-300 text-xs text-center">
+            <div
+              className={`p-4 rounded-xl text-xs text-center border ${
+                isLight
+                  ? "bg-red-50 border-red-200 text-red-700"
+                  : "bg-red-950/30 border-red-800/40 text-red-300"
+              }`}
+            >
               {error}
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="relative p-5 sm:p-6 bg-[#0D1117] border border-neutral-800 rounded-xl">
-                <p className="text-sm sm:text-base font-serif not-italic font-normal leading-relaxed text-neutral-100 select-text">
+              <div
+                className={`relative p-6 rounded-2xl border ${
+                  isLight
+                    ? "bg-stone-50 border-stone-200"
+                    : "bg-[#0B0E14] border-neutral-800/90"
+                }`}
+              >
+                <p
+                  className={`text-base sm:text-lg font-serif not-italic font-normal leading-relaxed select-text ${
+                    isLight ? "text-stone-900" : "text-neutral-100"
+                  }`}
+                >
                   "{verseText}"
                 </p>
-                <div className="mt-4 pt-3.5 border-t border-neutral-800 flex items-center justify-between text-xs font-mono text-neutral-400">
-                  <span className="flex items-center gap-1.5 text-amber-400 font-medium">
+                <div
+                  className={`mt-4 pt-3.5 border-t flex items-center justify-between text-xs font-mono ${
+                    isLight
+                      ? "border-stone-200 text-stone-500"
+                      : "border-neutral-800 text-neutral-400"
+                  }`}
+                >
+                  <span
+                    className={`flex items-center gap-1.5 font-medium ${
+                      isLight ? "text-amber-700" : "text-amber-400"
+                    }`}
+                  >
                     <Sparkles size={13} />
                     <span>{version} Translation</span>
                   </span>
@@ -220,19 +303,30 @@ export const VerseModal: React.FC<VerseModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 bg-[#0D1117]/90 border-t border-neutral-800 flex items-center justify-between">
+        <div
+          className={`px-6 py-4 border-t flex items-center justify-between ${
+            isLight ? "bg-stone-50 border-stone-200" : "bg-[#0D1117]/95 border-neutral-800"
+          }`}
+        >
           <button
             onClick={handleStudyDeeper}
             disabled={loading || !verseText}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition bg-neutral-850 hover:bg-neutral-800 border-neutral-750 text-neutral-200 hover:text-white hover:border-amber-500/50 hover:text-amber-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs ${
+              isLight
+                ? "bg-white hover:bg-stone-100 border-stone-300 text-stone-800 hover:border-amber-500 hover:text-amber-800"
+                : "bg-neutral-850 hover:bg-neutral-800 border-neutral-750 text-neutral-200 hover:text-white hover:border-amber-500/50 hover:text-amber-300"
+            }`}
           >
-            <BookOpen size={14} className="text-amber-400" />
+            <BookOpen size={14} className={isLight ? "text-amber-600" : "text-amber-400"} />
             <span>Study Deeper</span>
           </button>
-
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-neutral-700 hover:bg-neutral-650 text-white text-xs font-bold rounded-xl transition cursor-pointer border border-neutral-600"
+            className={`px-5 py-2.5 text-xs font-bold rounded-xl transition cursor-pointer border ${
+              isLight
+                ? "bg-stone-800 hover:bg-stone-900 text-white border-stone-700"
+                : "bg-neutral-800 hover:bg-neutral-750 text-white border-neutral-700"
+            }`}
           >
             Done
           </button>

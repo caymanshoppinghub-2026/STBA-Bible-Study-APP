@@ -166,7 +166,22 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       root.classList.add("light");
       root.classList.remove("dark");
     }
+
+    // Broadcast theme update event to keep all modules in sync
+    window.dispatchEvent(new CustomEvent("stba-theme-change", { detail: theme }));
   }, [theme]);
+
+  // Listen for theme updates triggered from elsewhere in the app (e.g. Sabbath School toolbar)
+  useEffect(() => {
+    const handleExternalThemeChange = (e: Event) => {
+      const customEvent = e as CustomEvent<ThemeMode>;
+      if (customEvent.detail && (customEvent.detail === "light" || customEvent.detail === "dark")) {
+        setThemeState((current) => (current !== customEvent.detail ? customEvent.detail : current));
+      }
+    };
+    window.addEventListener("stba-theme-change", handleExternalThemeChange);
+    return () => window.removeEventListener("stba-theme-change", handleExternalThemeChange);
+  }, []);
 
   const toggleTheme = () => {
     setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
@@ -191,7 +206,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (!context) {
-    throw new Error("useTheme must be used within a ThemeProvider");
+    return {
+      theme: "dark" as ThemeMode,
+      setTheme: () => {},
+      toggleTheme: () => {},
+      tokens: darkThemeTokens,
+    };
   }
   return context;
 };

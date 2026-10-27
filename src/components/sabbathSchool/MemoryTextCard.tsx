@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { Quote, Eye, EyeOff, Bookmark, Check, Sparkles } from "lucide-react";
 import { useSabbathSchoolStore } from "../../store/useSabbathSchoolStore";
+import { formatStandardReference } from "../../utils/sabbathUtils";
 
 const STOP_WORDS = new Set([
   "and", "a", "an", "the", "in", "on", "at", "to", "for", "of", "with",
@@ -205,8 +206,8 @@ export const MemoryTextCard: React.FC = () => {
 
         {/* 3. Verse reference and Add Recall button on the same line */}
         <div className={`flex items-center justify-between gap-3 pt-2 border-t ${isLight ? "border-stone-200" : "border-neutral-800/80"}`}>
-          <h4 className={`text-sm sm:text-base font-bold font-mono flex items-center gap-2 ${isLight ? "text-amber-900" : "text-amber-400"}`}>
-            <span>{reference}</span>
+          <h4 className={`text-sm sm:text-base font-bold font-mono flex items-center gap-2 tracking-normal no-underline ${isLight ? "text-amber-900" : "text-amber-400"}`}>
+            <span className="no-underline tracking-normal">{formatStandardReference(reference)}</span>
           </h4>
 
           <button

@@ -218,27 +218,58 @@ export function formatEgwParagraphChunks(rawQuote: string): string[] {
 }
 
 export const SCRIPTURE_BOOKS_PATTERN =
-  "Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Joshua|Judges|Ruth|" +
-  "1\\s*Samuel|2\\s*Samuel|1\\s*Kings|2\\s*Kings|1\\s*Chronicles|2\\s*Chronicles|Ezra|Nehemiah|Esther|Job|" +
-  "Psalms?|Proverbs|Ecclesiastes|Song\\s+of\\s+(?:Solomon|Songs)|Isaiah|Jeremiah|Lamentations|Ezekiel|Daniel|" +
-  "Hosea|Joel|Amos|Obadiah|Jonah|Micah|Nahum|Habakkuk|Zephaniah|Haggai|Zechariah|Malachi|" +
-  "Matthew|Mark|Luke|John|Acts|Romans|1\\s*Corinthians|2\\s*Corinthians|Galatians|Ephesians|Philippians|Colossians|" +
-  "1\\s*Thessalonians|2\\s*Thessalonians|1\\s*Timothy|2\\s*Timothy|Titus|Philemon|Hebrews|James|" +
-  "1\\s*Peter|2\\s*Peter|1\\s*John|2\\s*John|3\\s*John|Jude|Revelation|" +
-  "Gen|Exod?|Ex|Lev|Num|Deut|Josh|Judg|1\\s*Sam|2\\s*Sam|1\\s*Kgs|2\\s*Kgs|1\\s*Kings|2\\s*Kings|" +
-  "1\\s*Chron?|2\\s*Chron?|Ezra|Neh|Esth|Job|Ps|Psa|Prov|Eccl|Song|Isa|Jer|Lam|Ezek?|Dan|Hos|Joel|Amos|Obad|Jonah|Mic|Nah|Hab|Zeph|Hag|Zech|Mal|" +
-  "Matt?|Mark?|Luke?|John|Acts|Rom|1\\s*Cor|2\\s*Cor|Gal|Eph|Phil|Php|Col|1\\s*Thess|2\\s*Thess|1\\s*Tim|2\\s*Tim|Tit|Philem|Heb|Jas|1\\s*Pet|2\\s*Pet|1\\s*Jn|2\\s*Jn|3\\s*Jn|Jude|Rev";
+  "Genesis|Gen|Exodus|Exod?|Exo|Ex|Leviticus|Lev|Le|Numbers|Num|Nu|Deuteronomy|Deut|Deu|Dt|" +
+  "Joshua|Josh|Jos|Judges|Judg|Jdg|Jdgs|Ruth|Rth|Ru|" +
+  "1\\s*Samuel|2\\s*Samuel|1\\s*Sam|2\\s*Sam|1\\s*Sa|2\\s*Sa|1\\s*Kings|2\\s*Kings|1\\s*Kgs|2\\s*Kgs|1\\s*Ki|2\\s*Ki|" +
+  "1\\s*Chronicles|2\\s*Chronicles|1\\s*Chron?|2\\s*Chron?|1\\s*Chr|2\\s*Chr|1\\s*Ch|2\\s*Ch|" +
+  "Ezra|Ezr|Nehemiah|Neh|Ne|Esther|Esth|Est|Job|Jb|" +
+  "Psalms?|Psa|Ps|Proverbs|Prov|Pro|Pr|Ecclesiastes|Eccles|Eccl|Ecc|Ec|Qoh|" +
+  "Song\\s+of\\s+(?:Solomon|Songs)|Song|Canticles|Cant|" +
+  "Isaiah|Isa|Is|Jeremiah|Jer|Je|Lamentations|Lam|La|Ezekiel|Ezek|Eze|Ezk|Daniel|Dan|Da|" +
+  "Hosea|Hos|Ho|Joel|Joe|Jl|Amos|Am|Obadiah|Obad|Ob|Jonah|Jon|Jnh|Micah|Mic|Nahum|Nah|Na|" +
+  "Habakkuk|Hab|Zephaniah|Zeph|Zep|Haggai|Hag|Zechariah|Zech|Zec|Malachi|Mal|" +
+  "Matthew|Matt?|Mat|Mt|Mark|Mrk|Mk|Luke|Luk|Lk|John|Joh|Jhn|Jn|Acts|Act|Ac|Romans|Rom|Ro|" +
+  "1\\s*Corinthians|2\\s*Corinthians|1\\s*Cor|2\\s*Cor|1\\s*Co|2\\s*Co|" +
+  "Galatians|Gal|Ga|Ephesians|Ephes|Eph|Philippians|Phil|Php|Pp|Colossians|Col|" +
+  "1\\s*Thessalonians|2\\s*Thessalonians|1\\s*Thess|2\\s*Thess|1\\s*Th|2\\s*Th|" +
+  "1\\s*Timothy|2\\s*Timothy|1\\s*Tim|2\\s*Tim|1\\s*Ti|2\\s*Ti|Titus|Tit|Ti|Philemon|Philem|Phm|Hebrews|Heb|He|" +
+  "James|Jas|Jm|1\\s*Peter|2\\s*Peter|1\\s*Pet|2\\s*Pet|1\\s*Pe|2\\s*Pe|1\\s*P|2\\s*P|" +
+  "1\\s*John|2\\s*John|3\\s*John|1\\s*Joh|2\\s*Joh|3\\s*Joh|1\\s*Jn|2\\s*Jn|3\\s*Jn|1\\s*Jo|2\\s*Jo|3\\s*Jo|" +
+  "Jude|Jud|Revelation|Revel|Rev|Re";
 
 /**
- * Returns a global case-insensitive RegExp matching Bible references:
- * - Specific verses & multi-verse ranges: e.g. "Heb. 1:1 , 2", "2 Tim. 3:15–17", "Matt. 26:36 , 37", "Exod. 17:14", "Ezek. 4:1–8"
+ * Returns a global case-insensitive RegExp matching Bible references across all 66 books:
+ * - Abbreviations: e.g. "Exod. 17:14", "Ezek. 4:1–8", "2 Tim. 3:15–17"
+ * - Multi-verse ranges: e.g. "Heb. 1:1 , 2", "Matt. 26:36 , 37", "John 3:16, 17"
  * - Chapter ranges: e.g. "1 Cor. 8–10"
+ * - Supports normal and non-breaking spaces (\\u00A0)
  */
 export function getScriptureRegex(): RegExp {
   return new RegExp(
-    `\\b(?:[1-3]\\s*)?(?:${SCRIPTURE_BOOKS_PATTERN})\\.?\\s*(?:\\d+:\\d+(?:\\s*[–—\\-]\\s*\\d+)?(?:\\s*,\\s*\\d+(?:\\s*[–—\\-]\\s*\\d+)?)*|\\d+\\s*[–—\\-]\\s*\\d+)`,
+    `(?:\\b|(?<=[\\s\\u00A0(;“"'’\\[]))(?:[1-3][\\s\\u00A0]*)?(?:${SCRIPTURE_BOOKS_PATTERN})\\.?([\\s\\u00A0]*(?:\\d+[\\s\\u00A0]*:[\\s\\u00A0]*\\d+(?:[\\s\\u00A0]*[–—\\-\\u2013\\u2014\\u2212][\\s\\u00A0]*\\d+)?(?:[\\s\\u00A0]*,[\\s\\u00A0]*\\d+(?:[\\s\\u00A0]*[–—\\-\\u2013\\u2014\\u2212][\\s\\u00A0]*\\d+)?)*|\\d+[\\s\\u00A0]*[–—\\-\\u2013\\u2014\\u2212][\\s\\u00A0]*\\d+))`,
     "gi"
   );
+}
+
+/**
+ * Mandates standard character and token spacing for scripture references:
+ * - Replaces non-breaking spaces (\u00A0) with standard spaces
+ * - Standardizes range dashes (en-dash, em-dash, minus) to clean en-dashes without surrounding gaps
+ * - Removes extra spaces around colons (e.g. "17 : 14" -> "17:14")
+ * - Enforces single standard space after commas without spaces before (e.g. "1:1 , 2" -> "1:1, 2")
+ * - Enforces standard spacing between book numbers and book names (e.g. "1  Cor" -> "1 Cor")
+ * - Normalizes consecutive spaces to a single space
+ */
+export function formatStandardReference(ref: string | null | undefined): string {
+  if (!ref || typeof ref !== "string") return "";
+  return ref
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\s*:\s*/g, ":")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/\s*[–—\u2013\u2014\u2212]\s*/g, "–")
+    .replace(/\s*-\s*/g, "-")
+    .trim();
 }
 
 /**

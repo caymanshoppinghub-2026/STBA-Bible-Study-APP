@@ -23,6 +23,7 @@ import { TourOverlay } from "./TourOverlay";
 import { FloatingQuickNote } from "./notebook/FloatingQuickNote";
 import { useSabbathMode } from "../context/SabbathMode";
 import { useApp } from "../context/AppContext";
+import { useTheme } from "../context/ThemeContext";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -41,6 +42,8 @@ function useWindowWidth() {
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const { sabbathMode } = useSabbathMode();
   const { user, verifyUserEmail, isBottomBarVisible, setIsBottomBarVisible, resetBottomBarTimer } = useApp();
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showCodeModal, setShowCodeModal] = useState(false);
@@ -205,7 +208,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   return (
     <div
-      className={`flex text-white text-left transition-colors duration-700 bg-[#06162c] ${
+      className={`flex text-left transition-colors duration-500 ${
+        isLight ? "bg-[#FAF8F5] text-stone-900" : "bg-[#06162c] text-white"
+      } ${
         isImmersive ? "h-screen max-h-screen overflow-hidden w-full" : "min-h-screen"
       }`}
       id="stba-overall-app-layout"
@@ -246,7 +251,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       </AnimatePresence>
 
       {/* CORE WORKSPACE VIEW */}
-      <div className={`flex-1 flex flex-col min-w-0 bg-[#06162c] ${isImmersive ? "h-full max-h-full overflow-hidden" : ""}`} id="stba-content-workspace">
+      <div className={`flex-1 flex flex-col min-w-0 transition-colors duration-500 ${isLight ? "bg-[#FAF8F5]" : "bg-[#06162c]"} ${isImmersive ? "h-full max-h-full overflow-hidden" : ""}`} id="stba-content-workspace">
         {/* PENDING VERIFICATION ALERT BANNER */}
         {user && !user.emailVerified && (
           <div className="bg-[#1C2333] border-b border-[#C9973A]/30 text-stone-200 px-5 py-3.5 text-xs font-sans flex flex-wrap md:flex-nowrap items-center justify-between gap-4 z-40 animate-fade-in shrink-0 shadow-lg relative overflow-hidden">

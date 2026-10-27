@@ -9,6 +9,7 @@ import { useSabbathSchoolStore } from "../../store/useSabbathSchoolStore";
 import { CollapsibleContainer } from "./CollapsibleContainer";
 import { getTheologicalTakeaways } from "../../utils/sabbathLessonTheology";
 import { VerseModal } from "../VerseModal";
+import { formatStandardReference } from "../../utils/sabbathUtils";
 
 export const TalkingPointsSummary: React.FC = () => {
   const { lessonTitle, memoryVerse, dailyLessons, recordTakeawayEngagement, readingFontSize, readingTheme } = useSabbathSchoolStore();
@@ -178,15 +179,15 @@ export const TalkingPointsSummary: React.FC = () => {
                             key={vIdx}
                             type="button"
                             onClick={() => handleOpenVerse(verseRef)}
-                            title={`Read full scripture: ${verseRef}`}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg ${getVerseButtonFontSizeClass(readingFontSize)} font-mono font-bold transition cursor-pointer border shadow-2xs ${
+                            title={`Read full scripture: ${formatStandardReference(verseRef)}`}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg ${getVerseButtonFontSizeClass(readingFontSize)} font-mono font-bold transition cursor-pointer border shadow-2xs no-underline hover:no-underline tracking-normal ${
                               isLight
                                 ? "bg-amber-50 hover:bg-amber-100 border-amber-300 text-[#783E0A] hover:text-[#522904]"
                                 : "bg-[#1C2333] hover:bg-[#252E42] border-[#C9973A]/40 text-amber-300 hover:text-white"
                             }`}
                           >
                             <BookOpen size={11} className="shrink-0 text-amber-500" />
-                            <span>{verseRef}</span>
+                            <span className="no-underline tracking-normal">{formatStandardReference(verseRef)}</span>
                           </button>
                         ))}
                       </div>
@@ -268,6 +269,7 @@ export const TalkingPointsSummary: React.FC = () => {
       <VerseModal
         isOpen={isVerseModalOpen}
         reference={activeVerseRef}
+        theme={isLight ? "light" : "dark"}
         onClose={() => setIsVerseModalOpen(false)}
       />
     </>
