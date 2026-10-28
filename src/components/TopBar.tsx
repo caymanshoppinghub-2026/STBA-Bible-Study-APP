@@ -18,14 +18,10 @@ import {
   BookOpen,
   Shield,
   Volume2,
-  Radio,
-  Sun,
-  Moon
+  Radio
 } from "lucide-react";
 import { useSabbathMode } from "../context/SabbathMode";
 import { useApp } from "../context/AppContext";
-import { useTheme } from "../context/ThemeContext";
-import { useSabbathSchoolStore } from "../store/useSabbathSchoolStore";
 import { STBA_LOGO_URL } from "../assets/branding";
 import {
   AppNotification,
@@ -52,15 +48,6 @@ export const TopBar: React.FC<TopBarProps> = ({
   const navigate = useNavigate();
   const { sabbathMode } = useSabbathMode();
   const { user } = useApp();
-  const { theme, toggleTheme } = useTheme();
-  const { readingTheme, setReadingTheme } = useSabbathSchoolStore();
-  const isLight = theme === "light";
-
-  const handleToggleGlobalTheme = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    toggleTheme();
-    setReadingTheme(nextTheme);
-  };
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>(() => getStoredNotifications());
@@ -177,11 +164,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   return (
     <header
       id="stba-top-bar"
-      className={`h-[68px] backdrop-blur-md px-4 sm:px-6 flex items-center justify-between shrink-0 relative z-30 transition-all duration-300 select-none text-left shadow-lg ${
-        isLight
-          ? "bg-[#FFFDF7]/95 border-b border-amber-200/80 text-stone-900 shadow-stone-200/50"
-          : "bg-[#06162c]/95 border-b border-[#E5B842]/20 text-white shadow-black/20"
-      }`}
+      className="h-[68px] bg-[#06162c]/95 backdrop-blur-md border-b border-[#E5B842]/20 px-4 sm:px-6 flex items-center justify-between shrink-0 relative z-30 transition-all duration-300 select-none text-left shadow-lg shadow-black/20"
     >
       {/* LEFT: SLIDE-OUT MENU TOGGLE & STBA LOGO BRANDING */}
       <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 shrink-0">
@@ -189,11 +172,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         <button
           id="stba-sidebar-toggle-btn"
           onClick={handleMenuClick}
-          className={`p-2 -ml-1.5 rounded-xl focus:outline-none transition-all cursor-pointer shadow-xs active:scale-95 group flex items-center justify-center border ${
-            isLight
-              ? "bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300/70"
-              : "bg-[#0d3060]/60 hover:bg-[#0d3060] text-[#F3CF65] border-[#E5B842]/30"
-          }`}
+          className="p-2 -ml-1.5 rounded-xl bg-[#0d3060]/60 hover:bg-[#0d3060] text-[#F3CF65] border border-[#E5B842]/30 focus:outline-none transition-all cursor-pointer shadow-xs active:scale-95 group flex items-center justify-center"
           aria-label="Toggle Navigation Menu"
           title="Toggle Navigation Menu"
         >
@@ -207,11 +186,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           className="flex items-center space-x-2.5 group focus:outline-none"
         >
           <div className="relative">
-            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full ring-2 transition-all p-0.5 overflow-hidden flex items-center justify-center shadow-md ${
-              isLight
-                ? "ring-amber-400/80 group-hover:ring-amber-500 bg-amber-100 shadow-amber-300/30"
-                : "ring-[#E5B842]/50 group-hover:ring-[#F3CF65] bg-[#0a2246] shadow-[#E5B842]/10"
-            }`}>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full ring-2 ring-[#E5B842]/50 group-hover:ring-[#F3CF65] transition-all p-0.5 bg-[#0a2246] overflow-hidden flex items-center justify-center shadow-md shadow-[#E5B842]/10">
               <img
                 src={STBA_LOGO_URL}
                 alt="STBA Official Seal"
@@ -219,73 +194,39 @@ export const TopBar: React.FC<TopBarProps> = ({
                 className="w-full h-full object-contain"
               />
             </div>
-            <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 shadow-xs ${
-              isLight ? "bg-amber-500 border-[#FFFDF7]" : "bg-[#F3CF65] border-[#06162c]"
-            }`} />
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[#F3CF65] rounded-full border-2 border-[#06162c] shadow-xs" />
           </div>
 
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
-              <span className={`font-serif font-black text-lg sm:text-xl tracking-tight leading-none transition-colors ${
-                isLight ? "text-amber-900 group-hover:text-amber-700" : "text-[#F3CF65] group-hover:text-amber-200"
-              }`}>
+              <span className="font-serif font-black text-[#F3CF65] text-lg sm:text-xl tracking-tight leading-none group-hover:text-amber-200 transition-colors">
                 STBA
               </span>
             </div>
-            <span className={`text-[8px] sm:text-[9px] uppercase font-mono tracking-widest font-bold leading-none mt-0.5 ${
-              isLight ? "text-stone-500" : "text-[#94A3B8]"
-            }`}>
+            <span className="text-[8px] sm:text-[9px] uppercase font-mono tracking-widest text-[#94A3B8] font-bold leading-none mt-0.5">
               Study To Be Approved™
             </span>
           </div>
         </Link>
       </div>
 
-      {/* RIGHT: HUD (GLOBAL THEME TOGGLE, NOTIFICATION BELL, USER PROFILE) */}
+      {/* RIGHT: HUD (NOTIFICATION BELL, USER PROFILE) */}
       <div className="flex items-center space-x-2 sm:space-x-3 shrink-0" id="topbar-actions-hud">
-        {/* GLOBAL DAY / NIGHT THEME TOGGLE BUTTON */}
-        <button
-          id="topbar-theme-toggle-btn"
-          type="button"
-          onClick={handleToggleGlobalTheme}
-          className={`p-2 rounded-xl transition-all cursor-pointer relative focus:outline-none hover:scale-105 active:scale-95 border group flex items-center justify-center ${
-            isLight
-              ? "bg-amber-50 hover:bg-amber-100 text-stone-700 hover:text-amber-950 border-amber-300/70 shadow-xs"
-              : "bg-[#0a2246]/60 hover:bg-[#0d3060] text-amber-300 hover:text-[#F3CF65] border-[#E5B842]/20 shadow-xs"
-          }`}
-          aria-label={isLight ? "Switch to Night Mode (Dark)" : "Switch to Day Mode (Light)"}
-          title={isLight ? "Switch to Night Mode" : "Switch to Day Mode"}
-        >
-          {isLight ? (
-            <Moon className="w-4 h-4 text-stone-700 transition-transform group-hover:-rotate-12" />
-          ) : (
-            <Sun className="w-4 h-4 text-amber-300 transition-transform group-hover:rotate-45" />
-          )}
-        </button>
-
         {/* NOTIFICATIONS BELL WITH BADGE */}
         <div className="relative">
           <button
             id="topbar-bell-btn"
             onClick={() => setShowNotifications(!showNotifications)}
-            className={`p-2 rounded-xl transition-all cursor-pointer relative focus:outline-none hover:scale-105 active:scale-95 border ${
-              isLight
-                ? `bg-amber-50/80 hover:bg-amber-100 text-stone-700 hover:text-amber-900 border-amber-300/60 ${
-                    isBellRinging ? "animate-bell-glow border-amber-500 text-amber-600" : ""
-                  }`
-                : `bg-[#0a2246]/60 hover:bg-[#0d3060] text-stone-300 hover:text-[#F3CF65] border-[#E5B842]/20 ${
-                    isBellRinging ? "animate-bell-glow border-[#F3CF65] text-[#F3CF65]" : ""
-                  }`
+            className={`p-2 rounded-xl bg-[#0a2246]/60 hover:bg-[#0d3060] text-stone-300 hover:text-[#F3CF65] border border-[#E5B842]/20 transition-all cursor-pointer relative focus:outline-none hover:scale-105 active:scale-95 ${
+              isBellRinging ? "animate-bell-glow border-[#F3CF65] text-[#F3CF65]" : ""
             }`}
             aria-label="View notifications"
             title="Notifications"
           >
             {/* Subtle swinging animation when notification arrives */}
-            <Bell className={`w-4 h-4 ${isBellRinging ? (isLight ? "animate-bell-ring text-amber-600" : "animate-bell-ring text-[#F3CF65]") : ""}`} />
+            <Bell className={`w-4 h-4 ${isBellRinging ? "animate-bell-ring text-[#F3CF65]" : ""}`} />
             {unreadCount > 0 && (
-              <span className={`absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 font-mono font-black text-[10px] rounded-full flex items-center justify-center border shadow-xs ${
-                isLight ? "bg-amber-500 text-white border-white" : "bg-[#E5B842] text-[#06162c] border-[#06162c]"
-              }`}>
+              <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 bg-[#E5B842] text-[#06162c] font-mono font-black text-[10px] rounded-full flex items-center justify-center border border-[#06162c] shadow-xs">
                 {unreadCount}
               </span>
             )}
@@ -634,11 +575,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           className="flex items-center pl-1 focus:outline-none group"
           title="Account Profile & Settings"
         >
-          <div className={`w-8.5 h-8.5 rounded-full ring-2 transition-all flex items-center justify-center font-serif text-xs font-bold overflow-hidden shadow-sm ${
-            isLight
-              ? "bg-amber-100 text-amber-950 ring-amber-400/80 group-hover:ring-amber-500 shadow-amber-300/30"
-              : "bg-[#0a2246] text-[#F3CF65] ring-[#E5B842]/50 group-hover:ring-[#F3CF65] shadow-black/20"
-          }`}>
+          <div className="w-8.5 h-8.5 rounded-full bg-[#0a2246] text-[#F3CF65] ring-2 ring-[#E5B842]/50 group-hover:ring-[#F3CF65] transition-all flex items-center justify-center font-serif text-xs font-bold overflow-hidden shadow-sm">
             {user?.profilePic ? (
               <img
                 src={user.profilePic}

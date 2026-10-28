@@ -355,20 +355,8 @@ export const useSabbathSchoolStore = () => {
       fetchWeeklySyncData(false);
     }
 
-    // Listen for theme updates triggered globally
-    const handleGlobalThemeChange = (e: Event) => {
-      const customEvent = e as CustomEvent<"dark" | "light">;
-      if (customEvent.detail && (customEvent.detail === "light" || customEvent.detail === "dark")) {
-        if (globalStateStore.readingTheme !== customEvent.detail) {
-          saveStateAndNotify({ ...globalStateStore, readingTheme: customEvent.detail });
-        }
-      }
-    };
-    window.addEventListener("stba-theme-change", handleGlobalThemeChange);
-
     return () => {
       globalListeners.delete(setState);
-      window.removeEventListener("stba-theme-change", handleGlobalThemeChange);
     };
   }, []);
 
@@ -411,21 +399,6 @@ export const useSabbathSchoolStore = () => {
 
   const setReadingTheme = (theme: "dark" | "light") => {
     saveStateAndNotify({ ...globalStateStore, readingTheme: theme });
-    try {
-      localStorage.setItem("stba_global_theme", theme);
-      const root = window.document.documentElement;
-      root.setAttribute("data-theme", theme);
-      if (theme === "dark") {
-        root.classList.add("dark");
-        root.classList.remove("light");
-      } else {
-        root.classList.add("light");
-        root.classList.remove("dark");
-      }
-      window.dispatchEvent(new CustomEvent("stba-theme-change", { detail: theme }));
-    } catch (e) {
-      // ignore
-    }
   };
 
   const addDeckCard = (card: Omit<SabbathClassCard, "id" | "totalAttempts" | "successRate">) => {
