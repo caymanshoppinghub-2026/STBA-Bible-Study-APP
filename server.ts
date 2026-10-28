@@ -2919,11 +2919,31 @@ app.get("/api/bible", async (req, res) => {
   }
 
   try {
-    const text = await bibleService.getText(ref, version);
-    return res.json({ text });
+    const passage = await bibleService.getPassage(ref, version);
+    return res.json(passage);
   } catch (err: any) {
     return res.status(500).json({ error: "Failed to fetch verse text", details: err?.message });
   }
+});
+
+// Proxy and stub endpoints for Vercel Speed Insights to ensure valid JavaScript is always returned
+app.get("/_vercel/speed-insights/script.js", async (req, res) => {
+  try {
+    const upstreamRes = await fetch("https://va.vercel-scripts.com/v1/speed-insights/script.js");
+    if (upstreamRes.ok) {
+      const scriptBody = await upstreamRes.text();
+      res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+      return res.send(scriptBody);
+    }
+  } catch (e) {
+    // fallback
+  }
+  res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+  return res.send("/* Vercel Speed Insights proxy */");
+});
+
+app.post("/_vercel/speed-insights/vitals", (req, res) => {
+  return res.status(200).json({ ok: true });
 });
 
 // Curated daily Bible verses endpoint to provide inspiration upon login

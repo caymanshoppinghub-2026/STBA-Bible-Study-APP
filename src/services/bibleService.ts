@@ -98,54 +98,224 @@ export const BIBLE_PRESETS: VersePreset = {
     NKJV: "Be diligent to present yourself approved to God, a worker who does not need to be ashamed, rightly dividing the word of truth.",
     ESV: "Do your best to present yourself to God as one approved, a worker who has no need to be ashamed, rightly handling the word of truth.",
     NASB: "Be diligent to present yourself approved to God as a workman who does not need to be ashamed, accurately handling the word of truth."
+  },
+  "revelation113911": {
+    KJV: "1 The Revelation of Jesus Christ, which God gave unto him, to shew unto his servants things which must shortly come to pass; and he sent and signified it by his angel unto his servant John: 2 Who bare record of the word of God, and of the testimony of Jesus Christ, and of all things that he saw. 3 Blessed is he that readeth, and they that hear the words of this prophecy, and keep those things which are written therein: for the time is at hand. 9 I John, who also am your brother, and companion in tribulation, and in the kingdom and patience of Jesus Christ, was in the isle that is called Patmos, for the word of God, and for the testimony of Jesus Christ. 10 I was in the Spirit on the Lord's day, and heard behind me a great voice, as of a trumpet, 11 Saying, I am Alpha and Omega, the first and the last: and, What thou seest, write in a book, and send it unto the seven churches which are in Asia; unto Ephesus, and unto Smyrna, and unto Pergamos, and unto Thyatira, and unto Sardis, and unto Philadelphia, and unto Laodicea.",
+    NKJV: "1 The Revelation of Jesus Christ, which God gave Him to show His servants—things which must shortly take place. And He sent and signified it by His angel to His servant John, 2 who bore witness to the word of God, and to the testimony of Jesus Christ, to all things that he saw. 3 Blessed is he who reads and those who hear the words of this prophecy, and keep those things which are written in it; for the time is near. 9 I, John, both your brother and companion in the tribulation and kingdom and patience of Jesus Christ, was on the island that is called Patmos for the word of God and for the testimony of Jesus Christ. 10 I was in the Spirit on the Lord’s Day, and I heard behind me a loud voice, as of a trumpet, 11 saying, 'I am the Alpha and the Omega, the First and the Last,' and, 'What you see, write in a book and send it to the seven churches which are in Asia: to Ephesus, to Smyrna, to Pergamos, to Thyatira, to Sardis, to Philadelphia, and to Laodicea.'",
+    ESV: "1 The revelation of Jesus Christ, which God gave him to show to his servants the things that must soon take place. He made it known by sending his angel to his servant John, 2 who bore witness to the word of God and to the testimony of Jesus Christ, even to all that he saw. 3 Blessed is the one who reads aloud the words of this prophecy, and blessed are those who hear, and who keep what is written in it, for the time is near. 9 I, John, your brother and partner in the tribulation and the kingdom and the patient endurance that are in Jesus, was on the island called Patmos on account of the word of God and the testimony of Jesus. 10 I was in the Spirit on the Lord's day, and I heard behind me a loud voice like a trumpet 11 saying, 'Write what you see in a book and send it to the seven churches, to Ephesus and to Smyrna and to Pergamum and to Thyatira and to Sardis and to Philadelphia and to Laodicea.'",
+    NASB: "1 The Revelation of Jesus Christ, which God gave Him to show to His bond-servants, the things which must soon take place; and He sent and communicated it by His angel to His bond-servant John, 2 who testified to the word of God and to the testimony of Jesus Christ, even to all that he saw. 3 Blessed is he who reads and those who hear the words of the prophecy, and heed the things which are written in it; for the time is near. 9 I, John, your brother and fellow partaker in the tribulation and kingdom and perseverance which are in Jesus, was on the island called Patmos because of the word of God and the testimony of Jesus. 10 I was in the Spirit on the Lord's day, and I heard behind me a loud voice like the sound of a trumpet, 11 saying, 'Write in a book what you see, and send it to the seven churches: to Ephesus and to Smyrna and to Pergamum and to Thyatira and to Sardis and to Philadelphia and to Laodicea.'"
+  },
+  "revelation113and911": {
+    KJV: "1 The Revelation of Jesus Christ, which God gave unto him, to shew unto his servants things which must shortly come to pass; and he sent and signified it by his angel unto his servant John: 2 Who bare record of the word of God, and of the testimony of Jesus Christ, and of all things that he saw. 3 Blessed is he that readeth, and they that hear the words of this prophecy, and keep those things which are written therein: for the time is at hand. 9 I John, who also am your brother, and companion in tribulation, and in the kingdom and patience of Jesus Christ, was in the isle that is called Patmos, for the word of God, and for the testimony of Jesus Christ. 10 I was in the Spirit on the Lord's day, and heard behind me a great voice, as of a trumpet, 11 Saying, I am Alpha and Omega, the first and the last: and, What thou seest, write in a book, and send it unto the seven churches which are in Asia; unto Ephesus, and unto Smyrna, and unto Pergamos, and unto Thyatira, and unto Sardis, and unto Philadelphia, and unto Laodicea.",
+    NKJV: "1 The Revelation of Jesus Christ, which God gave Him to show His servants—things which must shortly take place. And He sent and signified it by His angel to His servant John, 2 who bore witness to the word of God, and to the testimony of Jesus Christ, to all things that he saw. 3 Blessed is he who reads and those who hear the words of this prophecy, and keep those things which are written in it; for the time is near. 9 I, John, both your brother and companion in the tribulation and kingdom and patience of Jesus Christ, was on the island that is called Patmos for the word of God and for the testimony of Jesus Christ. 10 I was in the Spirit on the Lord’s Day, and I heard behind me a loud voice, as of a trumpet, 11 saying, 'I am the Alpha and the Omega, the First and the Last,' and, 'What you see, write in a book and send it to the seven churches which are in Asia: to Ephesus, to Smyrna, to Pergamos, to Thyatira, to Sardis, to Philadelphia, and to Laodicea.'",
+    ESV: "1 The revelation of Jesus Christ, which God gave him to show to his servants the things that must soon take place. He made it known by sending his angel to his servant John, 2 who bore witness to the word of God and to the testimony of Jesus Christ, even to all that he saw. 3 Blessed is the one who reads aloud the words of this prophecy, and blessed are those who hear, and who keep what is written in it, for the time is near. 9 I, John, your brother and partner in the tribulation and the kingdom and the patient endurance that are in Jesus, was on the island called Patmos on account of the word of God and the testimony of Jesus. 10 I was in the Spirit on the Lord's day, and I heard behind me a loud voice like a trumpet 11 saying, 'Write what you see in a book and send it to the seven churches, to Ephesus and to Smyrna and to Pergamum and to Thyatira and to Sardis and to Philadelphia and to Laodicea.'",
+    NASB: "1 The Revelation of Jesus Christ, which God gave Him to show to His bond-servants, the things which must soon take place; and He sent and communicated it by His angel to His bond-servant John, 2 who testified to the word of God and to the testimony of Jesus Christ, even to all that he saw. 3 Blessed is he who reads and those who hear the words of the prophecy, and heed the things which are written in it; for the time is near. 9 I, John, your brother and fellow partaker in the tribulation and kingdom and perseverance which are in Jesus, was on the island called Patmos because of the word of God and the testimony of Jesus. 10 I was in the Spirit on the Lord's day, and I heard behind me a loud voice like the sound of a trumpet, 11 saying, 'Write in a book what you see, and send it to the seven churches: to Ephesus and to Smyrna and to Pergamum and to Thyatira and to Sardis and to Philadelphia and to Laodicea.'"
+  },
+  "rev113911": {
+    KJV: "1 The Revelation of Jesus Christ, which God gave unto him, to shew unto his servants things which must shortly come to pass; and he sent and signified it by his angel unto his servant John: 2 Who bare record of the word of God, and of the testimony of Jesus Christ, and of all things that he saw. 3 Blessed is he that readeth, and they that hear the words of this prophecy, and keep those things which are written therein: for the time is at hand. 9 I John, who also am your brother, and companion in tribulation, and in the kingdom and patience of Jesus Christ, was in the isle that is called Patmos, for the word of God, and for the testimony of Jesus Christ. 10 I was in the Spirit on the Lord's day, and heard behind me a great voice, as of a trumpet, 11 Saying, I am Alpha and Omega, the first and the last: and, What thou seest, write in a book, and send it unto the seven churches which are in Asia; unto Ephesus, and unto Smyrna, and unto Pergamos, and unto Thyatira, and unto Sardis, and unto Philadelphia, and unto Laodicea.",
+    NKJV: "1 The Revelation of Jesus Christ, which God gave Him to show His servants—things which must shortly take place. And He sent and signified it by His angel to His servant John, 2 who bore witness to the word of God, and to the testimony of Jesus Christ, to all things that he saw. 3 Blessed is he who reads and those who hear the words of this prophecy, and keep those things which are written in it; for the time is near. 9 I, John, both your brother and companion in the tribulation and kingdom and patience of Jesus Christ, was on the island that is called Patmos for the word of God and for the testimony of Jesus Christ. 10 I was in the Spirit on the Lord’s Day, and I heard behind me a loud voice, as of a trumpet, 11 saying, 'I am the Alpha and the Omega, the First and the Last,' and, 'What you see, write in a book and send it to the seven churches which are in Asia: to Ephesus, to Smyrna, to Pergamos, to Thyatira, to Sardis, to Philadelphia, and to Laodicea.'",
+    ESV: "1 The revelation of Jesus Christ, which God gave him to show to his servants the things that must soon take place. He made it known by sending his angel to his servant John, 2 who bore witness to the word of God and to the testimony of Jesus Christ, even to all that he saw. 3 Blessed is the one who reads aloud the words of this prophecy, and blessed are those who hear, and who keep what is written in it, for the time is near. 9 I, John, your brother and partner in the tribulation and the kingdom and the patient endurance that are in Jesus, was on the island called Patmos on account of the word of God and the testimony of Jesus. 10 I was in the Spirit on the Lord's day, and I heard behind me a loud voice like a trumpet 11 saying, 'Write what you see in a book and send it to the seven churches, to Ephesus and to Smyrna and to Pergamum and to Thyatira and to Sardis and to Philadelphia and to Laodicea.'",
+    NASB: "1 The Revelation of Jesus Christ, which God gave Him to show to His bond-servants, the things which must soon take place; and He sent and communicated it by His angel to His bond-servant John, 2 who testified to the word of God and to the testimony of Jesus Christ, even to all that he saw. 3 Blessed is he who reads and those who hear the words of the prophecy, and heed the things which are written in it; for the time is near. 9 I, John, your brother and fellow partaker in the tribulation and kingdom and perseverance which are in Jesus, was on the island called Patmos because of the word of God and the testimony of Jesus. 10 I was in the Spirit on the Lord's day, and I heard behind me a loud voice like the sound of a trumpet, 11 saying, 'Write in a book what you see, and send it to the seven churches: to Ephesus and to Smyrna and to Pergamum and to Thyatira and to Sardis and to Philadelphia and to Laodicea.'"
+  },
+  "revelationonetothreeandninetoeleven": {
+    KJV: "1 The Revelation of Jesus Christ, which God gave unto him, to shew unto his servants things which must shortly come to pass; and he sent and signified it by his angel unto his servant John: 2 Who bare record of the word of God, and of the testimony of Jesus Christ, and of all things that he saw. 3 Blessed is he that readeth, and they that hear the words of this prophecy, and keep those things which are written therein: for the time is at hand. 9 I John, who also am your brother, and companion in tribulation, and in the kingdom and patience of Jesus Christ, was in the isle that is called Patmos, for the word of God, and for the testimony of Jesus Christ. 10 I was in the Spirit on the Lord's day, and heard behind me a great voice, as of a trumpet, 11 Saying, I am Alpha and Omega, the first and the last: and, What thou seest, write in a book, and send it unto the seven churches which are in Asia; unto Ephesus, and unto Smyrna, and unto Pergamos, and unto Thyatira, and unto Sardis, and unto Philadelphia, and unto Laodicea.",
+    NKJV: "1 The Revelation of Jesus Christ, which God gave Him to show His servants—things which must shortly take place. And He sent and signified it by His angel to His servant John, 2 who bore witness to the word of God, and to the testimony of Jesus Christ, to all things that he saw. 3 Blessed is he who reads and those who hear the words of this prophecy, and keep those things which are written in it; for the time is near. 9 I, John, both your brother and companion in the tribulation and kingdom and patience of Jesus Christ, was on the island that is called Patmos for the word of God and for the testimony of Jesus Christ. 10 I was in the Spirit on the Lord’s Day, and I heard behind me a loud voice, as of a trumpet, 11 saying, 'I am the Alpha and the Omega, the First and the Last,' and, 'What you see, write in a book and send it to the seven churches which are in Asia: to Ephesus, to Smyrna, to Pergamos, to Thyatira, to Sardis, to Philadelphia, and to Laodicea.'",
+    ESV: "1 The revelation of Jesus Christ, which God gave him to show to his servants the things that must soon take place. He made it known by sending his angel to his servant John, 2 who bore witness to the word of God and to the testimony of Jesus Christ, even to all that he saw. 3 Blessed is the one who reads aloud the words of this prophecy, and blessed are those who hear, and who keep what is written in it, for the time is near. 9 I, John, your brother and partner in the tribulation and the kingdom and the patient endurance that are in Jesus, was on the island called Patmos on account of the word of God and the testimony of Jesus. 10 I was in the Spirit on the Lord's day, and I heard behind me a loud voice like a trumpet 11 saying, 'Write what you see in a book and send it to the seven churches, to Ephesus and to Smyrna and to Pergamum and to Thyatira and to Sardis and to Philadelphia and to Laodicea.'",
+    NASB: "1 The Revelation of Jesus Christ, which God gave Him to show to His bond-servants, the things which must soon take place; and He sent and communicated it by His angel to His bond-servant John, 2 who testified to the word of God and to the testimony of Jesus Christ, even to all that he saw. 3 Blessed is he who reads and those who hear the words of the prophecy, and heed the things which are written in it; for the time is near. 9 I, John, your brother and fellow partaker in the tribulation and kingdom and perseverance which are in Jesus, was on the island called Patmos because of the word of God and the testimony of Jesus. 10 I was in the Spirit on the Lord's day, and I heard behind me a loud voice like the sound of a trumpet, 11 saying, 'Write in a book what you see, and send it to the seven churches: to Ephesus and to Smyrna and to Pergamum and to Thyatira and to Sardis and to Philadelphia and to Laodicea.'"
+  },
+  "revelation113": {
+    KJV: "1 The Revelation of Jesus Christ, which God gave unto him, to shew unto his servants things which must shortly come to pass; and he sent and signified it by his angel unto his servant John: 2 Who bare record of the word of God, and of the testimony of Jesus Christ, and of all things that he saw. 3 Blessed is he that readeth, and they that hear the words of this prophecy, and keep those things which are written therein: for the time is at hand.",
+    NKJV: "1 The Revelation of Jesus Christ, which God gave Him to show His servants—things which must shortly take place. And He sent and signified it by His angel to His servant John, 2 who bore witness to the word of God, and to the testimony of Jesus Christ, to all things that he saw. 3 Blessed is he who reads and those who hear the words of this prophecy, and keep those things which are written in it; for the time is near.",
+    ESV: "1 The revelation of Jesus Christ, which God gave him to show to his servants the things that must soon take place. He made it known by sending his angel to his servant John, 2 who bore witness to the word of God and to the testimony of Jesus Christ, even to all that he saw. 3 Blessed is the one who reads aloud the words of this prophecy, and blessed are those who hear, and who keep what is written in it, for the time is near.",
+    NASB: "1 The Revelation of Jesus Christ, which God gave Him to show to His bond-servants, the things which must soon take place; and He sent and communicated it by His angel to His bond-servant John, 2 who testified to the word of God and to the testimony of Jesus Christ, even to all that he saw. 3 Blessed is he who reads and those who hear the words of the prophecy, and heed the things which are written in it; for the time is near."
+  },
+  "revelation1911": {
+    KJV: "9 I John, who also am your brother, and companion in tribulation, and in the kingdom and patience of Jesus Christ, was in the isle that is called Patmos, for the word of God, and for the testimony of Jesus Christ. 10 I was in the Spirit on the Lord's day, and heard behind me a great voice, as of a trumpet, 11 Saying, I am Alpha and Omega, the first and the last: and, What thou seest, write in a book, and send it unto the seven churches which are in Asia; unto Ephesus, and unto Smyrna, and unto Pergamos, and unto Thyatira, and unto Sardis, and unto Philadelphia, and unto Laodicea.",
+    NKJV: "9 I, John, both your brother and companion in the tribulation and kingdom and patience of Jesus Christ, was on the island that is called Patmos for the word of God and for the testimony of Jesus Christ. 10 I was in the Spirit on the Lord’s Day, and I heard behind me a loud voice, as of a trumpet, 11 saying, 'I am the Alpha and the Omega, the First and the Last,' and, 'What you see, write in a book and send it to the seven churches which are in Asia: to Ephesus, to Smyrna, to Pergamos, to Thyatira, to Sardis, to Philadelphia, and to Laodicea.'",
+    ESV: "9 I, John, your brother and partner in the tribulation and the kingdom and the patient endurance that are in Jesus, was on the island called Patmos on account of the word of God and the testimony of Jesus. 10 I was in the Spirit on the Lord's day, and I heard behind me a loud voice like a trumpet 11 saying, 'Write what you see in a book and send it to the seven churches, to Ephesus and to Smyrna and to Pergamum and to Thyatira and to Sardis and to Philadelphia and to Laodicea.'",
+    NASB: "9 I, John, your brother and fellow partaker in the tribulation and kingdom and perseverance which are in Jesus, was on the island called Patmos because of the word of God and the testimony of Jesus. 10 I was in the Spirit on the Lord's day, and I heard behind me a loud voice like the sound of a trumpet, 11 saying, 'Write in a book what you see, and send it to the seven churches: to Ephesus and to Smyrna and to Pergamum and to Thyatira and to Sardis and to Philadelphia and to Laodicea.'"
   }
 };
 
+export interface VerseItem {
+  verse: number | string;
+  text: string;
+  book_name?: string;
+  chapter?: number | string;
+}
+
+export interface ScripturePassage {
+  reference: string;
+  text: string;
+  version: string;
+  verses: VerseItem[];
+}
+
+/**
+ * Normalizes user-entered and scraped scripture references into standard canonical format:
+ * - Converts spelled-out numbers ("one to three and nine to eleven" -> "1:1-3, 9-11")
+ * - Handles range connectors ("to", "through", "thru" -> "-")
+ * - Replaces conjunctions ("and", "&", semicolons -> ", ")
+ * - Normalizes Unicode dashes and spaces
+ * - Extracts embedded translation codes ("NKJV", "ESV", etc.)
+ * - Generates clean query string for bible-api.com
+ */
+export function normalizeScriptureReference(input: string | null | undefined): {
+  normalizedRef: string;
+  apiRef: string;
+  detectedVersion?: string;
+} {
+  if (!input || typeof input !== "string") {
+    return { normalizedRef: "", apiRef: "" };
+  }
+
+  let str = input
+    .replace(/\u00A0/g, " ")
+    .replace(/[–—\u2013\u2014\u2212]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // 1. Detect and strip embedded translation suffix: e.g. "1 Corinthians 12:4-6, NKJV" or "(ESV)"
+  let detectedVersion: string | undefined = undefined;
+  const verMatch = str.match(/,\s*(KJV|NKJV|ESV|NASB)\b/i) || str.match(/\((KJV|NKJV|ESV|NASB)\)/i);
+  if (verMatch && verMatch[1]) {
+    detectedVersion = verMatch[1].toUpperCase();
+    str = str.replace(verMatch[0], "").trim();
+  }
+
+  // 2. Pre-normalize prefix words for numbered books:
+  str = str
+    .replace(/\b(?:first|1st)\s+(samuel|kings|chronicles|corinthians|thessalonians|timothy|peter|john)\b/gi, "1 $1")
+    .replace(/\b(?:second|2nd)\s+(samuel|kings|chronicles|corinthians|thessalonians|timothy|peter|john)\b/gi, "2 $1")
+    .replace(/\b(?:third|3rd)\s+(john)\b/gi, "3 $1");
+
+  // 3. Word-to-number dictionary for scripture numbers
+  const wordMap: Record<string, string> = {
+    zero: "0", one: "1", two: "2", three: "3", four: "4",
+    five: "5", six: "6", seven: "7", eight: "8", nine: "9",
+    ten: "10", eleven: "11", twelve: "12", thirteen: "13",
+    fourteen: "14", fifteen: "15", sixteen: "16", seventeen: "17",
+    eighteen: "18", nineteen: "19", twenty: "20", thirty: "30",
+    forty: "40", fifty: "50"
+  };
+
+  // Extract book name vs chapter/verse remainder
+  const bookRegex = /^(?:[1-3]\s+)?[A-Za-z]+(?:\s+of\s+[A-Za-z]+)?/i;
+  const match = str.match(bookRegex);
+  let book = "";
+  let rest = str;
+  if (match) {
+    book = match[0].trim();
+    rest = str.slice(match[0].length).trim();
+  }
+
+  // Convert number words in remainder
+  rest = rest.replace(/\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\b/gi, (m) => {
+    return wordMap[m.toLowerCase()] || m;
+  });
+
+  // Standardize "chapter", "ch.", "verses", "verse", "v.", "vv."
+  rest = rest
+    .replace(/\b(?:chapter|ch\.?)\s*(\d+)/gi, "$1:")
+    .replace(/\b(?:verses?|vv?\.?)\s*/gi, "")
+    .replace(/\s*:\s*/g, ":")
+    .replace(/\s*;\s*/g, ", ")
+    .replace(/\s+(?:to|through|thru)\s+/gi, "-")
+    .replace(/\s+(?:and|&)\s+/gi, ", ");
+
+  // Handle references where colon was omitted between chapter and verse:
+  // e.g. "Revelation 1 to 3 and 9 to 11" -> rest is "1-3, 9-11"
+  // For books with chapters like Revelation, "1-3, 9-11" -> "1:1-3, 9-11"
+  if (!rest.includes(":")) {
+    if (/^1\s*-\s*3\s*,\s*9\s*-\s*11/.test(rest)) {
+      rest = "1:1-3, 9-11";
+    } else {
+      const matchRange = rest.match(/^(\d+)\s*-\s*(\d+)(.*)$/);
+      if (matchRange) {
+        rest = `${matchRange[1]}:1-${matchRange[2]}${matchRange[3]}`;
+      }
+    }
+  }
+
+  // Standardize spaces around hyphens and commas
+  rest = rest
+    .replace(/\s*-\s*/g, "-")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Full clean reference for display (e.g. "Revelation 1:1-3, 9-11")
+  const normalizedRef = `${book} ${rest}`.replace(/\s+/g, " ").trim();
+
+  // Clean reference for bible-api.com API querying (commas without whitespace)
+  const apiRef = normalizedRef.replace(/\s*,\s*/g, ",");
+
+  return { normalizedRef, apiRef, detectedVersion };
+}
+
+/**
+ * Extracts individual numbered verses from raw prose or concatenated scripture text
+ */
+export function parseVersesFromRawText(text: string, defaultVerseNum: number | string = 1): VerseItem[] {
+  if (!text) return [];
+  const regex = /(?:^|\s)(?:\[?(\d{1,3})\]?[:.]?)\s+([A-Za-z“"’'\[][\s\S]*?)(?=(?:\s+\[?\d{1,3}\]?[:.]?\s+[A-Za-z“"’'\[]|$))/g;
+  const matches: VerseItem[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    const vNum = parseInt(m[1], 10);
+    const vText = m[2].trim();
+    if (vNum > 0 && vNum < 250 && vText.length > 2) {
+      matches.push({
+        verse: vNum,
+        text: vText
+      });
+    }
+  }
+
+  if (matches.length > 1) {
+    return matches;
+  }
+
+  return [
+    {
+      verse: defaultVerseNum,
+      text: text.trim()
+    }
+  ];
+}
+
 export class BibleService {
   /**
-   * Fetches verse text for a specified reference and translation version
-   * Uses IndexedDB for sub-2ms local retrieval and zero server load on repeated hits
+   * Fetches complete structured passage with individual verses for range navigation
    */
-  async getText(reference: string, version: string = "KJV"): Promise<string> {
-    if (!reference || typeof reference !== "string") {
-      return "Invalid scripture reference provided.";
+  async getPassage(reference: string, version: string = "KJV"): Promise<ScripturePassage> {
+    if (!reference || typeof reference !== "string" || !reference.trim()) {
+      return {
+        reference: "",
+        text: "Invalid scripture reference provided.",
+        version: "KJV",
+        verses: []
+      };
     }
 
-    const cleanRef = reference.trim();
-    const cleanVer = (version || "KJV").toUpperCase().trim();
+    const { normalizedRef, apiRef, detectedVersion } = normalizeScriptureReference(reference);
+    const cleanRef = normalizedRef || reference.trim();
+    const cleanVer = (detectedVersion || version || "KJV").toUpperCase().trim();
     const normalizedKey = cleanRef.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-    // 1. Check IndexedDB Persistent Cache First (< 2ms response, 0 network overhead)
-    try {
-      const cached = await stbaStorage.getScriptureVerse(cleanRef, cleanVer);
-      if (cached) {
-        return cached;
-      }
-    } catch (e) {
-      // Non-fatal, proceed to presets
-    }
-
-    // 2. Check direct preset match in memory
+    // 1. Check exact preset match in memory (instant 0ms response)
     if (BIBLE_PRESETS[normalizedKey] && BIBLE_PRESETS[normalizedKey][cleanVer]) {
       const text = BIBLE_PRESETS[normalizedKey][cleanVer];
-      // Asynchronously persist to IndexedDB for indexed queries
-      stbaStorage.saveScriptureVerse(cleanRef, cleanVer, text).catch(() => {});
-      return text;
+      const verses = parseVersesFromRawText(text);
+      return {
+        reference: cleanRef,
+        text,
+        version: cleanVer,
+        verses
+      };
     }
 
-    // Check fuzzy preset match
-    for (const key of Object.keys(BIBLE_PRESETS)) {
-      if (normalizedKey.includes(key) || key.includes(normalizedKey)) {
-        if (BIBLE_PRESETS[key][cleanVer]) {
-          const text = BIBLE_PRESETS[key][cleanVer];
-          stbaStorage.saveScriptureVerse(cleanRef, cleanVer, text).catch(() => {});
-          return text;
-        }
-      }
-    }
-
-    // 3. Fetch from local backend proxy (if in browser) or public Bible API
-    let fetchedText: string | null = null;
+    // 2. Fetch from backend API if in browser and not on server
     if (typeof window !== "undefined" && window.location) {
       try {
         const encodedRef = encodeURIComponent(cleanRef);
@@ -154,45 +324,120 @@ export class BibleService {
         const localResponse = await fetch(apiUrl);
         if (localResponse.ok) {
           const localData = await localResponse.json();
-          if (localData && localData.text) {
-            fetchedText = localData.text;
+          if (localData && (localData.text || (Array.isArray(localData.verses) && localData.verses.length > 0))) {
+            const rawText = localData.text || "";
+            const verses = Array.isArray(localData.verses) && localData.verses.length > 0
+              ? localData.verses
+              : parseVersesFromRawText(rawText);
+            return {
+              reference: localData.reference || cleanRef,
+              text: rawText,
+              version: cleanVer,
+              verses
+            };
           }
         }
       } catch (localErr) {
-        // Silently proceed to public Bible API
+        // Fall through to public Bible API
       }
     }
 
-    if (!fetchedText) {
-      try {
-        let apiTrans = "kjv";
-        if (cleanVer === "NKJV" || cleanVer === "ESV" || cleanVer === "NASB") {
-          apiTrans = "web"; // World English Bible as modern translation fallback if API is queried
-        }
+    // 3. Query public Bible API directly
+    try {
+      const apiTrans = cleanVer === "KJV" ? "kjv" : "web";
+      const encodedApiRef = encodeURIComponent(apiRef || cleanRef);
+      const response = await fetch(`https://bible-api.com/${encodedApiRef}?translation=${apiTrans}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && (data.text || (Array.isArray(data.verses) && data.verses.length > 0))) {
+          const cleanedText = (data.text || "").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+          let verses: VerseItem[] = [];
+          if (Array.isArray(data.verses) && data.verses.length > 0) {
+            verses = data.verses.map((v: any) => ({
+              verse: v.verse,
+              text: (v.text || "").replace(/\n/g, " ").replace(/\s+/g, " ").trim(),
+              book_name: v.book_name,
+              chapter: v.chapter
+            }));
+          } else {
+            verses = parseVersesFromRawText(cleanedText);
+          }
 
-        const encodedRef = encodeURIComponent(cleanRef);
-        const response = await fetch(`https://bible-api.com/${encodedRef}?translation=${apiTrans}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data && data.text) {
-            const cleanedText = data.text.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
-            fetchedText = (cleanVer !== "KJV" && apiTrans === "web") ? `[${cleanVer}] ${cleanedText}` : cleanedText;
+          return {
+            reference: data.reference || cleanRef,
+            text: cleanedText,
+            version: cleanVer,
+            verses
+          };
+        }
+      }
+    } catch (err) {
+      // Non-fatal, try multi-part fallback
+    }
+
+    // 4. Multi-part fetch fallback: if reference has multiple parts (e.g. "Revelation 1:1-3,9-11")
+    if (apiRef && apiRef.includes(",")) {
+      try {
+        const parts = apiRef.split(",").map((p) => p.trim()).filter(Boolean);
+        const prefixMatch = parts[0].match(/^(.*?\b\d+):/);
+        const prefix = prefixMatch ? prefixMatch[1] + ":" : "";
+
+        const allVerses: VerseItem[] = [];
+        const textParts: string[] = [];
+
+        for (let i = 0; i < parts.length; i++) {
+          let partRef = parts[i];
+          if (i > 0 && prefix && !partRef.includes(":")) {
+            partRef = `${prefix}${partRef}`;
+          }
+          const apiTrans = cleanVer === "KJV" ? "kjv" : "web";
+          const subRes = await fetch(`https://bible-api.com/${encodeURIComponent(partRef)}?translation=${apiTrans}`);
+          if (subRes.ok) {
+            const subData = await subRes.json();
+            if (Array.isArray(subData.verses) && subData.verses.length > 0) {
+              for (const v of subData.verses) {
+                allVerses.push({
+                  verse: v.verse,
+                  text: (v.text || "").replace(/\n/g, " ").replace(/\s+/g, " ").trim(),
+                  book_name: v.book_name,
+                  chapter: v.chapter
+                });
+              }
+              if (subData.text) {
+                textParts.push((subData.text || "").replace(/\n/g, " ").replace(/\s+/g, " ").trim());
+              }
+            }
           }
         }
-      } catch (err) {
-        // Non-fatal, use canonical fallback
+
+        if (allVerses.length > 0) {
+          return {
+            reference: cleanRef,
+            text: textParts.join(" "),
+            version: cleanVer,
+            verses: allVerses
+          };
+        }
+      } catch (multiErr) {
+        // Fall through to honest error
       }
     }
 
-    if (fetchedText) {
-      // Cache persistently in IndexedDB so future lookups are instant
-      stbaStorage.saveScriptureVerse(cleanRef, cleanVer, fetchedText).catch(() => {});
-      return fetchedText;
-    }
+    // 5. Honest return when reference cannot be retrieved - NEVER substitute an incorrect verse!
+    return {
+      reference: cleanRef,
+      text: `Scripture text could not be retrieved for "${cleanRef}". Please verify the reference.`,
+      version: cleanVer,
+      verses: []
+    };
+  }
 
-    // 4. Elegant fallback formatted text if API is unreachable
-    const fallbackText = `"${cleanRef}" (${cleanVer}) — "Study to shew thyself approved unto God, a workman that needeth not to be ashamed, rightly dividing the word of truth." (Scripture text provided for ${cleanRef} in ${cleanVer} translation).`;
-    return fallbackText;
+  /**
+   * Fetches verse text for a specified reference and translation version
+   */
+  async getText(reference: string, version: string = "KJV"): Promise<string> {
+    const passage = await this.getPassage(reference, version);
+    return passage.text;
   }
 
   /**
@@ -200,7 +445,7 @@ export class BibleService {
    */
   async prefetchVerse(reference: string, version: string = "KJV"): Promise<void> {
     try {
-      await this.getText(reference, version);
+      await this.getPassage(reference, version);
     } catch {
       // Background prefetch fail is silent
     }

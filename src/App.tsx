@@ -470,7 +470,7 @@ export function App() {
           </StartupSafetyWrapper>
         </MediaInitializationProvider>
       </ThemeProvider>
-      <SpeedInsights />
+      <SpeedInsights scriptSrc="https://va.vercel-scripts.com/v1/speed-insights/script.js" />
     </Router>
   );
 }
