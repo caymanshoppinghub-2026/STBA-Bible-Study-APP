@@ -44,6 +44,7 @@ import { initContentUpdatesWatcher } from "./utils/contentUpdatesWatcher";
 import { AppLayout } from "./components/AppLayout";
 import { ThemeProvider } from "./context/ThemeContext";
 import { MediaInitializationProvider, StartupSafetyWrapper } from "./components/MediaInitializationProvider";
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 function PublicLayout({ children }: { children: React.ReactNode }) {
   const { sabbathMode } = useSabbathMode();
@@ -469,6 +470,7 @@ export function App() {
           </StartupSafetyWrapper>
         </MediaInitializationProvider>
       </ThemeProvider>
+      <SpeedInsights />
     </Router>
   );
 }
