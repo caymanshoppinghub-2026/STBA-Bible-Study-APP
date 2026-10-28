@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+
 import React, { useState } from "react";
 import { X, Copy, Check, Share2, Mail, Printer, MessageSquare, BookOpen } from "lucide-react";
 import { useSabbathSchoolStore } from "../../store/useSabbathSchoolStore";
