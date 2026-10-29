@@ -310,3 +310,38 @@ export async function getEgwNotesDailyBreakdown(): Promise<any> {
   return null;
 }
 
+/**
+ * Retrieves the 3 horizontal theological takeaways synthesized directly from scraped source website Talking Points.
+ */
+export async function getTheologicalTakeawaysFromSource(forceRefresh: boolean = false): Promise<any> {
+  try {
+    const url = `/api/sabbath/theological-takeaways?refresh=${forceRefresh ? "true" : "false"}`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (err) {
+    console.warn("[SabbathAPI] getTheologicalTakeawaysFromSource warning:", err);
+  }
+  return null;
+}
+
+/**
+ * Retrieves the raw scraped Talking Points from the source website.
+ */
+export async function getScrapedLessonTalkingPoints(): Promise<any> {
+  try {
+    const response = await fetch("/api/sabbath/scraped-talking-points");
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (err) {
+    console.warn("[SabbathAPI] getScrapedLessonTalkingPoints warning:", err);
+  }
+  return null;
+}
+
+

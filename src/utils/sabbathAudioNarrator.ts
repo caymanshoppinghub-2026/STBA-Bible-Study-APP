@@ -233,8 +233,86 @@ export function expandScriptureReferences(text: string): string {
   });
 }
 
+const SCRIPTURE_BOOKS_NARRATION_PATTERN =
+  "Genesis|Gen|Exodus|Exod?|Exo|Ex|Leviticus|Lev|Le|Numbers|Num|Nu|Deuteronomy|Deut|Deu|Dt|" +
+  "Joshua|Josh|Jos|Judges|Judg|Jdg|Ruth|Ru|" +
+  "1\\s*Samuel|2\\s*Samuel|1\\s*Sam|2\\s*Sam|1\\s*Sa|2\\s*Sa|1\\s*Kings|2\\s*Kings|1\\s*Kgs|2\\s*Kgs|1\\s*Ki|2\\s*Ki|" +
+  "1\\s*Chronicles|2\\s*Chronicles|1\\s*Chron?|2\\s*Chr|1\\s*Chr|" +
+  "Ezra|Ezr|Nehemiah|Neh|Ne|Esther|Esth|Job|Jb|" +
+  "Psalms?|Psa|Ps|Proverbs|Prov|Pro|Pr|Ecclesiastes|Eccles|Eccl|Ecc|Song\\s+of\\s+(?:Solomon|Songs)|Song|" +
+  "Isaiah|Isa|Is|Jeremiah|Jer|Lamentations|Lam|Ezekiel|Ezek|Eze|Daniel|Dan|Da|" +
+  "Hosea|Hos|Joel|Amos|Am|Obadiah|Obad|Jonah|Jon|Micah|Mic|Nahum|Nah|Habakkuk|Hab|Zephaniah|Zeph|Haggai|Hag|Zechariah|Zech|Malachi|Mal|" +
+  "Matthew|Matt?|Mat|Mt|Mark|Mrk|Mk|Luke|Luk|Lk|John|Joh|Jn|Acts|Act|Ac|Romans|Rom|Ro|" +
+  "1\\s*Corinthians|2\\s*Corinthians|1\\s*Cor|2\\s*Cor|1\\s*Co|2\\s*Co|" +
+  "Galatians|Gal|Ephesians|Ephes|Eph|Philippians|Phil|Php|Colossians|Col|" +
+  "1\\s*Thessalonians|2\\s*Thessalonians|1\\s*Thess|2\\s*Thess|1\\s*Th|2\\s*Th|" +
+  "1\\s*Timothy|2\\s*Timothy|1\\s*Tim|2\\s*Tim|Titus|Tit|Philemon|Philem|Hebrews|Heb|He|" +
+  "James|Jas|1\\s*Peter|2\\s*Peter|1\\s*Pet|2\\s*Pet|1\\s*Pe|2\\s*Pe|" +
+  "1\\s*John|2\\s*John|3\\s*John|1\\s*Joh|2\\s*Joh|3\\s*Joh|1\\s*Jn|2\\s*Jn|3\\s*Jn|" +
+  "Jude|Jud|Revelation|Revel|Rev|Re";
+
+/**
+ * Strips inline scripture references, parenthetical citations, translation identifiers,
+ * and metadata headings so the narrator reads only the main paragraph prose text naturally.
+ */
+export function stripScriptureReferencesAndMetadata(text: string): string {
+  if (!text || typeof text !== "string") return "";
+
+  let cleaned = text
+    .replace(/\u00A0/g, " ")
+    .replace(/[–—\u2013\u2014\u2212]/g, "-");
+
+  // 1. Remove parenthetical scripture citations: e.g. "(see Acts 15:20, 29; 1 Cor. 6:9; Eph. 5:5; Rev. 21:8)",
+  // "(1 Cor. 7:1)", "(1 Cor. 10:31, NKJV)", "(John 3:16)", "(cf. Rom. 8:1-4)"
+  const parenScriptureRegex = new RegExp(
+    `\\s*\\([\\s]*(?:see(?:\\s+also)?|compare|cf\\.?|read|quoted\\s+in)?\\s*(?:[1-3]\\s*)?(?:${SCRIPTURE_BOOKS_NARRATION_PATTERN})\\.?\\s*\\d+[:.]\\d+[\\s\\S]*?\\)`,
+    "gi"
+  );
+  cleaned = cleaned.replace(parenScriptureRegex, "");
+
+  // 2. Remove standalone parenthetical translation tags e.g. "(NKJV)", "(KJV)", "(ESV)", "(NASB)", "(NIV)"
+  cleaned = cleaned.replace(/\s*\((?:NKJV|KJV|ESV|NASB|NIV|NLT|RSV|AMP)\)/gi, "");
+
+  // 3. Remove standalone verse citations outside parentheses (e.g. "1 Cor. 10:31", "Rev. 14:12")
+  const inlineScriptureRegex = new RegExp(
+    `\\b(?:see\\s+|compare\\s+)?(?:[1-3]\\s*)?(?:${SCRIPTURE_BOOKS_NARRATION_PATTERN})\\.?\\s*\\d+[:.]\\d+(?:[–—\\-]\\d+)?(?:,\\s*\\d+(?:[–—\\-]\\d+)?)*\\b`,
+    "gi"
+  );
+  cleaned = cleaned.replace(inlineScriptureRegex, "");
+
+  // 4. Remove metadata brackets e.g. [1], [2], footnote indicators
+  cleaned = cleaned.replace(/\[\d+\]/g, "");
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+
+  // 5. Remove markdown section headers and metadata lines:
+  // e.g. "### 1. Introduction to 1 Corinthians 8-10" or "Lesson 1: ..."
+  cleaned = cleaned.replace(/^#{1,6}\s*(?:\d+[\.:]\s*)?.*$/gm, "");
+
+  // 6. Clean markdown formatting: bold, italic, blockquotes, bullets
+  cleaned = cleaned
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/^>\s*/gm, "")
+    .replace(/^[-*•]\s+/gm, "");
+
+  // 7. Clean up punctuation and spacing around stripped elements
+  cleaned = cleaned
+    .replace(/\s*([,;:])\s*/g, "$1 ")
+    .replace(/\s+([.?!])/g, "$1")
+    .replace(/,\s*,+/g, ",")
+    .replace(/,\s*\./g, ".")
+    .replace(/\.{2,}/g, ".")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned;
+}
+
 /**
  * Strips markdown and cleans lesson text to ensure a single, continuous, natural flowing spoken narration
+ * containing ONLY the main paragraph text, skipping any inline scripture references or metadata.
  */
 export function cleanLessonTextForSpokenNarration(content: any): string {
   let rawText = "";
@@ -252,28 +330,10 @@ export function cleanLessonTextForSpokenNarration(content: any): string {
 
   if (!rawText.trim()) return "";
 
-  // 1. Expand all scripture citations first
-  let smoothed = expandScriptureReferences(rawText);
+  // 1. Strip inline scripture references and metadata so only main paragraph text remains
+  let smoothed = stripScriptureReferencesAndMetadata(rawText);
 
-  // 2. Remove markdown headers (#, ##, ###) into smooth prose sentences
-  smoothed = smoothed.replace(/^#{1,6}\s+(.*)$/gm, "$1.");
-
-  // 3. Remove bold and italic markers
-  smoothed = smoothed.replace(/\*\*([^*]+)\*\*/g, "$1");
-  smoothed = smoothed.replace(/\*([^*]+)\*/g, "$1");
-  smoothed = smoothed.replace(/__([^_]+)__/g, "$1");
-  smoothed = smoothed.replace(/_([^_]+)_/g, "$1");
-
-  // 4. Clean blockquotes and bullet points
-  smoothed = smoothed.replace(/^>\s*/gm, "");
-  smoothed = smoothed.replace(/^[-*•]\s+/gm, "");
-
-  // 5. Clean citation brackets e.g. [1], [2], (see also...)
-  smoothed = smoothed.replace(/\[\d+\]/g, "");
-  smoothed = smoothed.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1"); // markdown links
-
-  // 6. Avoid robotic pauses at punctuation:
-  // Replace multiple periods/ellipses, long dashes, and semicolons with softer flow
+  // 2. Avoid robotic pauses at punctuation
   smoothed = smoothed.replace(/\.{2,}/g, ".");
   smoothed = smoothed.replace(/—|–/g, ", ");
   smoothed = smoothed.replace(/;/g, ",");

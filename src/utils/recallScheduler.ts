@@ -283,6 +283,76 @@ export function saveRecallQueue(items: RecallQueueItem[]): void {
 }
 
 /**
+ * Adds a scripture to the user's active recall schedule
+ */
+export function addScriptureToRecallQueue(scripture: {
+  reference: string;
+  text: string;
+  trackTitle?: string;
+  theologicalContext?: string;
+}): RecallQueueItem {
+  const queue = getRecallQueue();
+  const now = Date.now();
+  const cleanRef = scripture.reference.trim();
+
+  // Check if item with identical reference already exists in queue
+  const existingIndex = queue.findIndex(
+    (q) => q.reference.toLowerCase().trim() === cleanRef.toLowerCase()
+  );
+  if (existingIndex !== -1) {
+    // Bring to top and mark due for review
+    const existing = queue[existingIndex];
+    existing.dueAt = new Date(now).toISOString();
+    existing.decayStatus = "Review Due";
+    queue.splice(existingIndex, 1);
+    queue.unshift(existing);
+    saveRecallQueue(queue);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("stba-recall-queue-updated", { detail: { item: existing, queue } }));
+    }
+    return existing;
+  }
+
+  // Extract keywords
+  const keywords = scripture.text
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, "")
+    .split(/\s+/)
+    .filter((w) => w.length > 4 && !["which", "shall", "unto", "there", "their", "these", "about"].includes(w))
+    .slice(0, 5);
+
+  const id = `rq-custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const scriptureId = `custom-${Date.now()}`;
+
+  const newItem: RecallQueueItem = {
+    id,
+    scriptureId,
+    reference: cleanRef,
+    text: scripture.text.trim(),
+    keywords: keywords.length > 0 ? keywords : ["scripture", "truth", "faith"],
+    trackTitle: scripture.trackTitle || "Scripture Memory",
+    theologicalContext: scripture.theologicalContext || `Scripture committed to memory from ${cleanRef}.`,
+    proficiencyScore: 50,
+    stage: 1,
+    intervalDays: 1,
+    lastReviewedAt: new Date(now).toISOString(),
+    dueAt: new Date(now).toISOString(),
+    retrievalAttempts: 0,
+    successfulRetrievals: 0,
+    decayStatus: "Review Due"
+  };
+
+  queue.unshift(newItem);
+  saveRecallQueue(queue);
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("stba-recall-queue-updated", { detail: { newItem, queue } }));
+  }
+
+  return newItem;
+}
+
+/**
  * Pulls current daily recall progress (date-checked)
  */
 export function getDailyRecallProgress(): DailyRecallProgress {

@@ -13,9 +13,11 @@ import {
   recordClassroomActivity, 
   getSabbathSchoolSyncData,
   triggerSabbathSchoolSync,
+  getTheologicalTakeawaysFromSource,
   DailyLesson, 
   SabbathClassCard 
 } from "../api/sabbathSchoolApi";
+import { TheologicalTakeawayItem } from "../utils/sabbathLessonTheology";
 import { askElderStephen, ElderStephenMessage } from "../api/elderStephenApi";
 import { notifyLiveSectionUpdate } from "../utils/contentUpdatesWatcher";
 import { separateLessonAndEgwNotes } from "../utils/sabbathUtils";
@@ -82,6 +84,8 @@ export interface SabbathSchoolState {
   lastSyncedAt?: string;
   isSyncing?: boolean;
   activeLessonDate: string;
+  theologicalTakeaways?: TheologicalTakeawayItem[];
+  isTakeawaysLoading?: boolean;
 }
 
 export function formatQuarterTitle(title?: string): string {
@@ -223,6 +227,8 @@ Reflect on how your spiritual gifts can be used this week to encourage your Sabb
   isEgwAudioPlaying: false,
   isEgwVideoPlaying: false,
   currentEgwTimestampIndex: 0,
+  theologicalTakeaways: undefined,
+  isTakeawaysLoading: false,
   classroomStats: {
     totalStudents: 0,
     complianceRate: 0,
@@ -580,6 +586,9 @@ export const useSabbathSchoolStore = () => {
           dailyLessons: mappedDailyLessons.length === 7 ? mappedDailyLessons : globalStateStore.dailyLessons,
           weeklyVideos: payload.videos || globalStateStore.weeklyVideos,
           egwDailyBreakdown: payload.egwDailyBreakdown || globalStateStore.egwDailyBreakdown,
+          theologicalTakeaways: (Array.isArray(payload.theologicalTakeaways) && payload.theologicalTakeaways.length === 3)
+            ? payload.theologicalTakeaways
+            : globalStateStore.theologicalTakeaways,
           hasPendingRetries: typeof payload.hasPendingRetries === "boolean" ? payload.hasPendingRetries : false,
           pendingChannels: payload.pendingChannels || [],
           nextRetryAt: payload.nextRetryAt,
@@ -820,6 +829,25 @@ ${contextSummary ? `Special Context: ${contextSummary}` : ""}`;
     });
   };
 
+  const refreshTheologicalTakeaways = async () => {
+    saveStateAndNotify({ ...globalStateStore, isTakeawaysLoading: true });
+    try {
+      const res = await getTheologicalTakeawaysFromSource(true);
+      if (res && Array.isArray(res.takeaways) && res.takeaways.length === 3) {
+        saveStateAndNotify({
+          ...globalStateStore,
+          theologicalTakeaways: res.takeaways,
+          isTakeawaysLoading: false
+        });
+        return res.takeaways;
+      }
+    } catch (e) {
+      console.warn("[SabbathStore] Error refreshing theological takeaways:", e);
+    }
+    saveStateAndNotify({ ...globalStateStore, isTakeawaysLoading: false });
+    return null;
+  };
+
   const resetStore = () => {
     saveStateAndNotify(DEFAULT_STATE);
   };
@@ -857,6 +885,7 @@ ${contextSummary ? `Special Context: ${contextSummary}` : ""}`;
     setIsEgwVideoPlaying,
     setCurrentEgwTimestampIndex,
     fetchWeeklySyncData,
+    refreshTheologicalTakeaways,
     resetStore
   };
 };

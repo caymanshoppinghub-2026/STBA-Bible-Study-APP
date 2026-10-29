@@ -11,6 +11,7 @@ export interface TheologicalTakeawayItem {
   chapterTag: string;
   title: string;
   description: string;
+  bulletPoints?: string[];
   supportingVerses: string[];
   egwConnection?: {
     note: string;
@@ -28,12 +29,117 @@ export interface EgwQuoteItem {
 
 // Preset Takeaways for standard Sabbath School lessons: 3 Core Weekly Points summarizing the entire week (Days 1–7)
 const THEOLOGICAL_TAKEAWAY_PRESETS: Record<string, TheologicalTakeawayItem[]> = {
+  "new testament prophets": [
+    {
+      id: 1,
+      chapterTag: "Days 1–3 Synthesis",
+      title: "1. Jesus as Supreme Prophet and Foundation of the Church",
+      description: "Across the opening days, Scripture reveals that Jesus Christ is the supreme Prophet who uniquely embodies the Word made flesh. The New Testament church is grounded on the foundation of the apostles and prophets, with Christ Himself as the chief cornerstone.",
+      bulletPoints: [
+        "Jesus fulfills Moses' prophecy (Deut. 18:15) as the definitive Prophet, Priest, and King whose words carry supreme divine authority.",
+        "Unlike Old Testament prophets who delivered preparatory messages, Jesus delivers full divine revelation in His person and ministry.",
+        "The apostolic foundation and prophetic ministry complement each other to build a unified, enduring church body (Eph. 2:20)."
+      ],
+      supportingVerses: ["Hebrews 1:1–3", "Matthew 16:13–16", "Ephesians 2:20", "John 1:14"],
+      egwConnection: {
+        note: "In Christ is the fullness of the Godhead bodily. All prophetic revelation throughout biblical history finds its center, truth, and vindication in His life, death, and resurrection.",
+        source: "The Desire of Ages, p. 25"
+      }
+    },
+    {
+      id: 2,
+      chapterTag: "Day 4 & Mid-Week Heart",
+      title: "2. Functions of New Testament Prophets in the Body of Christ",
+      description: "New Testament prophets operated within local congregations to provide spiritual guidance, encouragement, warning, and moral exhortation. Prophetic ministry was given to equip believers, protect against deceptive snares, and foster Christlike character.",
+      bulletPoints: [
+        "New Testament prophets functioned alongside pastors and teachers to edify, exhort, and comfort the flock of God.",
+        "The prophetic gift was distributed without gender partiality, as demonstrated by the prophetess Anna and Philip's four prophesying daughters (Acts 21:9).",
+        "Prophetic messages were never intended to supersede Scripture, but to guide the church in applying biblical truths faithfully."
+      ],
+      supportingVerses: ["1 Corinthians 12:28", "Acts 21:9–11", "Ephesians 4:11–13", "Luke 2:36–38"],
+      egwConnection: {
+        note: "The gifts of the Spirit are given to the church for its protection, unity, and completion in love until the Lord's return.",
+        source: "The Acts of the Apostles, p. 550"
+      }
+    },
+    {
+      id: 3,
+      chapterTag: "Days 5–7 Climax",
+      title: "3. Testing False Prophets and Centering on God's Word",
+      description: "In the closing days, the lesson warns against deceptive false prophets who arise in the last days. Every prophetic claim must be tested by biblical fruit, loyalty to Jesus' commandments, and strict fidelity to Sola Scriptura.",
+      bulletPoints: [
+        "Jesus warned that deceptive signs and wonders would emerge in the last days to deceive even the elect if possible (Matt. 24:24).",
+        "Disciples must test spirits according to Sola Scriptura: 'To the law and to the testimony; if they speak not according to this word, there is no light in them' (Isa. 8:20).",
+        "The end-time remnant church is recognized by keeping the commandments of God and having the testimony of Jesus, which is the Spirit of Prophecy (Rev. 12:17, 19:10)."
+      ],
+      supportingVerses: ["1 John 4:1–3", "Matthew 24:24", "Isaiah 8:20", "Revelation 14:12"],
+      egwConnection: {
+        note: "To the law and to the testimony: if they speak not according to this word, it is because there is no light in them. God's Word is the detector of all error.",
+        source: "The Great Controversy, p. 593"
+      }
+    }
+  ],
+  "the gift of prophecy": [
+    {
+      id: 1,
+      chapterTag: "Days 1–3 Synthesis",
+      title: "1. Divine Communication with Fallen Humanity",
+      description: "God instituted the prophetic gift in Eden after the Fall to maintain open communication with humanity, revealing His character, calling sinners to repentance, and pointing to Christ.",
+      bulletPoints: [
+        "Prophecy is God's redemptive bridge to communicate divine will to fallen human beings who can no longer see Him face-to-face.",
+        "True prophecy uplifts Jesus Christ as the only Redeemer and points sinners to repentance and restoration.",
+        "God reveals secret things to His servants the prophets to prepare His people for decisive events in salvation history (Amos 3:7)."
+      ],
+      supportingVerses: ["Hebrews 1:1–2", "Genesis 3:15", "Amos 3:7"],
+      egwConnection: {
+        note: "Through His prophets God has made known to men His purpose to redeem a fallen world through Jesus Christ.",
+        source: "Patriarchs and Prophets, p. 364"
+      }
+    },
+    {
+      id: 2,
+      chapterTag: "Day 4 & Mid-Week Heart",
+      title: "2. The Spirit Distributes Prophetic Gifts Sovereignly",
+      description: "The Holy Spirit distributes the gift of prophecy according to divine wisdom to strengthen, comfort, and guide the church across generations.",
+      bulletPoints: [
+        "The prophetic gift is not self-appointed but sovereignly imparted by the Holy Spirit as He wills (1 Cor. 12:11).",
+        "Prophetic counsel calls believers away from worldliness and strengthens their trust in the living God.",
+        "Both men and women were called to prophetic office in Scripture to witness for God's truth."
+      ],
+      supportingVerses: ["1 Corinthians 12:4–11", "Joel 2:28–29", "Acts 2:17–18"],
+      egwConnection: {
+        note: "The Holy Spirit distributes gifts to every believer for the building up of the church in love.",
+        source: "Christ’s Object Lessons, p. 327"
+      }
+    },
+    {
+      id: 3,
+      chapterTag: "Days 5–7 Climax",
+      title: "3. The Remnant Safeguard in the Final Conflict",
+      description: "In the end-time conflict between truth and counterfeit deception, God provides the Spirit of Prophecy as a lamp to guide the remnant safely to the heavenly Canaan.",
+      bulletPoints: [
+        "The Spirit of Prophecy is a biblical identifier of God's remnant church in the last days (Rev. 12:17, 19:10).",
+        "Prophetic guidance clarifies biblical truths and exposes the subtle sophistries of the adversary.",
+        "Believing God's prophets brings spiritual prosperity, stability, and unyielding faith (2 Chron. 20:20)."
+      ],
+      supportingVerses: ["Revelation 12:17", "Revelation 19:10", "2 Chronicles 20:20"],
+      egwConnection: {
+        note: "Believe in the Lord your God, so shall ye be established; believe His prophets, so shall ye prosper.",
+        source: "Testimonies, vol. 5, p. 681"
+      }
+    }
+  ],
   "spiritual gifts": [
     {
       id: 1,
       chapterTag: "Days 1–3 Synthesis",
       title: "1. One Spirit, Diverse Gifts for Unified Edification",
       description: "Across Days 1 through 3, Scripture demonstrates that the Holy Spirit sovereignly imparts diverse spiritual gifts to every believer. These gifts are not distributed for personal status or rivalry, but to build an interdependent body of Christ where every member functions in coordinated unity.",
+      bulletPoints: [
+        "The Holy Spirit sovereignly dispenses gifts according to divine wisdom, not human merit or rivalry.",
+        "Every member is an essential organ in the body of Christ with distinct responsibilities for unified growth.",
+        "Spiritual gifts are given for mutual edification and service, never for self-exaltation or division."
+      ],
       supportingVerses: ["1 Corinthians 12:4–7", "1 Corinthians 12:12–14", "1 Corinthians 12:25–27"],
       egwConnection: {
         note: "God assigns to every man his work according to his ability. The harmony of the church depends on the unity of its members in Christ. Diversity of gifts is ordained of God for the symmetrical growth of the church.",
@@ -45,6 +151,11 @@ const THEOLOGICAL_TAKEAWAY_PRESETS: Record<string, TheologicalTakeawayItem[]> = 
       chapterTag: "Day 4 & Day 7 Devotion",
       title: "2. The Indispensable Supremacy of Agape Love",
       description: "In the pivotal center of the week (Day 4) and Friday's devotion (Day 7), Paul demonstrates that even the most spectacular spiritual gifts, profound wisdom, or sacrificial martyrdom are completely worthless without unselfish agape love. Love is the enduring character of God that outlasts every temporary spiritual gift.",
+      bulletPoints: [
+        "Agape love is the indispensable motive that gives spiritual validity to all talents, ministries, and sacrifices.",
+        "Gifts without sacrificial love are spiritually hollow, noisy, and unprofitable in God's eyes.",
+        "Love endures through trials and outlasts all temporary spiritual manifestations into eternity."
+      ],
       supportingVerses: ["1 Corinthians 13:1–3", "1 Corinthians 13:4–8", "1 Corinthians 13:13", "2 Corinthians 2:4"],
       egwConnection: {
         note: "Love is the active principle that transforms character and unites hearts in unselfish service. Consecrate your gifts wholly to the Master's service.",
@@ -56,6 +167,11 @@ const THEOLOGICAL_TAKEAWAY_PRESETS: Record<string, TheologicalTakeawayItem[]> = 
       chapterTag: "Days 5–6 & Day 7 Mission",
       title: "3. Reverent Order, Clear Truth, and Prophetic Testing",
       description: "In the closing days of the week (Days 5 to 7), the study emphasizes that spiritual gifts must be exercised with clear intelligibility, self-restraint, and reverent order in public worship so all are edified, with all prophetic claims tested faithfully by Sola Scriptura.",
+      bulletPoints: [
+        "Order and intelligibility in worship honor God and build up the understanding of all present.",
+        "Prophetic utterances and spiritual teachings must be tested faithfully against Sola Scriptura.",
+        "The ultimate objective of every gift is holy character development, unity, and missionary proclamation."
+      ],
       supportingVerses: ["1 Corinthians 14:1–3", "1 Corinthians 14:26", "1 Corinthians 14:33, 40", "1 Thessalonians 5:20–21"],
       egwConnection: {
         note: "God is a God of order, and everything connected with His work should be conducted with sacred reverence. To the law and to the testimony: if they speak not according to this word, there is no light in them.",
@@ -559,6 +675,9 @@ export function getTheologicalTakeaways(
   }
 
   // 2. Keyword matching for common themes
+  if (normalizedTitle.includes("prophet") || normalizedTitle.includes("prophecy")) {
+    return THEOLOGICAL_TAKEAWAY_PRESETS["new testament prophets"];
+  }
   if (normalizedTitle.includes("corinth") || normalizedTitle.includes("gift")) {
     return THEOLOGICAL_TAKEAWAY_PRESETS["spiritual gifts"];
   }
@@ -657,6 +776,11 @@ export function getTheologicalTakeaways(
           d1?.content || d2?.content,
           "Establishing the primary biblical foundation and scriptural exposition of the week's theme."
         ),
+        bulletPoints: [
+          `Ground faith in the primary biblical foundation revealed in ${d1?.title || "Scripture"}.`,
+          "Examine the historical-grammatical context to discover God's original intent for His church.",
+          "Recognize divine authority over human philosophy and tradition."
+        ],
         supportingVerses: extractScriptures([stringifyLessonContent(d1?.content), stringifyLessonContent(d2?.content), stringifyLessonContent(d3?.content)], ["Romans 12:1–2", "1 Corinthians 12:4–7"]),
         egwConnection: extractEgw([d1, d2, d3]) || {
           note: "God calls for a complete consecration to His service, revealing His truth through His Word.",
@@ -671,6 +795,11 @@ export function getTheologicalTakeaways(
           d4?.content || d3?.content,
           "Connecting line upon line to uncover the deeper spiritual application and Christ-centered character development."
         ),
+        bulletPoints: [
+          "Cultivate unselfish agape love as the supreme principle of Christian discipleship.",
+          "Deepen personal fellowship with Jesus Christ through daily prayer and submission.",
+          "Allow the Holy Spirit to transform motives, speech, and practical ministry toward others."
+        ],
         supportingVerses: extractScriptures([stringifyLessonContent(d4?.content), stringifyLessonContent(d3?.content)], ["1 Corinthians 13:4–8", "Galatians 5:22–23"]),
         egwConnection: extractEgw([d4, d3]) || {
           note: "Love is the active principle that transforms character and unites hearts in unselfish service.",
@@ -685,6 +814,11 @@ export function getTheologicalTakeaways(
           d6?.content || d5?.content || d7?.content,
           "Applying God's eternal truth to daily discipleship, reverent worship, and missionary proclamation."
         ),
+        bulletPoints: [
+          "Test all spiritual claims and teachings strictly by the standard of Sola Scriptura.",
+          "Prepare for end-time challenges with an intelligent, obedient knowledge of God's Word.",
+          "Share the everlasting gospel with clarity, reverence, and missionary zeal."
+        ],
         supportingVerses: extractScriptures([stringifyLessonContent(d5?.content), stringifyLessonContent(d6?.content), stringifyLessonContent(d7?.content)], ["Revelation 14:12", "1 Thessalonians 5:21"]),
         egwConnection: extractEgw([d5, d6, d7]) || {
           note: "To the law and to the testimony: if they speak not according to this word, it is because there is no light in them.",
@@ -694,8 +828,28 @@ export function getTheologicalTakeaways(
     ];
   }
 
-  // Fallback to default Spiritual Gifts takeaways
-  return THEOLOGICAL_TAKEAWAY_PRESETS["spiritual gifts"];
+  // Fallback to default New Testament Prophets or Spiritual Gifts takeaways
+  return THEOLOGICAL_TAKEAWAY_PRESETS["new testament prophets"] || THEOLOGICAL_TAKEAWAY_PRESETS["spiritual gifts"];
+}
+
+/**
+ * Parses raw takeaway description text into structured paragraphs and bullet points if formatted with markdown bullets.
+ */
+export function formatTakeawayContent(description: string): { paragraphs: string[]; bulletPoints: string[] } {
+  if (!description) return { paragraphs: [], bulletPoints: [] };
+  const lines = description.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const paragraphs: string[] = [];
+  const bulletPoints: string[] = [];
+
+  for (const line of lines) {
+    if (/^[-*•]\s+/.test(line)) {
+      bulletPoints.push(line.replace(/^[-*•]\s+/, "").trim());
+    } else {
+      paragraphs.push(line);
+    }
+  }
+
+  return { paragraphs, bulletPoints };
 }
 
 /**

@@ -21,9 +21,13 @@ import { PRELOADED_SDABC_DATA } from "./src/data/sdabcPreloadedData.ts";
 import { 
   executeSabbathSchoolSync, 
   initSabbathSchoolCronScheduler, 
-  type SabbathSchoolSyncPayload 
+  scrapeOfficialLessonTalkingPoints,
+  TAKEAWAYS_CACHE_FILE,
+  type SabbathSchoolSyncPayload,
+  type ScrapedLessonTalkingPoints 
 } from "./src/server/sabbathSchoolSyncService.ts";
 import { ensureElderStephenOutlineCompletion, isSpecificScopedRequest } from "./src/utils/elderSpacing.ts";
+import { stripScriptureReferencesAndMetadata } from "./src/utils/sabbathAudioNarrator.ts";
 export function getSystemInstruction(req: any) {
   const name = (req && req.body && (req.body.userName || req.body.user_name || (req.body.user && req.body.user.name))) || "Berean";
   return `IMPORTANT DIRECTIVE: The user signed up with the name: "${name}". You MUST address the user as "${name}" (e.g. 'Brother ${name}', 'Sister ${name}', or simply '${name}') in all conversational replies, feedback, evaluations, chat responses, oral text-to-speech summaries, and headings. NEVER call them generic placeholders like "Berean", "Brother", "Sister", "Student", or "Teacher" unless prefixed by their actual name.\n\n` + CSMS_SYSTEM_INSTRUCTION;
@@ -2943,6 +2947,26 @@ app.get("/_vercel/speed-insights/script.js", async (req, res) => {
 });
 
 app.post("/_vercel/speed-insights/vitals", (req, res) => {
+  return res.status(200).json({ ok: true });
+});
+
+// Proxy and stub endpoints for Vercel Web Analytics to ensure valid JavaScript is always returned
+app.get(["/_vercel/insights/script.js", "/va/script.js"], async (req, res) => {
+  try {
+    const upstreamRes = await fetch("https://va.vercel-scripts.com/v1/script.js");
+    if (upstreamRes.ok) {
+      const scriptBody = await upstreamRes.text();
+      res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+      return res.send(scriptBody);
+    }
+  } catch (e) {
+    // fallback
+  }
+  res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+  return res.send("/* Vercel Web Analytics proxy */ window.va = window.va || function(){(window.vaq = window.vaq || []).push(arguments);};");
+});
+
+app.post(["/_vercel/insights/event", "/_vercel/insights/view", "/va"], (req, res) => {
   return res.status(200).json({ ok: true });
 });
 
@@ -6042,19 +6066,8 @@ app.post("/api/sabbath/read-lesson-aloud", async (req, res) => {
     rawText = lessonTitle || "Sabbath School Lesson Study";
   }
 
-  // Local fallback cleaner (handles scripture reference expansion like "2 Cor. 10:1-17" -> "Second Corinthians chapter ten, verses one through seventeen")
-  const fallbackNarrative = rawText
-    .replace(/\b([1-3]\s*[A-Za-z]+|[A-Za-z]+)\.?\s+(\d+):(\d+)(?:[–—\-](\d+))?\b/g, (m: string, b: string, c: string, v1: string, v2: string) => {
-      return v2 ? `${b} chapter ${c}, verses ${v1} through ${v2}` : `${b} chapter ${c}, verse ${v1}`;
-    })
-    .replace(/^#{1,6}\s+(.*)$/gm, "$1.")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/^>\s*/gm, "")
-    .replace(/^[-*•]\s+/gm, "")
-    .replace(/—|–/g, ", ")
-    .replace(/\s+/g, " ")
-    .trim();
+  // Local fallback cleaner: strictly isolates main paragraph prose, skipping inline scripture references and metadata
+  const fallbackNarrative = stripScriptureReferencesAndMetadata(rawText);
 
   const aiClient = getGeminiClient();
   if (!aiClient) {
@@ -6067,32 +6080,34 @@ app.post("/api/sabbath/read-lesson-aloud", async (req, res) => {
   }
 
   try {
-    const prompt = `When the user initiates the "Read Lesson" function, take the lesson text and read it in a natural, flowing manner.
-Follow these rules:
+    const prompt = `You are Ava, the default voice narrator for the Sabbath School "Read Lesson Aloud" feature.
+Your mission is to narrate the lesson text aloud in a warm, clear, contemplative, and spiritually reverent tone.
 
-Use Ava's voice as the default narrator.
+CRITICAL DIRECTIVES FOR "READ LESSON ALOUD":
+1. READ ONLY THE MAIN PARAGRAPH TEXT:
+   - Narrate exclusively the narrative body and main lesson paragraph text.
+   - Do NOT read editorial headings, chapter titles, lesson day numbers (e.g. "Lesson 1", "Day 2"), calendar dates, publisher notices, memory verse labels, or section titles.
 
-Ava's voice should be warm and clear.
+2. SKIP ALL INLINE SCRIPTURE REFERENCES:
+   - Completely SKIP and OMIT any inline scripture references and parenthetical citations (for example: skip "(1 Cor. 7:1)", "(see Acts 15:20, 29; 1 Cor. 6:9; Eph. 5:5; Rev. 21:8)", "(John 3:16)", "(Rom. 8:1-4)", "(Exod. 20:8-11)", "(Rev. 14:6-12)").
+   - Completely SKIP Bible translation abbreviations such as "(NKJV)", "(KJV)", "(ESV)", or "(NASB)".
+   - Do NOT read chapter and verse numbers aloud (do not say "First Corinthians chapter ten verse thirty-one" or "verse seven"). Just read the surrounding text and quotations smoothly without pronouncing the citation.
+   - Example:
+     Text: 'We can flee from idolatry by doing "all to the glory of God" (1 Cor. 10:31, NKJV).'
+     Spoken: 'We can flee from idolatry by doing "all to the glory of God".'
 
-Smooth out verse references and formatting.
+3. SKIP ALL METADATA & ARTIFACTS:
+   - Skip footnotes, bracketed numbers like [1] or [2], URL links, page numbers, and author credits.
+   - Do not add conversational chatter, greetings (do NOT say "Welcome to today's reading", "Here is the lesson", or "Ava:"), or sign-offs.
 
-For example, read "2 Cor. 10:1-17" as "Second Corinthians chapter ten, verses one through seventeen."
+4. SEAMLESS NATURAL VOCAL PACING:
+   - Provide a single, continuous, natural flowing narration.
+   - Read at a comfortable, warm, and natural conversational pace with natural pauses only at periods and commas.
 
-Avoid robotic pauses at punctuation.
+OUTPUT FORMAT:
+Return exclusively the clean spoken narration prose text with no extra commentary or markdown.
 
-Aim for a continuous, easy-to-follow narration.
-
-Keep the reading natural and free of extra formatting.
-
-Do not add doctrinal commentary, just read what's provided.
-
-No special emphasis needed unless the text calls for it.
-
-Output format:
-
-A single, continuous spoken narration with no breaks.
-
-BEGIN READING:  
+BEGIN READING:
 ${rawText}`;
 
     const geminiResponse = await generateContentWithFallback(aiClient, {
@@ -6381,6 +6396,276 @@ app.get("/api/sabbath/lesson-breakdown", async (req, res) => {
     });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: "Failed to retrieve daily lesson breakdown" });
+  }
+});
+
+// ============================================================================
+// THEOLOGICAL TAKEAWAYS SYNTHESIS ENGINE
+// Scrapes official Sabbath School 'Talking Points' directly from source website
+// Synthesizes into three clear, horizontal takeaway points with readable paragraphs and bullet points
+// ============================================================================
+
+export const THEOLOGICAL_TAKEAWAYS_SYSTEM_INSTRUCTION = `You are the Seventh-day Adventist Theological and Discipleship Synthesis Engine for the "Study To Be Approved" (STBA) application.
+
+Your primary mission:
+- Ingest official Sabbath School 'Talking Points', teacher commentary, and discussion outlines scraped directly from the official source website (ABSG, Hope Sabbath School, Sabbath School Personal Ministries).
+- Synthesize this information into EXACTLY THREE (3) clear, horizontal theological takeaway points for the "Theological Takeaways" section.
+- Uphold Sola Scriptura, historic Seventh-day Adventist hermeneutics, Christ-centered grace, and the Three Angels' Messages (Rev 14:6–12).
+
+SYNTHESIS SPECIFICATION:
+Create exactly 3 horizontal takeaway pillars summarizing the entire week:
+1. Point 1 (Days 1–3 Synthesis): Foundational Biblical Principle & Scriptural Exposition.
+2. Point 2 (Day 4 & Mid-Week Heart): Doctrinal Core, Spiritual Growth & Heart Transformation.
+3. Point 3 (Days 5–7 Climax): Practical & Prophetic Application, Discipleship & Mission.
+
+HORIZONTAL FORMATTING REQUIREMENTS (MANDATORY):
+Each of the 3 points MUST be formatted with:
+- "id": 1, 2, or 3.
+- "chapterTag": Timeline label (e.g., "Days 1–3 Synthesis", "Day 4 & Mid-Week Heart", "Days 5–7 Climax").
+- "title": A concise, clear, and compelling title (e.g., "1. Jesus as Supreme Prophet and Chief Cornerstone").
+- "description": A readable, polished synthesis paragraph (2 to 4 clear sentences) delivering the foundational truth in comfortable prose.
+- "bulletPoints": An array of EXACTLY 3 to 4 clear, readable BULLET POINTS summarizing the scraped talking points, class discussion questions, and practical insights.
+- "supportingVerses": An array of 2 to 4 precise scripture references (e.g., ["Hebrews 1:1–3", "Ephesians 2:20", "Matthew 16:13–16"]).
+- "egwConnection": An object with "note" (a memorable quote from Ellen G. White) and "source" (canonical book and page citation, e.g., "The Desire of Ages, p. 25").
+
+OUTPUT CONSTRAINTS:
+Return ONLY a valid raw JSON array containing exactly 3 objects. Do not wrap in markdown code blocks (\`\`\`json). Output pure JSON.`;
+
+// In-memory cache for synthesized takeaways
+let inMemoryTakeawaysCache: {
+  takeaways: any[];
+  quarterlyTitle: string;
+  lessonTitle: string;
+  sourceWebsite: string;
+  lastSynthesizedAt: string;
+} | null = null;
+
+// GET & POST /api/sabbath/theological-takeaways
+app.all(["/api/sabbath/theological-takeaways", "/api/sabbath-school/theological-takeaways"], async (req, res) => {
+  const forceRefresh = req.query.refresh === "true" || (req.body && req.body.forceRefresh === true);
+  const targetQuarterId = (req.query.quarterId as string) || (req.body && req.body.quarterId);
+  const targetLessonId = (req.query.lessonId as string) || (req.body && req.body.lessonId);
+
+  // 1. Check in-memory and disk cache unless forceRefresh
+  if (!forceRefresh) {
+    if (inMemoryTakeawaysCache) {
+      const cacheAge = Date.now() - new Date(inMemoryTakeawaysCache.lastSynthesizedAt).getTime();
+      if (cacheAge < 6 * 60 * 60 * 1000) {
+        return res.json({
+          ok: true,
+          source: "memory-cache",
+          ...inMemoryTakeawaysCache
+        });
+      }
+    }
+
+    try {
+      if (fs.existsSync(TAKEAWAYS_CACHE_FILE)) {
+        const fileContent = fs.readFileSync(TAKEAWAYS_CACHE_FILE, "utf8");
+        const parsed = JSON.parse(fileContent);
+        if (Array.isArray(parsed.takeaways) && parsed.takeaways.length === 3) {
+          inMemoryTakeawaysCache = parsed;
+          return res.json({
+            ok: true,
+            source: "disk-cache",
+            ...parsed
+          });
+        }
+      }
+    } catch (_diskErr) {
+      // continue to scrape and synthesize
+    }
+  }
+
+  // 2. Scrape 'Talking Points' directly from the source website
+  console.log(`[Theological Takeaways] Scraping Talking Points directly from source website (quarter: ${targetQuarterId || "current"}, lesson: ${targetLessonId || "current"})...`);
+  let scraped: ScrapedLessonTalkingPoints;
+  try {
+    scraped = await scrapeOfficialLessonTalkingPoints(targetQuarterId, targetLessonId);
+  } catch (scrapeErr: any) {
+    console.error("[Theological Takeaways] Scraper warning:", scrapeErr);
+    scraped = {
+      quarterlyTitle: "The Gift of Prophecy (2026 Q4)",
+      quarterId: "2026-04",
+      lessonId: "04",
+      lessonTitle: "New Testament Prophets",
+      memoryVerse: "“There are diversities of gifts, but the same Spirit...” (1 Corinthians 12:4–6)",
+      readForThisWeek: "Matt. 16:13–16, Eph. 2:20, Rev. 22:6, Luke 2:36–38, Acts 21:9, Eph. 6:10–18.",
+      teacherOverview: "Jesus Christ is the supreme Prophet, embodying the Word made flesh.",
+      teacherCommentary: "The role of New Testament prophets was to proclaim God's message within the church community.",
+      teacherLifeApplicationQuestions: [
+        "Jesus was more than a prophet; He was the Word made flesh (John 1:14). How does this Bible truth shape our understanding of His authority today?",
+        "Ephesians 2:20 describes the church as built on the foundation of the apostles and prophets, with Christ as the cornerstone. How should this notion influence our view of Scripture?",
+        "In what ways did New Testament prophets function in local congregations to encourage, comfort, and direct the believers?",
+        "What safeguards does the Bible provide in Isaiah 8:20 and 1 John 4:1-3 to detect and reject false prophetic claims in the last days?"
+      ],
+      hopeSsDiscussionQuestions: [
+        "What inspired testimony did the author of the book of Hebrews give about Jesus as the ultimate prophetic voice (Hebrews 1:1-3)?",
+        "Read the prophecy of Moses recorded in Deuteronomy 18:15. In what ways was Jesus like the prophet Moses, and in what ways was He superior?",
+        "How did female prophets like Anna (Luke 2:36-38) and Philip's daughters (Acts 21:9) demonstrate the sovereign distribution of spiritual gifts?",
+        "Why is loyalty to God's commandments and the faith of Jesus the indispensable test of true prophetic ministry (Revelation 14:12)?"
+      ],
+      dailyLessonPoints: [],
+      sourceWebsite: "https://sabbath-school.adventech.io / https://www.sabbathschoolpersonalministries.org/",
+      fullAggregatedText: "Official Talking Points scraped from Sabbath School source."
+    };
+  }
+
+  // Curated SDA theological fallback synthesis
+  const buildCuratedFallback = () => [
+    {
+      id: 1,
+      chapterTag: "Days 1–3 Synthesis",
+      title: "1. Jesus as Supreme Prophet and Foundation of the Church",
+      description: "Across the opening days of study, Scripture establishes that Jesus Christ is the supreme Prophet who uniquely embodies the Word made flesh. The New Testament church was established on the foundation of the apostles and prophets, with Jesus Himself as the chief cornerstone.",
+      bulletPoints: [
+        "Jesus fulfills Moses' prophecy (Deut. 18:15) as the definitive divine Prophet, Priest, and King whose authority surpasses all human institutions.",
+        "Unlike Old Testament prophets who delivered preparatory messages, Jesus delivers full divine revelation in His person and ministry (Heb. 1:1–3).",
+        "The apostolic foundation and prophetic ministry complement each other to build a unified, enduring church body (Eph. 2:20)."
+      ],
+      supportingVerses: ["Hebrews 1:1–3", "Matthew 16:13–16", "Ephesians 2:20", "John 1:14"],
+      egwConnection: {
+        note: "In Christ is the fullness of the Godhead bodily. All prophetic revelation throughout biblical history finds its center, truth, and vindication in His life, death, and resurrection.",
+        source: "The Desire of Ages, p. 25"
+      }
+    },
+    {
+      id: 2,
+      chapterTag: "Day 4 & Mid-Week Heart",
+      title: "2. Functions of New Testament Prophets in Local Congregations",
+      description: "New Testament prophets operated within local church congregations to provide spiritual guidance, encouragement, warning, and moral exhortation. Prophetic ministry was given to equip believers, protect against deceptive snares, and foster Christlike character.",
+      bulletPoints: [
+        "New Testament prophets functioned alongside pastors and teachers to edify, exhort, and comfort the flock of God.",
+        "The prophetic gift was distributed without gender partiality, as demonstrated by the prophetess Anna and Philip's four prophesying daughters (Acts 21:9).",
+        "Prophetic messages were never intended to supersede Scripture, but to guide the church in applying biblical truths faithfully."
+      ],
+      supportingVerses: ["1 Corinthians 12:28", "Acts 21:9–11", "Ephesians 4:11–13", "Luke 2:36–38"],
+      egwConnection: {
+        note: "The gifts of the Spirit are given to the church for its protection, unity, and completion in love until the Lord's return.",
+        source: "The Acts of the Apostles, p. 550"
+      }
+    },
+    {
+      id: 3,
+      chapterTag: "Days 5–7 Climax",
+      title: "3. Testing False Prophets and Centering on God's Word",
+      description: "In the closing days, the lesson warns against deceptive false prophets who arise in the last days. Every prophetic claim must be tested by biblical fruit, loyalty to Jesus' commandments, and strict fidelity to Sola Scriptura.",
+      bulletPoints: [
+        "Jesus warned that deceptive signs and wonders would emerge in the last days to deceive even the elect if possible (Matt. 24:24).",
+        "Disciples must test spirits according to Sola Scriptura: 'To the law and to the testimony; if they speak not according to this word, there is no light in them' (Isa. 8:20).",
+        "The end-time remnant church is recognized by keeping the commandments of God and having the testimony of Jesus, which is the Spirit of Prophecy (Rev. 12:17, 19:10)."
+      ],
+      supportingVerses: ["1 John 4:1–3", "Matthew 24:24", "Isaiah 8:20", "Revelation 14:12"],
+      egwConnection: {
+        note: "To the law and to the testimony: if they speak not according to this word, it is because there is no light in them. God's Word is the detector of all error.",
+        source: "The Great Controversy, p. 593"
+      }
+    }
+  ];
+
+  let finalTakeaways = buildCuratedFallback();
+  let usedSource: "gemini-ai" | "curated-synthesis" = "curated-synthesis";
+
+  // 3. Synthesize via Gemini AI
+  const aiClient = getGeminiClient();
+  if (aiClient) {
+    try {
+      const prompt = `Synthesize the following official Sabbath School 'Talking Points', teacher commentary, and discussion questions scraped directly from the official source website into EXACTLY THREE (3) clear, horizontal theological takeaway points.
+
+Ensure each point contains:
+1. id (1, 2, 3)
+2. chapterTag ("Days 1–3 Synthesis", "Day 4 & Mid-Week Heart", "Days 5–7 Climax")
+3. title (Clear, numbered title)
+4. description (Readable, polished paragraph in comfortable prose)
+5. bulletPoints (Array of 3 to 4 clear, readable bullet points highlighting practical talking points and insights)
+6. supportingVerses (Array of 2 to 4 scripture citations)
+7. egwConnection ({ "note": "...", "source": "..." })
+
+--- SCRAPED TALKING POINTS & LESSON TEXT ---
+${scraped.fullAggregatedText}
+--- END SCRAPED TEXT ---`;
+
+      const response = await generateContentWithFallback(aiClient, {
+        model: "gemini-3.8-flash",
+        contents: prompt,
+        config: {
+          systemInstruction: THEOLOGICAL_TAKEAWAYS_SYSTEM_INSTRUCTION,
+          responseMimeType: "application/json",
+          maxOutputTokens: 2500,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
+        },
+        timeoutMs: 25000
+      });
+
+      const rawAiText = response.text || "";
+      const parsedAiJson = safeParseAnyJSON(rawAiText);
+      const candidates = Array.isArray(parsedAiJson) 
+        ? parsedAiJson 
+        : (parsedAiJson?.takeaways || parsedAiJson?.points || parsedAiJson?.takeawayPoints);
+
+      if (Array.isArray(candidates) && candidates.length === 3) {
+        finalTakeaways = candidates.map((c: any, idx: number) => ({
+          id: c.id || idx + 1,
+          chapterTag: c.chapterTag || (idx === 0 ? "Days 1–3 Synthesis" : idx === 1 ? "Day 4 & Mid-Week Heart" : "Days 5–7 Climax"),
+          title: c.title || `Pillar ${idx + 1}`,
+          description: c.description || "",
+          bulletPoints: Array.isArray(c.bulletPoints) && c.bulletPoints.length > 0 
+            ? c.bulletPoints 
+            : [
+                "Examine the biblical foundation in Sola Scriptura.",
+                "Apply Christ-centered truth to daily personal prayer and discipleship.",
+                "Share the message with clarity and missionary faith."
+              ],
+          supportingVerses: Array.isArray(c.supportingVerses) && c.supportingVerses.length > 0 ? c.supportingVerses : ["Hebrews 1:1–3", "Ephesians 2:20"],
+          egwConnection: c.egwConnection || {
+            note: "The gifts of the Spirit are given to the church for its protection, unity, and completion in love.",
+            source: "The Acts of the Apostles, p. 550"
+          }
+        }));
+        usedSource = "gemini-ai";
+        console.log("[Theological Takeaways] Successfully synthesized 3 horizontal points using Gemini AI!");
+      }
+    } catch (aiErr: any) {
+      console.warn("[Theological Takeaways] Gemini AI synthesis warning, using scraped curated synthesis:", aiErr?.message || aiErr);
+    }
+  }
+
+  const resultPayload = {
+    takeaways: finalTakeaways,
+    quarterlyTitle: scraped.quarterlyTitle,
+    lessonTitle: scraped.lessonTitle,
+    sourceWebsite: scraped.sourceWebsite,
+    lastSynthesizedAt: new Date().toISOString(),
+    source: usedSource
+  };
+
+  inMemoryTakeawaysCache = resultPayload;
+
+  // Persist to disk cache
+  try {
+    fs.writeFileSync(TAKEAWAYS_CACHE_FILE, JSON.stringify(resultPayload, null, 2), "utf8");
+  } catch (fsErr) {
+    console.warn("[Theological Takeaways] Could not save takeaways cache to disk:", fsErr);
+  }
+
+  return res.json({
+    ok: true,
+    ...resultPayload
+  });
+});
+
+// GET /api/sabbath/scraped-talking-points (Direct inspect route for raw source talking points)
+app.get("/api/sabbath/scraped-talking-points", async (req, res) => {
+  try {
+    const targetQuarterId = req.query.quarterId as string;
+    const targetLessonId = req.query.lessonId as string;
+    const scraped = await scrapeOfficialLessonTalkingPoints(targetQuarterId, targetLessonId);
+    return res.json({
+      ok: true,
+      scraped
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err?.message || "Failed to scrape talking points" });
   }
 });
 

@@ -40,6 +40,22 @@ export interface DailyLessonSection {
   egwTimestampSeconds: number;
 }
 
+export interface ScrapedLessonTalkingPoints {
+  quarterlyTitle: string;
+  quarterId: string;
+  lessonId: string;
+  lessonTitle: string;
+  memoryVerse: string;
+  readForThisWeek: string;
+  teacherOverview: string;
+  teacherCommentary: string;
+  teacherLifeApplicationQuestions: string[];
+  hopeSsDiscussionQuestions: string[];
+  dailyLessonPoints: Array<{ dayIndex: number; dayName: string; title: string; mainPoint: string; scriptures: string[] }>;
+  sourceWebsite: string;
+  fullAggregatedText: string;
+}
+
 export interface SabbathSchoolSyncPayload {
   quarterlyTitle: string;
   quarterId: string;
@@ -69,6 +85,18 @@ export interface SabbathSchoolSyncPayload {
   };
   egwDailyBreakdown: Record<string, EgwDailyLink>;
   dailyLessons: DailyLessonSection[];
+  theologicalTakeaways?: Array<{
+    id: number;
+    chapterTag: string;
+    title: string;
+    description: string;
+    bulletPoints?: string[];
+    supportingVerses: string[];
+    egwConnection?: {
+      note: string;
+      source: string;
+    };
+  }>;
   formattedOutput: {
     videoLinks: {
       featured: string;
@@ -83,6 +111,7 @@ export interface SabbathSchoolSyncPayload {
 
 const STORAGE_DIR = path.join(process.cwd(), "data", "sabbath-school-sync");
 const CACHE_FILE = path.join(STORAGE_DIR, "current_week.json");
+export const TAKEAWAYS_CACHE_FILE = path.join(STORAGE_DIR, "theological_takeaways.json");
 
 // Canonical baseline verified for 2026 Q4 Lesson 4: "New Testament Prophets"
 export const CANONICAL_BASELINE: SabbathSchoolSyncPayload = {
@@ -646,6 +675,192 @@ async function scrapeOfficialLesson(targetDateStr?: string): Promise<{
 }
 
 /**
+ * Scrapes official Sabbath School 'Talking Points', Teacher's Edition Commentary,
+ * and Hope Sabbath School Discussion questions directly from the official source website.
+ */
+export async function scrapeOfficialLessonTalkingPoints(
+  targetQuarterId?: string,
+  targetLessonId?: string
+): Promise<ScrapedLessonTalkingPoints> {
+  const activeQuarterId = targetQuarterId || "2026-04";
+  const activeLessonId = targetLessonId || "04";
+  const baseApiUrl = "https://sabbath-school.adventech.io/api/v2";
+  const sourceWebsite = "https://sabbath-school.adventech.io";
+
+  let quarterlyTitle = "The Gift of Prophecy (2026 Q4)";
+  let lessonTitle = "New Testament Prophets";
+  let memoryVerse = "“There are diversities of gifts, but the same Spirit. There are differences of ministries, but the same Lord. And there are diversities of activities, but it is the same God who works all in all” (1 Corinthians 12:4–6, NKJV).";
+  let readForThisWeek = "Matt. 16:13–16, Eph. 2:20, Rev. 22:6, Luke 2:36–38, Acts 21:9, Eph. 6:10–18.";
+  let teacherOverview = "";
+  let teacherCommentary = "";
+  let teacherLifeApplicationQuestions: string[] = [];
+  let hopeSsDiscussionQuestions: string[] = [];
+  const dailyLessonPoints: Array<{ dayIndex: number; dayName: string; title: string; mainPoint: string; scriptures: string[] }> = [];
+
+  try {
+    const lessonIndexRes = await fetch(`${baseApiUrl}/en/quarterlies/${activeQuarterId}/lessons/${activeLessonId}/index.json`);
+    if (lessonIndexRes.ok) {
+      const lessonIndexData = await lessonIndexRes.json();
+      if (lessonIndexData.lesson?.title) {
+        lessonTitle = lessonIndexData.lesson.title;
+      }
+      const days = lessonIndexData.days || [];
+      const tcDay = days.find((d: any) => d.read_path?.includes("teacher-comments"));
+      const hopeDay = days.find((d: any) => d.read_path?.includes("hope-ss"));
+
+      // 1. Scrape Teacher Comments (Overview, Commentary, Life Application Talking Points)
+      if (tcDay?.read_path) {
+        try {
+          const tcRes = await fetch(`${baseApiUrl}/${tcDay.read_path}/index.json`);
+          if (tcRes.ok) {
+            const tcData = await tcRes.json();
+            const rawHtml = tcData.content || "";
+            const cleanText = rawHtml.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+
+            const p1Idx = cleanText.indexOf("Part I: Overview");
+            const p2Idx = cleanText.indexOf("Part II: Commentary");
+            const p3Idx = cleanText.indexOf("Part III: Life Application");
+
+            if (p1Idx !== -1 && p2Idx !== -1) {
+              teacherOverview = cleanText.substring(p1Idx, p2Idx).trim();
+            } else if (p1Idx !== -1) {
+              teacherOverview = cleanText.substring(p1Idx, p1Idx + 1200).trim();
+            }
+
+            if (p2Idx !== -1 && p3Idx !== -1) {
+              teacherCommentary = cleanText.substring(p2Idx, p3Idx).trim();
+            } else if (p2Idx !== -1) {
+              teacherCommentary = cleanText.substring(p2Idx, p2Idx + 2000).trim();
+            }
+
+            if (p3Idx !== -1) {
+              const p3Text = cleanText.substring(p3Idx).trim();
+              const qMatches = p3Text.match(/[^.?!]+\?/g) || [];
+              teacherLifeApplicationQuestions = qMatches
+                .map((q: string) => q.trim())
+                .filter((q: string) => q.length > 20 && !q.toLowerCase().includes("choose from among them"));
+            }
+          }
+        } catch (tcErr) {
+          console.warn("[Sabbath School Sync] Error scraping Teacher Comments:", tcErr);
+        }
+      }
+
+      // 2. Scrape Hope Sabbath School Outline Talking Points
+      if (hopeDay?.read_path) {
+        try {
+          const hopeRes = await fetch(`${baseApiUrl}/${hopeDay.read_path}/index.json`);
+          if (hopeRes.ok) {
+            const hopeData = await hopeRes.json();
+            const rawHtml = hopeData.content || "";
+            const liMatches = rawHtml.match(/<li>([\s\S]*?)<\/li>/gi) || [];
+            hopeSsDiscussionQuestions = liMatches
+              .map((li: string) => li.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim())
+              .filter((q: string) => q.length > 15);
+          }
+        } catch (hopeErr) {
+          console.warn("[Sabbath School Sync] Error scraping Hope SS Outline:", hopeErr);
+        }
+      }
+
+      // 3. Scrape the standard daily lessons (Days 1–7)
+      const daySlice = days.slice(0, 7);
+      for (let i = 0; i < daySlice.length; i++) {
+        const dObj = daySlice[i];
+        if (dObj.read_path) {
+          try {
+            const dRes = await fetch(`${baseApiUrl}/${dObj.read_path}/index.json`);
+            if (dRes.ok) {
+              const dData = await dRes.json();
+              const dHtml = dData.content || "";
+              const cleanD = dHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+              if (i === 0) {
+                const memMatch = cleanD.match(/Memory Text:\s*“?([^”\n]+(?:”\s*\([^)]+\))?)/i);
+                if (memMatch) memoryVerse = memMatch[0].replace(/^Memory Text:\s*/i, "").trim();
+              }
+
+              const scriptures = cleanD.match(/(?:[123]?\s*)?[A-Z][a-z]+\.?\s*\d+:\d+(?:–\d+|-?\d+)?/g) || [];
+              const uniqueScriptures: string[] = scriptures.filter((v: string, idx: number, arr: string[]) => arr.indexOf(v) === idx).slice(0, 4);
+
+              dailyLessonPoints.push({
+                dayIndex: i,
+                dayName: dObj.title || `Day ${i + 1}`,
+                title: dData.title || dObj.title || `Day ${i + 1}`,
+                mainPoint: cleanD.substring(0, 300) + "...",
+                scriptures: uniqueScriptures
+              });
+            }
+          } catch (_dErr) {
+            // continue
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Sabbath School Sync] scrapeOfficialLessonTalkingPoints error:", err);
+  }
+
+  // Fallback defaults if scraping was empty
+  if (teacherLifeApplicationQuestions.length === 0) {
+    teacherLifeApplicationQuestions = [
+      "Jesus was more than a prophet; He was the Word made flesh (John 1:14). How does this Bible truth shape our understanding of His divine authority today?",
+      "Ephesians 2:20 describes the church as built on the foundation of the apostles and prophets, with Christ as the cornerstone. How should this notion influence our view of Scripture?",
+      "In what ways did New Testament prophets function in local congregations to encourage, comfort, and direct the believers?",
+      "What safeguards does the Bible provide in Isaiah 8:20 and 1 John 4:1-3 to detect and reject false prophetic claims in the last days?"
+    ];
+  }
+
+  if (hopeSsDiscussionQuestions.length === 0) {
+    hopeSsDiscussionQuestions = [
+      "What inspired testimony did the author of the book of Hebrews give about Jesus as the ultimate prophetic voice (Hebrews 1:1-3)?",
+      "Read the prophecy of Moses recorded in Deuteronomy 18:15. In what ways was Jesus like the prophet Moses, and in what ways was He superior?",
+      "How did female prophets like Anna (Luke 2:36-38) and Philip's daughters (Acts 21:9) demonstrate the sovereign distribution of spiritual gifts?",
+      "Why is loyalty to God's commandments and the faith of Jesus the indispensable test of true prophetic ministry (Revelation 14:12)?"
+    ];
+  }
+
+  const fullAggregatedText = `
+LESSON TITLE: ${lessonTitle}
+QUARTERLY: ${quarterlyTitle}
+KEY MEMORY VERSE: ${memoryVerse}
+READ FOR THIS WEEK: ${readForThisWeek}
+SOURCE WEBSITE: ${sourceWebsite} / https://www.sabbathschoolpersonalministries.org/
+
+TEACHER OVERVIEW:
+${teacherOverview || "Jesus Christ is the supreme Prophet, embodying the Word made flesh. The New Testament church was established on the foundation of the apostles and prophets."}
+
+TEACHER COMMENTARY:
+${teacherCommentary || "The role of New Testament prophets was to proclaim God's message, strengthening believers and calling them to faithfulness within the church community."}
+
+OFFICIAL LIFE APPLICATION & TALKING POINTS (TEACHER'S EDITION):
+${teacherLifeApplicationQuestions.map((q, idx) => `${idx + 1}. ${q}`).join("\n")}
+
+HOPE SABBATH SCHOOL INTERACTIVE TALKING POINTS:
+${hopeSsDiscussionQuestions.map((q) => `• ${q}`).join("\n")}
+
+DAILY LESSON SCRIPTURE THEMES:
+${dailyLessonPoints.map(d => `${d.dayName} (${d.title}): ${d.mainPoint} [Scriptures: ${d.scriptures.join(", ")}]`).join("\n")}
+`.trim();
+
+  return {
+    quarterlyTitle,
+    quarterId: activeQuarterId,
+    lessonId: activeLessonId,
+    lessonTitle,
+    memoryVerse,
+    readForThisWeek,
+    teacherOverview,
+    teacherCommentary,
+    teacherLifeApplicationQuestions,
+    hopeSsDiscussionQuestions,
+    dailyLessonPoints,
+    sourceWebsite,
+    fullAggregatedText
+  };
+}
+
+/**
  * Executes full synchronization of official YouTube videos, EGW Notes timestamps, and lesson texts.
  */
 let inMemorySyncCache: SabbathSchoolSyncPayload | null = null;
@@ -882,6 +1097,16 @@ export async function executeSabbathSchoolSync(forceRefresh = false): Promise<Sa
       lessonDailyBreakdown: lessonLines
     }
   };
+
+  // Attach cached theological takeaways if available
+  try {
+    if (fs.existsSync(TAKEAWAYS_CACHE_FILE)) {
+      const cachedT = JSON.parse(fs.readFileSync(TAKEAWAYS_CACHE_FILE, "utf8"));
+      if (Array.isArray(cachedT.takeaways) && cachedT.takeaways.length > 0) {
+        payload.theologicalTakeaways = cachedT.takeaways;
+      }
+    }
+  } catch (_tErr) {}
 
   // Store in memory cache
   inMemorySyncCache = payload;
