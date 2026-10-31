@@ -252,8 +252,10 @@ const SCRIPTURE_BOOKS_NARRATION_PATTERN =
   "Jude|Jud|Revelation|Revel|Rev|Re";
 
 /**
- * Strips inline scripture references, parenthetical citations, translation identifiers,
- * and metadata headings so the narrator reads only the main paragraph prose text naturally.
+ * Dynamically formats scraped lesson content for Microsoft Natural Voice TTS,
+ * ensuring the narrator reads ONLY the explanatory paragraphs and sentences,
+ * while ENTIRELY SKIPPING any quoted Bible text, memory verse passages, blockquoted scripture,
+ * parenthetical citations, translation identifiers, and metadata headings.
  */
 export function stripScriptureReferencesAndMetadata(text: string): string {
   if (!text || typeof text !== "string") return "";
@@ -262,57 +264,122 @@ export function stripScriptureReferencesAndMetadata(text: string): string {
     .replace(/\u00A0/g, " ")
     .replace(/[–—\u2013\u2014\u2212]/g, "-");
 
-  // 1. Remove parenthetical scripture citations: e.g. "(see Acts 15:20, 29; 1 Cor. 6:9; Eph. 5:5; Rev. 21:8)",
-  // "(1 Cor. 7:1)", "(1 Cor. 10:31, NKJV)", "(John 3:16)", "(cf. Rom. 8:1-4)"
+  // 1. Remove entire blockquotes (used for quoted scripture and memory verses in scraped lesson text)
+  cleaned = cleaned.replace(/<blockquote>[\s\S]*?<\/blockquote>/gi, "");
+  cleaned = cleaned.replace(/^>.*$/gm, "");
+
+  // 2. Remove Memory Verse & "Read for This Week" headers/blocks
+  cleaned = cleaned.replace(/#{1,6}\s*(?:Memory\s+(?:Verse|Text)|Read\s+for\s+This\s+Week).*$/gim, "");
+  cleaned = cleaned.replace(/<h[1-6][^>]*>(?:Memory\s+(?:Verse|Text)|Read\s+for\s+This\s+Week)[\s\S]*?<\/h[1-6]>/gi, "");
+  cleaned = cleaned.replace(/\b(?:Memory\s+(?:Verse|Text)|Read\s+for\s+This\s+Week’s\s+Study)\b[:\s]*/gi, "");
+
+  // 3. Remove quoted Bible passages followed by scripture citations:
+  // Matches quotes (with optional nested quotes e.g. “ ‘...’ ” or “...”) followed by (Book Chapter:Verse...)
+  const quotedScriptureWithCitationRegex = new RegExp(
+    `[“"«][\\s\\S]*?[”"»]\\s*(?:<[^>]+>\\s*)*\\([\\s]*(?:<[^>]+>\\s*)*(?:see(?:\\s+also)?|compare|cf\\.?|read|quoted\\s+in)?\\s*(?:[1-3]\\s*)?(?:${SCRIPTURE_BOOKS_NARRATION_PATTERN})\\.?\\s*\\d+[:.]\\d+[\\s\\S]*?\\)`,
+    "gi"
+  );
+  cleaned = cleaned.replace(quotedScriptureWithCitationRegex, "");
+
+  // Quotes with single quote / apostrophe styling followed by scripture citation
+  const singleQuotedScriptureRegex = new RegExp(
+    `[‘\x27][\\s\\S]*?[’\x27]\\s*(?:<[^>]+>\\s*)*\\([\\s]*(?:<[^>]+>\\s*)*(?:see(?:\\s+also)?|compare|cf\\.?|read|quoted\\s+in)?\\s*(?:[1-3]\\s*)?(?:${SCRIPTURE_BOOKS_NARRATION_PATTERN})\\.?\\s*\\d+[:.]\\d+[\\s\\S]*?\\)`,
+    "gi"
+  );
+  cleaned = cleaned.replace(singleQuotedScriptureRegex, "");
+
+  // 4. Remove scripture citation that immediately precedes a quote:
+  // e.g. "In Romans 8:1, Paul writes: “There is therefore now no condemnation...”"
+  const citationPrecedingQuoteRegex = new RegExp(
+    `\\b(?:in\\s+)?(?:[1-3]\\s*)?(?:${SCRIPTURE_BOOKS_NARRATION_PATTERN})\\.?\\s*\\d+[:.]\\d+[^“"«\n]{0,35}[:,\s]+[“"«][\\s\\S]*?[”"»]`,
+    "gi"
+  );
+  cleaned = cleaned.replace(citationPrecedingQuoteRegex, "");
+
+  // 5. Strip any remaining HTML tags (like <a>, <p>, <span>)
+  cleaned = cleaned.replace(/<[^>]+>/g, " ");
+
+  // 6. Remove parenthetical scripture citations: e.g. "(see Acts 15:20, 29; Rev. 21:8)", "(1 Cor. 7:1)", "(John 3:16)"
   const parenScriptureRegex = new RegExp(
     `\\s*\\([\\s]*(?:see(?:\\s+also)?|compare|cf\\.?|read|quoted\\s+in)?\\s*(?:[1-3]\\s*)?(?:${SCRIPTURE_BOOKS_NARRATION_PATTERN})\\.?\\s*\\d+[:.]\\d+[\\s\\S]*?\\)`,
     "gi"
   );
   cleaned = cleaned.replace(parenScriptureRegex, "");
 
-  // 2. Remove standalone parenthetical translation tags e.g. "(NKJV)", "(KJV)", "(ESV)", "(NASB)", "(NIV)"
+  // 7. Remove standalone parenthetical translation tags e.g. "(NKJV)", "(KJV)", "(ESV)"
   cleaned = cleaned.replace(/\s*\((?:NKJV|KJV|ESV|NASB|NIV|NLT|RSV|AMP)\)/gi, "");
 
-  // 3. Remove standalone verse citations outside parentheses (e.g. "1 Cor. 10:31", "Rev. 14:12")
+  // 8. Remove standalone verse citations outside parentheses (e.g. "1 Cor. 10:31", "Rev. 14:12")
   const inlineScriptureRegex = new RegExp(
     `\\b(?:see\\s+|compare\\s+)?(?:[1-3]\\s*)?(?:${SCRIPTURE_BOOKS_NARRATION_PATTERN})\\.?\\s*\\d+[:.]\\d+(?:[–—\\-]\\d+)?(?:,\\s*\\d+(?:[–—\\-]\\d+)?)*\\b`,
     "gi"
   );
   cleaned = cleaned.replace(inlineScriptureRegex, "");
 
-  // 4. Remove metadata brackets e.g. [1], [2], footnote indicators
+  // 9. Remove "Read [Scripture]" prompt fragments (e.g. "Read 1 Corinthians 10:1-13." or "Read .")
+  cleaned = cleaned.replace(/\bRead\s+(?:[1-3]\s*)?(?:[A-Za-z]+)?\s*[:.]?\s*/gi, "");
+
+  // 10. Remove metadata brackets e.g. [1], [2], footnote indicators
   cleaned = cleaned.replace(/\[\d+\]/g, "");
   cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
 
-  // 5. Remove markdown section headers and metadata lines:
-  // e.g. "### 1. Introduction to 1 Corinthians 8-10" or "Lesson 1: ..."
+  // 11. Remove markdown section headers and metadata lines:
   cleaned = cleaned.replace(/^#{1,6}\s*(?:\d+[\.:]\s*)?.*$/gm, "");
 
-  // 6. Clean markdown formatting: bold, italic, blockquotes, bullets
+  // 12. Clean markdown formatting: bold, italic, blockquotes, bullets
   cleaned = cleaned
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
     .replace(/_([^_]+)_/g, "$1")
     .replace(/^>\s*/gm, "")
-    .replace(/^[-*•]\s+/gm, "");
+    .replace(/^[-*•]\s+/gm, "")
+    .replace(/---+/g, "");
 
-  // 7. Clean up punctuation and spacing around stripped elements
-  cleaned = cleaned
-    .replace(/\s*([,;:])\s*/g, "$1 ")
-    .replace(/\s+([.?!])/g, "$1")
-    .replace(/,\s*,+/g, ",")
-    .replace(/,\s*\./g, ".")
-    .replace(/\.{2,}/g, ".")
-    .replace(/\s+/g, " ")
-    .trim();
+  // 13. Split into sentences and clean up hanging conjunctions / verbs / punctuation
+  const rawSentences = cleaned
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-  return cleaned;
+  const cleanSentences: string[] = [];
+  for (let sent of rawSentences) {
+    // Remove hanging connective prepositions/verbs before period
+    sent = sent
+      .replace(/\s*,\s*for\s*[.!?]?$/i, ".")
+      .replace(/\s*,\s*and\s*[.!?]?$/i, ".")
+      .replace(/\s*,\s*that\s+is\s*[.!?]?$/i, ".")
+      .replace(/\b(?:that|as|for|because)\s*[.!?]$/i, ".")
+      .replace(/\b(?:states?|said|declares?|writes?|proclaims?|records?|reads?|warns?|predicted)\s*[:,\s]*[.!?]$/i, ".")
+      .replace(/^(?:as\s+(?:it\s+is\s+)?written|as\s+scripture\s+(?:declares?|says?|states?)|as\s+the\s+bible\s+says?|paul\s+(?:writes?|states?|says?)|jesus\s+(?:said|says?)|moses\s+(?:predicted|wrote|said))\s*[:,\s]*[.!?]?$/i, "")
+      .replace(/^(?:moses|paul|peter|john|jesus|david|isaiah|jeremiah)\s+(?:predicted|wrote|said|stated|taught|explained|reminded)\s+(?:that\s+)?[:,\s]*[.!?]?$/i, "")
+      .replace(/^[–—\s,:;.]+/, "")
+      .replace(/[,\s:;]+$/, ".")
+      .replace(/\s*([,;:])\s*/g, "$1 ")
+      .replace(/\s+([.?!])/g, "$1")
+      .replace(/,\s*,+/g, ",")
+      .replace(/,\s*\./g, ".")
+      .replace(/\.{2,}/g, ".")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    // Skip empty or trivial fragments with no substantive thought (under 14 chars)
+    if (sent.length < 14) continue;
+    cleanSentences.push(sent);
+  }
+
+  let finalSpoken = cleanSentences.join(" ");
+  finalSpoken = finalSpoken.replace(/\.{2,}/g, ".");
+  finalSpoken = finalSpoken.replace(/—|–/g, ", ");
+  finalSpoken = finalSpoken.replace(/;/g, ",");
+  finalSpoken = finalSpoken.replace(/\s+/g, " ").trim();
+
+  return finalSpoken;
 }
 
 /**
- * Strips markdown and cleans lesson text to ensure a single, continuous, natural flowing spoken narration
- * containing ONLY the main paragraph text, skipping any inline scripture references or metadata.
+ * Dynamically formats scraped lesson content to ensure Microsoft Natural Voice TTS reads
+ * only paragraphs and sentences, while entirely skipping any quoted Bible text.
  */
 export function cleanLessonTextForSpokenNarration(content: any): string {
   let rawText = "";
@@ -330,17 +397,11 @@ export function cleanLessonTextForSpokenNarration(content: any): string {
 
   if (!rawText.trim()) return "";
 
-  // 1. Strip inline scripture references and metadata so only main paragraph text remains
-  let smoothed = stripScriptureReferencesAndMetadata(rawText);
-
-  // 2. Avoid robotic pauses at punctuation
-  smoothed = smoothed.replace(/\.{2,}/g, ".");
-  smoothed = smoothed.replace(/—|–/g, ", ");
-  smoothed = smoothed.replace(/;/g, ",");
-  smoothed = smoothed.replace(/\s+/g, " ").trim();
-
-  return smoothed;
+  return stripScriptureReferencesAndMetadata(rawText);
 }
+
+// Explicit semantic alias for formatting scraped lessons for natural voice TTS
+export const formatScrapedLessonForSpokenNarration = cleanLessonTextForSpokenNarration;
 
 /**
  * Resolves the Microsoft Emma Multilingual (Natural) voice from Web Speech API.

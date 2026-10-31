@@ -6,7 +6,8 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   cleanLessonTextForSpokenNarration,
-  getMicrosoftEmmaVoice
+  getMicrosoftEmmaVoice,
+  requestAvaLessonNarration
 } from "../utils/sabbathAudioNarrator";
 
 export interface NarratorState {
@@ -100,12 +101,25 @@ export function prepareNarrationInBackground(dayIndex: number, title: string, co
     return;
   }
 
-  // Pre-generate smoothed spoken narration script immediately (instant client-side)
+  // Pre-generate dynamically formatted spoken narration script immediately (instant client-side)
   const clientSmoothed = cleanLessonTextForSpokenNarration(rawText);
   narrationBackgroundCache.set(cacheKey, {
     narrationScript: clientSmoothed,
     timestamp: Date.now()
   });
+
+  // Asynchronously request AI-formatted narration if available to enrich cache
+  requestAvaLessonNarration(title, rawText)
+    .then((res) => {
+      if (res && res.success && res.narrationText) {
+        narrationBackgroundCache.set(cacheKey, {
+          narrationScript: res.narrationText,
+          audioBase64: res.audioBase64,
+          timestamp: Date.now()
+        });
+      }
+    })
+    .catch(() => {});
 }
 
 function splitIntoFlowingClauses(text: string): string[] {

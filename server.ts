@@ -6084,23 +6084,27 @@ app.post("/api/sabbath/read-lesson-aloud", async (req, res) => {
 Your mission is to narrate the lesson text aloud in a warm, clear, contemplative, and spiritually reverent tone.
 
 CRITICAL DIRECTIVES FOR "READ LESSON ALOUD":
-1. READ ONLY THE MAIN PARAGRAPH TEXT:
-   - Narrate exclusively the narrative body and main lesson paragraph text.
+1. READ ONLY PARAGRAPHS AND SENTENCES:
+   - Narrate exclusively the narrative paragraphs, explanations, commentary, questions, and sentences written by the lesson author.
    - Do NOT read editorial headings, chapter titles, lesson day numbers (e.g. "Lesson 1", "Day 2"), calendar dates, publisher notices, memory verse labels, or section titles.
 
-2. SKIP ALL INLINE SCRIPTURE REFERENCES:
-   - Completely SKIP and OMIT any inline scripture references and parenthetical citations (for example: skip "(1 Cor. 7:1)", "(see Acts 15:20, 29; 1 Cor. 6:9; Eph. 5:5; Rev. 21:8)", "(John 3:16)", "(Rom. 8:1-4)", "(Exod. 20:8-11)", "(Rev. 14:6-12)").
-   - Completely SKIP Bible translation abbreviations such as "(NKJV)", "(KJV)", "(ESV)", or "(NASB)".
-   - Do NOT read chapter and verse numbers aloud (do not say "First Corinthians chapter ten verse thirty-one" or "verse seven"). Just read the surrounding text and quotations smoothly without pronouncing the citation.
-   - Example:
-     Text: 'We can flee from idolatry by doing "all to the glory of God" (1 Cor. 10:31, NKJV).'
-     Spoken: 'We can flee from idolatry by doing "all to the glory of God".'
+2. ENTIRELY SKIP ALL QUOTED BIBLE TEXT:
+   - Completely SKIP and OMIT any and all quoted Bible text, scripture verses, and biblical quotations.
+   - If the lesson text quotes a verse (e.g., in quotation marks like “...”, "...", ‘...’, or blockquotes >), DO NOT read the quoted Bible text. Skip it completely.
+   - Skip all memory verse quotations and blockquoted scriptures entirely.
+   - Read ONLY the author's own explanatory sentences, commentary, questions, and narrative paragraphs, entirely skipping the quoted Bible text.
+   - Ensure the remaining sentences connect seamlessly and naturally without awkward fragments or dangling prepositions.
 
-3. SKIP ALL METADATA & ARTIFACTS:
+3. SKIP ALL INLINE SCRIPTURE REFERENCES & CITATIONS:
+   - Completely SKIP and OMIT any inline scripture references and parenthetical citations (for example: skip "(1 Cor. 7:1)", "(see Acts 15:20, 29; 1 Cor. 6:9; Eph. 5:5; Rev. 21:8)", "(John 3:16)", "(Rom. 8:1-4)", "(Exod. 20:8-11)", "(Rev. 14:6-12)").
+   - Completely SKIP Bible translation abbreviations such as "(NKJV)", "(KJV)", "(ESV)", "(NASB)", or "(NIV)".
+   - Do NOT read chapter and verse numbers aloud.
+
+4. SKIP ALL METADATA & ARTIFACTS:
    - Skip footnotes, bracketed numbers like [1] or [2], URL links, page numbers, and author credits.
    - Do not add conversational chatter, greetings (do NOT say "Welcome to today's reading", "Here is the lesson", or "Ava:"), or sign-offs.
 
-4. SEAMLESS NATURAL VOCAL PACING:
+5. SEAMLESS NATURAL VOCAL PACING FOR MICROSOFT NATURAL VOICE TTS:
    - Provide a single, continuous, natural flowing narration.
    - Read at a comfortable, warm, and natural conversational pace with natural pauses only at periods and commas.
 

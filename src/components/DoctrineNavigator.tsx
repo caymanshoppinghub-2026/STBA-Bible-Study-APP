@@ -11,7 +11,6 @@ import {
   ChevronRight,
   Sparkles,
   Plus,
-  Search,
   FileText,
   CheckCircle2,
   BookMarked,
@@ -22,7 +21,6 @@ import {
   Check,
   X,
   Bell,
-  Radio,
   Shield,
   GraduationCap,
   Award,
@@ -46,7 +44,7 @@ import { useSabbathMode } from "../context/SabbathMode";
 import { useElderStephen } from "../context/ElderStephenContext";
 import { saveNoteToSupabase, ensureSupabaseAuth } from "../lib/notebookSync";
 import { StudyNote } from "../types/notebook";
-import { notifyLiveSectionUpdate, simulateLiveSectionUpdate } from "../utils/contentUpdatesWatcher";
+import { notifyLiveSectionUpdate } from "../utils/contentUpdatesWatcher";
 import { playReminderPingSound } from "../utils/audioFeedback";
 
 // Elevated Track metadata mapping for sacred architectural exploration
@@ -102,7 +100,6 @@ export const DoctrineNavigator: React.FC = () => {
   // Track state
   const [selectedTrackId, setSelectedTrackId] = useState<string>("fundamental-beliefs");
   const [selectedSectionIndex, setSelectedSectionIndex] = useState<number>(0);
-  const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedChipRef, setSelectedChipRef] = useState<string | null>(null);
   const [activePerspective, setActivePerspective] = useState<"blueprint" | "cross-references" | "mastery">("blueprint");
   
@@ -202,15 +199,8 @@ export const DoctrineNavigator: React.FC = () => {
     }
   }, [selectedTrackId, selectedSectionIndex]);
 
-  // Filter sections inside search
-  const filteredSections = activeTrack.outline.sections.map((sec, idx) => ({ sec, idx })).filter(({ sec }) => {
-    if (!searchQuery) return true;
-    return (
-      sec.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sec.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sec.key_references.some(ref => ref.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  });
+  // Sacred pillar sections available for inspection
+  const filteredSections = activeTrack.outline.sections.map((sec, idx) => ({ sec, idx }));
 
   // Handle saving the study note
   const handleSaveNote = async () => {
@@ -272,7 +262,8 @@ export const DoctrineNavigator: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-8" id="doctrine-navigator-root">
       
       {/* 1. ELEVATED HEADER BANNER & COMPANION SYSTEM STATUS */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 text-left border-b border-[#DFC57B]/20 pb-6">
+      {/* 1. ELEVATED HEADER BANNER */}
+      <div className="flex flex-col gap-5 text-left border-b border-[#DFC57B]/20 pb-6">
         <div className="space-y-3 max-w-4xl">
           
           {/* Top Intelligent Companion Badges */}
@@ -285,27 +276,10 @@ export const DoctrineNavigator: React.FC = () => {
               <Brain className="w-3.5 h-3.5 text-[#DFC57B] animate-pulse" />
               <span>COGNITIVE SCRIPTURE COMPANION • INTELLIGENT BIBLICAL REASONING ENGINE</span>
             </div>
-
-            {/* Live Session Update — Active & Adaptive Tracker */}
-            <div 
-              className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-950/70 border border-emerald-500/40 rounded-full text-emerald-300 text-[10px] font-mono font-semibold backdrop-blur-xs shadow-xs"
-              title="Real-time Berean monitoring active: dynamically synchronizing your study milestones across key doctrines"
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span>LIVE ADAPTIVE INSIGHT • SPIRITUAL PROGRESS SYNCHRONIZING</span>
-            </div>
           </div>
 
           {/* Master Hub Title */}
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono font-extrabold uppercase tracking-widest text-[#DFC57B]/80">
-                The Sacred Doctrinal Landscape • Panoramic Exploration Hub
-              </span>
-            </div>
             <h1 className="font-serif text-3xl md:text-5xl text-[#DFC57B] font-black tracking-tight leading-tight drop-shadow-xs">
               The Doctrine Navigator
             </h1>
@@ -363,21 +337,6 @@ export const DoctrineNavigator: React.FC = () => {
               )}
             </AnimatePresence>
           </div>
-        </div>
-
-        {/* Live Section Alert Verification Action */}
-        <div className="flex flex-col sm:flex-row md:flex-col items-start md:items-end gap-2 shrink-0 self-start md:self-center">
-          <button
-            onClick={() => simulateLiveSectionUpdate("28-fundamentals")}
-            title="Broadcast a live update to the 28 Fundamentals to verify active spiritual synchronization"
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#081e3a] hover:bg-[#0c284e] border border-[#DFC57B]/50 hover:border-[#DFC57B] text-[#DFC57B] text-xs font-semibold rounded-xl shadow-md transition-all duration-200 cursor-pointer active:scale-95"
-          >
-            <Radio className="w-3.5 h-3.5 text-[#DFC57B] animate-pulse" />
-            <span>Simulate 28 Fundamentals Live Update</span>
-          </button>
-          <span className="text-[10px] font-mono text-stone-400">
-            Real-time insight & adaptive alert active
-          </span>
         </div>
       </div>
 
@@ -552,18 +511,6 @@ export const DoctrineNavigator: React.FC = () => {
             <p className="text-xs text-stone-300 font-sans">
               Unveiling the structural harmony, prophetic foundations, and line-upon-line blueprints of God's revealed truth.
             </p>
-          </div>
-
-          {/* SEARCH BAR */}
-          <div className="relative w-full md:w-[320px]">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search divine blueprint, key texts, themes..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#E8E4DA] rounded-xl text-xs font-sans placeholder-stone-400 focus:outline-none focus:border-[#DFC57B] focus:ring-1 focus:ring-[#DFC57B]/30 transition-all shadow-xs"
-            />
           </div>
         </div>
 
@@ -868,65 +815,61 @@ export const DoctrineNavigator: React.FC = () => {
                   )}
                 </div>
 
-                {/* ACTION BAR INLINE */}
+                {/* ACTION BAR HORIZONTAL */}
                 <div 
-                  className="pt-4 border-t border-stone-100 flex flex-wrap gap-2.5 items-center justify-between"
+                  className="pt-4 border-t border-stone-100 grid grid-cols-2 sm:grid-cols-4 gap-2 w-full"
                   id="action-bar"
                 >
-                  <div className="flex flex-wrap gap-2">
-                    {/* Open in Track Studies */}
-                    <button
-                      onClick={() => navigate(`/tracks/${selectedTrackId}/preview`)}
-                      id="action-open-track"
-                      title="Navigate to the sequential step-by-step Study Track"
-                      className="px-4 py-2.5 bg-[#1C2333] hover:bg-[#2c3750] text-white rounded-xl text-xs font-sans font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-                    >
-                      <Layers className="w-3.5 h-3.5 text-[#DFC57B]" />
-                      <span>Step-by-Step Study Track</span>
-                    </button>
+                  {/* Outline Notebook */}
+                  <button
+                    onClick={() => {
+                      setIsNotesOpen(true);
+                      playReminderPingSound();
+                    }}
+                    id="action-open-notebook"
+                    title="Map this outline directly into your personal discipleship notebook"
+                    className="w-full px-2.5 sm:px-3 py-2.5 bg-[#FDFAF5] border border-[#DFC57B]/60 text-[#C9973A] hover:bg-[#F2ECE0] hover:border-[#DFC57B] rounded-xl text-xs font-sans font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+                  >
+                    <FilePen className="w-3.5 h-3.5 text-[#C9973A] shrink-0" />
+                    <span>Outline Notebook</span>
+                  </button>
 
-                    {/* Open in STBA Mode */}
-                    <button
-                      onClick={() => navigate("/stba")}
-                      id="action-open-stba"
-                      title="Launch the STBA cognitive exegesis tutor"
-                      className="px-4 py-2.5 bg-white border border-[#E8E4DA] hover:border-[#DFC57B] text-stone-800 rounded-xl text-xs font-sans font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                    >
-                      <Brain className="w-3.5 h-3.5 text-[#C9973A]" />
-                      <span>Open in STBA Exegesis</span>
-                    </button>
-                  </div>
+                  {/* Open Exegesis */}
+                  <button
+                    onClick={() => navigate("/stba")}
+                    id="action-open-stba"
+                    title="Launch the STBA cognitive exegesis tutor"
+                    className="w-full px-2.5 sm:px-3 py-2.5 bg-white border border-[#E8E4DA] hover:border-[#DFC57B] text-stone-800 rounded-xl text-xs font-sans font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+                  >
+                    <Brain className="w-3.5 h-3.5 text-[#C9973A] shrink-0" />
+                    <span>Open Exegesis</span>
+                  </button>
 
-                  <div className="flex flex-wrap gap-2">
-                    {/* Open Discipleship Notebook Drawer */}
-                    <button
-                      onClick={() => {
-                        setIsNotesOpen(true);
-                        playReminderPingSound();
-                      }}
-                      id="action-open-notebook"
-                      title="Map this outline directly into your personal discipleship notebook"
-                      className="px-4 py-2.5 bg-[#FDFAF5] border border-[#DFC57B]/60 text-[#C9973A] hover:bg-[#F2ECE0] hover:border-[#DFC57B] rounded-xl text-xs font-sans font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-                    >
-                      <FilePen className="w-3.5 h-3.5 text-[#C9973A]" />
-                      <span>Map Outline to Notebook</span>
-                    </button>
+                  {/* Elder Stephen */}
+                  <button
+                    onClick={() => {
+                      setIsElderPanelOpen(true);
+                      playReminderPingSound();
+                    }}
+                    id="action-open-elder-stephen"
+                    title="Consult Elder Stephen on this sacred doctrinal pillar"
+                    className="w-full px-2.5 sm:px-3 py-2.5 bg-gradient-to-r from-[#0C1E3D] via-[#102449] to-[#0C1E3D] border border-[#D4A346]/70 text-[#F5C768] hover:border-[#D4A346] rounded-xl text-xs font-sans font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-95 whitespace-nowrap"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-[#E6B756] shrink-0" />
+                    <span>Elder Stephen</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5 shrink-0" />
+                  </button>
 
-                    {/* Open Elder Stephen Pastoral Guidance Drawer */}
-                    <button
-                      onClick={() => {
-                        setIsElderPanelOpen(true);
-                        playReminderPingSound();
-                      }}
-                      id="action-open-elder-stephen"
-                      title="Consult Elder Stephen on this sacred doctrinal pillar"
-                      className="px-4 py-2.5 bg-gradient-to-r from-[#0C1E3D] via-[#102449] to-[#0C1E3D] border border-[#D4A346]/70 text-[#F5C768] hover:border-[#D4A346] rounded-xl text-xs font-sans font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5 text-[#E6B756]" />
-                      <span>Consult Elder Stephen</span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-                    </button>
-                  </div>
+                  {/* Study Track */}
+                  <button
+                    onClick={() => navigate(`/tracks/${selectedTrackId}/preview`)}
+                    id="action-open-track"
+                    title="Navigate to the sequential step-by-step Study Track"
+                    className="w-full px-2.5 sm:px-3 py-2.5 bg-[#1C2333] hover:bg-[#2c3750] text-white rounded-xl text-xs font-sans font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-[#DFC57B] shrink-0" />
+                    <span>Study Track</span>
+                  </button>
                 </div>
 
               </div>
