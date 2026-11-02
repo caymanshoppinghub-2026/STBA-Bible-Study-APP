@@ -5,14 +5,17 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Send, Sparkles, Trash2, Heart, Compass, Zap, BookOpen, Check } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useSabbathSchoolStore } from "../../store/useSabbathSchoolStore";
 import { useApp } from "../../context/AppContext";
 import { TtsPlayer } from "../TtsPlayer";
 import { STBA_LOGO_URL } from "../../assets/branding";
 import { saveResponseAsNewNote } from "../../data/notebookData";
+import { renderTextWithVerseButtons } from "../ExegesisRenderer";
 
 export const ElderStephenPanel: React.FC = () => {
   const appCtx = useApp();
+  const navigate = useNavigate();
 
   const {
     elderDiscussion,
@@ -95,6 +98,14 @@ export const ElderStephenPanel: React.FC = () => {
     }
   };
 
+  const handleVerseClick = (verse: string) => {
+    if (!verse) return;
+    const cleanRef = verse.trim();
+    localStorage.setItem("stba_pending_search_ref", cleanRef);
+    localStorage.setItem("stba_pending_search_tool", "stephen");
+    navigate(`/stba?ref=${encodeURIComponent(cleanRef)}`);
+  };
+
   const userIdentifier = appCtx?.user?.email || (appCtx?.user as any)?.id || rawUserName || "session_user";
   const userWelcomeSessionKey = `stba_ss_welcomed_session_${userIdentifier}`;
   const userAudioWelcomeSessionKey = `stba_ss_audio_welcomed_session_${userIdentifier}`;
@@ -136,7 +147,7 @@ export const ElderStephenPanel: React.FC = () => {
 
     // Only add initial greeting if discussion is empty
     if (elderDiscussion.length === 0) {
-      const greetingText = `Welcome, ${displayName}, to the Sabbath School study mode. I am Elder Stephen, ready to assist you with this week's lesson. If you have any questions, type them in the box below or click the Discuss button.`;
+      const greetingText = `Welcome, ${displayName}, to the Sabbath School study mode. I am Elder Stephen, your spiritual mentor and Sabbath School administrator. What topic or question would you like to discuss today regarding "${lessonTitle || "our Sabbath School lesson"}"?`;
 
       addElderMessage({ role: "elder", text: greetingText });
       console.log("[ElderStephenPanel] Initialized Sabbath School welcome greeting for:", displayName);
@@ -177,8 +188,8 @@ export const ElderStephenPanel: React.FC = () => {
   // Render Elder Stephen message in a single clean left-aligned text container (no nested cards or inner sub-boxes)
   const renderElderMessageText = (text: string, msgIndex: number, commentaryMode?: string) => {
     const cleanText = text
-      .replace(/### \d+\.\s*/g, "")
-      .replace(/\*\*Summary\*\*/i, "")
+      .replace(/^###\s*(.+)$/gm, "**$1**")
+      .replace(/\*\*Summary\*\*/i, "**Summary**")
       .trim();
 
     const isLatest = msgIndex === elderDiscussion.length - 1;
@@ -221,9 +232,9 @@ export const ElderStephenPanel: React.FC = () => {
           </div>
         )}
 
-        <p className={`whitespace-pre-wrap elder-stephen-output font-lato font-['Lato',sans-serif] tracking-[0.2px] text-left leading-relaxed antialiased ${getBodyFontSizeClass(readingFontSize)} ${isLight ? "text-[#000000]" : "text-neutral-200"}`}>
-          {cleanText}
-        </p>
+        <div className={`whitespace-pre-wrap elder-stephen-output font-lato font-['Lato',sans-serif] tracking-[0.2px] text-left leading-relaxed antialiased ${getBodyFontSizeClass(readingFontSize)} ${isLight ? "text-[#000000]" : "text-neutral-200"}`}>
+          {renderTextWithVerseButtons(cleanText, handleVerseClick)}
+        </div>
 
         {isVelocity && !isFirstWelcome && (
           <div className="pt-2.5 mt-2 border-t border-neutral-500/20 flex flex-wrap items-center justify-between gap-2">

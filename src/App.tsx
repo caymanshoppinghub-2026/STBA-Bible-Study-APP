@@ -34,6 +34,7 @@ import { NotebookPage } from "./pages/NotebookPage";
 import { UserStatsPage } from "./components/UserStatsPage";
 import { Confetti } from "./components/Confetti";
 import { RecallPopupModal } from "./components/recall/RecallPopupModal";
+import { HelpCenterPage } from "./pages/HelpCenterPage";
 
 import { AppProvider, useApp } from "./context/AppContext";
 import { SabbathSchoolProvider } from "./context/SabbathSchoolContext";
@@ -440,6 +441,30 @@ function AnimatedRoutes() {
                     userEmail={activeUser.email}
                   />
                 </div>
+              </AppLayout>
+            }
+          />
+          <Route
+            path="/help"
+            element={
+              <AppLayout>
+                <HelpCenterPage />
+              </AppLayout>
+            }
+          />
+          <Route
+            path="/support"
+            element={
+              <AppLayout>
+                <HelpCenterPage />
+              </AppLayout>
+            }
+          />
+          <Route
+            path="/faq"
+            element={
+              <AppLayout>
+                <HelpCenterPage />
               </AppLayout>
             }
           />

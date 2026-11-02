@@ -37,14 +37,17 @@ import {
   Download,
   FileText,
   Printer,
-  Brain
+  Brain,
+  ExternalLink
 } from "lucide-react";
 import { Scripture } from "../types";
 import { useApp } from "../context/AppContext";
 import { callElderStephen } from "../lib/callElderStephen";
 import { getElderStephenVoice } from "./stba/RightPaneTools";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { bibleService } from "../services/bibleService";
+import { ScriptureLinkedText } from "./stba/ScriptureLinkedText";
+import { STBA_LOGO_URL } from "../assets/branding";
 
 // Default target scripture used for exegesis (2 Timothy 2:15)
 const DEFAULT_SCRIPTURE: Scripture = {
@@ -225,6 +228,15 @@ interface ChatMessage {
   sender: "user" | "ai";
   text: string;
   timestamp: Date;
+  type?: "standard" | "overview" | "scripture_proof" | "prompt";
+  topicTitle?: string;
+  scriptureRef?: string;
+  scriptureText?: string;
+  scriptureIndex?: number;
+  totalScriptures?: number;
+  historicalContext?: string;
+  lastDaysImportance?: string;
+  stagesOutline?: { stage: number; title: string; focus: string }[];
 }
 
 type PhaseType =
@@ -243,6 +255,39 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 }) => {
   const { user, showConfetti } = useApp();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Sequential speech bubble timers
+  const sequentialTimersRef = useRef<NodeJS.Timeout[]>([]);
+
+  const clearSequentialTimers = () => {
+    sequentialTimersRef.current.forEach((t) => clearTimeout(t));
+    sequentialTimersRef.current = [];
+  };
+
+  useEffect(() => {
+    return () => {
+      clearSequentialTimers();
+    };
+  }, []);
+
+  // Direct navigation to Bible study module with target reference
+  const handleNavigateToBibleStudy = (reference: string) => {
+    if (!reference || !reference.trim()) return;
+    const cleanRef = reference.trim();
+
+    cleanupLiveAudioAndWS();
+    stopVoiceResponse();
+    clearIntervals();
+    clearSequentialTimers();
+    setIsTimerActive(false);
+
+    localStorage.setItem("stba_pending_search_ref", cleanRef);
+    localStorage.setItem("stba_pending_search_tool", "stephen");
+
+    triggerToast(`Opening ${cleanRef} in Bible Study module...`);
+    navigate(`/stba?ref=${encodeURIComponent(cleanRef)}`);
+  };
 
   // Resolve Holy Scriptures override
   const params = new URLSearchParams(location.search);
@@ -398,6 +443,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 
   // Clean exit navigation: Returns to start session screen if in an active session, or to dashboard if on start screen
   const handleExitStudio = () => {
+    clearSequentialTimers();
     cleanupLiveAudioAndWS();
     stopVoiceResponse();
     clearIntervals();
@@ -405,6 +451,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     setIsPaused(false);
     if (phase !== "intro") {
       setPhase("intro");
+      setChatMessages([]);
       triggerToast("Returned to Start Session screen.");
     } else {
       onClose(); // Navigates to /dashboard
@@ -1217,9 +1264,9 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     if (chatContainerRef.current) {
       const el = chatContainerRef.current;
       const lastMsgIsUser = chatMessages.length > 0 && chatMessages[chatMessages.length - 1].sender === "user";
-      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-      if (isNearBottom || lastMsgIsUser || chatMessages.length <= 1) {
-        el.scrollTop = el.scrollHeight;
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 250;
+      if (isNearBottom || lastMsgIsUser || chatMessages.length <= 6) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       }
     }
   }, [chatMessages, isLoading]);
@@ -1295,10 +1342,12 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     }
   };
 
-  // Starting the dialogue session - begins timer and starts Stage 1
+  // Starting the dialogue session - begins timer, ensures dialogue screen is initially blank, and delivers AI overview & key scriptures sequentially
   const handleBeginSession = () => {
+    clearSequentialTimers();
     setIsTimerActive(true);
     setSecondsRemaining(900);
+    // Ensure the dialogue screen is initially blank
     setChatMessages([]);
     setIsPaused(false);
     setPhase("stage1");
@@ -1328,30 +1377,81 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 
     stage5CompletedRef.current = false;
     const userName = resolveUserName();
-    const initialPrompt = `Hello ${userName ? `${userName}, ` : ""}I am Elder Stephen, your Bible study mentor. What topic would you like to discuss today?
-
-Once you select your topic or passage, we will explore it through our 5-stage scriptural journey:
-• **Stage 1: Exegesis**: What does this passage actually say? Original context and key words.
-• **Stage 2: The Great Controversy**: Cosmic conflict between Christ and Satan along prophetic timeline.
-• **Stage 3: Doctrine**: Connection to Seventh-day Adventist Fundamental Beliefs.
-• **Stage 4: Application**: Concrete, actionable character and daily life reform.
-• **Stage 5: Invitation**: Winsome, gentle, and respectful appeal to seekers outside the church.`;
 
     setLiveBarTranscript(`Elder Stephen: Hello ${userName ? `${userName}, ` : ""}I am Elder Stephen, your Bible study mentor. What topic would you like to discuss today?`);
 
-    setChatMessages([
-      {
-        id: "sys-init",
+    // Bubble 1: Elder Steven AI Overview Speech Bubble (dispatched after brief initial blank pause: 450ms)
+    const tOverview = setTimeout(() => {
+      const overviewMsg: ChatMessage = {
+        id: `overview-${Date.now()}`,
         sender: "ai",
-        text: initialPrompt,
+        type: "overview",
+        text: `**${topicOverview.topicTitle}**\n\nAnchor Scripture: ${topicOverview.scriptureReference}\n\n**1. Historical, Cultural & Theological Setting:**\n${topicOverview.historicalContext}\n\n**2. Critical Importance for the Last Days:**\n${topicOverview.lastDaysImportance}`,
+        topicTitle: topicOverview.topicTitle,
+        scriptureRef: topicOverview.scriptureReference,
+        historicalContext: topicOverview.historicalContext,
+        lastDaysImportance: topicOverview.lastDaysImportance,
+        stagesOutline: topicOverview.stagesOutline,
         timestamp: new Date()
-      }
-    ]);
+      };
+      setChatMessages([overviewMsg]);
+    }, 450);
+    sequentialTimersRef.current.push(tOverview);
 
-    // Read intro prompt
-    setTimeout(() => {
-      triggerVoiceResponse(initialPrompt);
-    }, 400);
+    // Bubbles 2..N: Selected Key Scripture Proofs dispatched sequentially
+    const quotes = topicOverview.quotedScriptures && topicOverview.quotedScriptures.length > 0
+      ? topicOverview.quotedScriptures
+      : [{ reference: topicOverview.scriptureReference, text: scripture.text }];
+
+    let delay = 1350;
+    const quoteInterval = 950;
+
+    quotes.forEach((item, idx) => {
+      const tQuote = setTimeout(() => {
+        const quoteMsg: ChatMessage = {
+          id: `scripture-proof-${idx}-${Date.now()}`,
+          sender: "ai",
+          type: "scripture_proof",
+          text: `**Key Scripture Proof (${idx + 1} of ${quotes.length}): ${item.reference}**\n\n"${item.text}"`,
+          scriptureRef: item.reference,
+          scriptureText: item.text,
+          scriptureIndex: idx + 1,
+          totalScriptures: quotes.length,
+          timestamp: new Date()
+        };
+        setChatMessages((prev) => [...prev, quoteMsg]);
+      }, delay);
+      sequentialTimersRef.current.push(tQuote);
+      delay += quoteInterval;
+    });
+
+    // Final Sequential Bubble: Stage 1 Prompt
+    const promptDelay = delay + 450;
+    const tPrompt = setTimeout(() => {
+      const promptText = `Hello ${userName ? `${userName}, ` : ""}I am Elder Stephen, your Bible study mentor. What topic would you like to discuss today?
+
+We are examining **${topicOverview.topicTitle}** with anchor scripture **${topicOverview.scriptureReference}**.
+
+**Stage 1: Exegesis & Original Text Exposition**
+${activeStage.prompt}
+
+What are your initial exegesis observations on this passage? Click any scripture link to open and explore the text and Hebrew/Greek roots in the Bible Study module!`;
+
+      const promptMsg: ChatMessage = {
+        id: `prompt-init-${Date.now()}`,
+        sender: "ai",
+        type: "prompt",
+        text: promptText,
+        timestamp: new Date()
+      };
+      setChatMessages((prev) => [...prev, promptMsg]);
+
+      // Read intro prompt via TTS
+      triggerVoiceResponse(
+        `Hello ${userName ? `${userName}. ` : ""}I am Elder Stephen. Let us examine ${topicOverview.topicTitle}. Stage 1: Exegesis. What does this passage say?`
+      );
+    }, promptDelay);
+    sequentialTimersRef.current.push(tPrompt);
 
     // Proactively initiate Live Gemini voice session if enabled
     if (useLiveVoiceAPI && !liveWebSocketActive) {
@@ -2656,7 +2756,7 @@ Once you select your topic or passage, we will explore it through our 5-stage sc
                 
                 {/* Responsive Chat Metadata Header */}
                 <div 
-                  className="flex flex-col items-center justify-center text-center w-full px-4 py-3 gap-2 border-b border-white/5 text-[10px] font-mono select-none lg:flex-col lg:items-start lg:text-left lg:w-full lg:px-2 lg:py-2"
+                  className="flex flex-col items-center justify-center text-center w-full px-4 py-2.5 gap-2 border-b border-white/5 text-[10px] font-mono select-none lg:flex-col lg:items-start lg:text-left lg:w-full lg:px-2 lg:py-2"
                   id="chat-metadata-header"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-1.5 text-stone-400 w-full">
@@ -2664,220 +2764,24 @@ Once you select your topic or passage, we will explore it through our 5-stage sc
                       <span className="whitespace-nowrap">Active study phase:</span>
                       <span className="text-[#C9973A] font-bold uppercase whitespace-nowrap">Stage {activeStage.number}: {activeStage.title}</span>
                     </div>
-                    <span className="text-stone-400 font-mono text-[9.5px]">Scripture Anchor: {scripture.reference}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-stone-400 font-mono text-[9.5px]">Scripture Anchor:</span>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateToBibleStudy(scripture.reference)}
+                        className="inline-flex items-center gap-1 text-[#C9973A] hover:text-amber-300 font-mono text-[10px] font-bold underline underline-offset-2 decoration-[#C9973A]/40 transition-colors cursor-pointer"
+                        title="Open Anchor Scripture in Bible Study Module"
+                      >
+                        <BookOpen className="w-2.5 h-2.5" />
+                        <span>{scripture.reference}</span>
+                        <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* ACTIVE STAGE PEDAGOGY OVERVIEW & CORE TEXTS */}
-                <div className="w-full bg-[#1C2333]/70 border border-white/10 rounded-xl p-4 sm:p-5 mb-3 space-y-3 select-none">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2">
-                    <span className="font-mono text-xs sm:text-sm uppercase tracking-wider text-[#C9973A] font-extrabold flex items-center gap-2">
-                      <span>Stage {activeStage.number}: {activeStage.title}</span>
-                      <span className="text-stone-400 font-normal">• {activeStage.subtitle}</span>
-                    </span>
-                    <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold">
-                      Step {activeStage.number} of 5 (3m Pace)
-                    </span>
-                  </div>
-
-                  {/* Enlarged Stage Description */}
-                  <p className="text-sm sm:text-base text-stone-100 font-sans leading-relaxed">
-                    {activeStage.overview}
-                  </p>
-
-                  {/* Prominent Stage Prompt & Question */}
-                  <div className="bg-[#C9973A]/10 border border-[#C9973A]/30 p-3.5 rounded-xl space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#C9973A] font-bold block">
-                      Stage Prompt & Discussion Question:
-                    </span>
-                    <p className="font-serif text-sm sm:text-base font-medium text-amber-200 leading-relaxed">
-                      "{activeStage.prompt}"
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <span className="text-xs font-mono uppercase text-stone-400 font-semibold">Core Biblical Texts:</span>
-                    {activeStage.coreTexts.map((txt) => (
-                      <span key={txt} className="px-2.5 py-1 bg-[#C9973A]/15 border border-[#C9973A]/30 text-amber-200 font-mono text-xs sm:text-sm rounded-md font-semibold">
-                        {txt}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* STAGE 3 EXPANDED FUNDAMENTAL BELIEF BANNER */}
-                {activeStage.number === 3 && (() => {
-                  const belief = getActiveBelief();
-                  return (
-                    <div className="w-full mb-3 bg-gradient-to-br from-[#1C2333] via-[#161D2C] to-[#141A27] border-2 border-[#C9973A] rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className="p-1.5 bg-[#C9973A]/20 text-[#C9973A] rounded-lg">
-                            <BrainCircuit className="w-4 h-4" />
-                          </span>
-                          <span className="text-xs sm:text-sm font-mono font-bold uppercase tracking-wider text-[#C9973A]">
-                            Fundamental Belief #{belief.number}: {belief.title}
-                          </span>
-                        </div>
-                        <span className="text-[10px] font-mono text-stone-400 bg-white/5 px-2 py-0.5 rounded border border-white/10">
-                          SDA Fundamental Belief Pillar
-                        </span>
-                      </div>
-
-                      <p className="text-sm sm:text-base text-stone-100 font-sans leading-relaxed">
-                        {belief.summary}
-                      </p>
-
-                      <div className="bg-[#C9973A]/10 border-l-4 border-[#C9973A] p-3.5 rounded-r-xl space-y-1">
-                        <div className="flex items-center gap-1.5 text-xs font-mono uppercase text-[#C9973A] font-bold">
-                          <span>Spirit of Prophecy Text Connection</span>
-                        </div>
-                        <p className="text-sm sm:text-base font-serif italic text-amber-100/95 leading-relaxed">
-                          "{belief.egwQuote}"
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <span className="text-xs font-mono text-stone-400 uppercase mr-1 font-semibold">Foundation Scripture Texts:</span>
-                        {belief.keyTexts.map((txt) => (
-                          <span key={txt} className="px-2.5 py-1 bg-white/5 border border-white/10 rounded-md text-xs sm:text-sm font-mono text-stone-200">
-                            {txt}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* STAGE 5 PUBLIC PRESENTATION NOTE */}
-                {activeStage.number === 5 && (
-                  <div className="w-full mb-3 bg-amber-500/10 border-2 border-amber-500/40 rounded-xl p-4 flex items-start gap-3.5 shadow-md">
-                    <div className="p-2 bg-amber-500/20 text-amber-300 rounded-lg shrink-0">
-                      <Award className="w-5 h-5" />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-xs sm:text-sm font-mono uppercase font-bold text-amber-300 block">
-                        Public Presentation Note — Evangelist Evaluation Focus
-                      </span>
-                      <p className="text-sm sm:text-base text-stone-100 font-sans leading-relaxed">
-                        Public presentation note — this stage is scored separately for clarity, grace, and doctrinal accuracy. Envision speaking to someone outside the church—lead with winsome gentleness, avoid Adventist jargon, and appeal directly to Christ's love and Scripture.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* DEDICATED DYNAMIC TOPIC OVERVIEW CARD (Context, Quoted Scriptures, Last-Days Urgency) */}
-                <div className="w-full bg-[#121826] border-2 border-[#C9973A]/40 rounded-2xl p-4 sm:p-5 mb-3 shadow-2xl backdrop-blur-md relative overflow-hidden select-text">
-                  <div className="flex items-center justify-between gap-3 pb-3 border-b border-white/10">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 bg-[#C9973A]/20 text-[#C9973A] rounded-xl border border-[#C9973A]/30">
-                        <BookOpen className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-[#C9973A] font-extrabold block">
-                          Elder Stephen's Prophetic & Historical Overview
-                        </span>
-                        <h3 className="font-serif text-base sm:text-lg font-bold text-white leading-tight">
-                          {topicOverview.topicTitle}
-                        </h3>
-                        <span className="text-xs font-mono text-amber-200/90 font-semibold">
-                          Anchor Scripture: {topicOverview.scriptureReference}
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
-                      className="px-2.5 py-1 text-[11px] font-mono text-stone-300 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-                    >
-                      <span>{isOverviewExpanded ? "Minimize" : "Expand Overview"}</span>
-                    </button>
-                  </div>
-
-                  {isOverviewExpanded && (
-                    <div className="space-y-4 pt-3.5">
-                      {/* Historical & Theological Context */}
-                      <div className="space-y-1.5">
-                        <span className="text-[11px] font-mono uppercase tracking-wider text-[#C9973A] font-bold block">
-                          1. Historical, Cultural & Theological Setting:
-                        </span>
-                        <p className="text-sm sm:text-base text-stone-100 font-sans leading-relaxed">
-                          {topicOverview.historicalContext}
-                        </p>
-                      </div>
-
-                      {/* Directly Quoted Scriptures */}
-                      {topicOverview.quotedScriptures && topicOverview.quotedScriptures.length > 0 && (
-                        <div className="space-y-2">
-                          <span className="text-[11px] font-mono uppercase tracking-wider text-[#C9973A] font-bold block">
-                            2. Key Scriptures Explaining This Doctrine (Direct Quotations):
-                          </span>
-                          <div className="space-y-2">
-                            {topicOverview.quotedScriptures.map((item, idx) => (
-                              <div
-                                key={idx}
-                                className="bg-[#C9973A]/10 border-l-4 border-[#C9973A] p-3.5 rounded-r-xl space-y-1 shadow-sm"
-                              >
-                                <span className="text-xs font-mono font-bold text-amber-200 block uppercase tracking-wider">
-                                  {item.reference}
-                                </span>
-                                <p className="font-serif text-sm sm:text-base italic text-amber-100/95 leading-relaxed">
-                                  "{item.text}"
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Importance for the Last Days */}
-                      <div className="space-y-1.5 bg-gradient-to-r from-amber-500/10 via-transparent to-transparent p-3.5 rounded-xl border border-amber-500/20">
-                        <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-amber-300 font-extrabold">
-                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                          <span>3. Critical Importance for the Last Days & The Final Crisis:</span>
-                        </div>
-                        <p className="text-sm sm:text-base text-stone-100 font-sans leading-relaxed">
-                          {topicOverview.lastDaysImportance}
-                        </p>
-                      </div>
-
-                      {/* 5-Stage Study Roadmap */}
-                      <div className="space-y-2 pt-1 border-t border-white/5">
-                        <span className="text-[11px] font-mono uppercase tracking-wider text-[#C9973A] font-bold block">
-                          4. Five-Stage Exegesis Study Roadmap (3 Minutes Per Stage):
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs">
-                          {topicOverview.stagesOutline.map((stg) => {
-                            const isCurrent = activeStage?.number === stg.stage;
-                            return (
-                              <div
-                                key={stg.stage}
-                                className={`p-2.5 rounded-xl border transition-all ${
-                                  isCurrent
-                                    ? "bg-[#C9973A]/20 border-[#C9973A] text-white shadow-md ring-1 ring-[#C9973A]"
-                                    : "bg-white/5 border-white/10 text-stone-300"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="font-mono text-[10px] font-extrabold uppercase text-[#C9973A]">
-                                    Stage {stg.stage}
-                                  </span>
-                                  <span className="text-[9px] font-mono text-stone-400">3 min</span>
-                                </div>
-                                <strong className="block text-xs font-bold text-white mb-0.5">{stg.title}</strong>
-                                <p className="text-[11px] text-stone-300 line-clamp-2 leading-snug">{stg.focus}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* PROMINENT BAR ABOVE THE DIALOGUE STREAM: LIVE STATUS & LIVE TRANSCRIPT (Soundwave Removed) */}
-                <div className="w-full bg-[#101522] border-2 border-[#C9973A]/40 rounded-2xl p-3.5 sm:p-4 mb-3 shadow-xl backdrop-blur-md relative overflow-hidden select-none">
+                {/* PROMINENT BAR ABOVE THE DIALOGUE STREAM: LIVE STATUS & LIVE TRANSCRIPT */}
+                <div className="w-full bg-[#101522] border-2 border-[#C9973A]/40 rounded-2xl p-3 sm:p-3.5 my-3 shadow-xl backdrop-blur-md relative overflow-hidden select-none">
                   {/* Top Bar Status */}
                   <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-white/10">
                     <div className="flex items-center gap-2">
@@ -2923,48 +2827,272 @@ Once you select your topic or passage, we will explore it through our 5-stage sc
                     </div>
                   </div>
 
-                  {/* Live Streaming Transcript with Enlarged Font Size */}
-                  <div className="pt-2.5 flex items-start gap-2.5 text-sm sm:text-base">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-[#C9973A] shrink-0 bg-[#C9973A]/10 border border-[#C9973A]/30 px-2 py-0.5 rounded font-bold">
+                  {/* Live Streaming Transcript */}
+                  <div className="pt-2 flex items-start gap-2.5 text-xs sm:text-sm">
+                    <span className="font-mono text-[9.5px] uppercase tracking-wider text-[#C9973A] shrink-0 bg-[#C9973A]/10 border border-[#C9973A]/30 px-2 py-0.5 rounded font-bold">
                       Live Transcript:
                     </span>
-                    <span className="text-stone-100 font-sans italic leading-relaxed min-h-[22px]">
+                    <span className="text-stone-100 font-sans italic leading-relaxed min-h-[20px]">
                       {liveBarTranscript || "Awaiting voice interaction... Speak or listen to Elder Stephen."}
                     </span>
                   </div>
                 </div>
 
-                {/* Chat Log container */}
+                {/* Dialogue Screen / Dynamic Speech Bubble Stream */}
                 <div
                   ref={chatContainerRef}
-                  className="w-full min-w-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-4 h-[320px] scrollbar-thin border-b border-white/5"
+                  className="w-full min-w-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-4 min-h-[460px] h-[540px] sm:h-[620px] scrollbar-thin border-b border-white/5"
                   id="chat-scroller-box"
                 >
+                  {/* INITIALLY BLANK DIALOGUE SCREEN STATE */}
+                  {chatMessages.length === 0 && (
+                    <div
+                      id="dialogue-screen-initial-blank"
+                      className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-6 sm:p-8 space-y-4 my-auto select-none opacity-90"
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-[#C9973A]/10 border border-[#C9973A]/30 flex items-center justify-center text-[#C9973A] shadow-inner">
+                        <BookOpen className="w-8 h-8 opacity-80" />
+                      </div>
+                      <div className="space-y-1.5 max-w-md">
+                        <h4 className="font-serif text-lg sm:text-xl font-bold text-white tracking-wide">
+                          Dialogue Screen Ready
+                        </h4>
+                        <p className="text-xs sm:text-sm text-stone-300 font-sans leading-relaxed">
+                          {chatMessages.length === 0
+                            ? "Click 'Begin Interactive Dialogue' to initiate Elder Stephen's interactive guidance. The theological overview and selected key scripture proofs will unfold sequentially in dynamic speech bubbles."
+                            : "Session initialized. Presenting Elder Stephen's prophetic overview and selected key scripture texts..."}
+                        </p>
+                      </div>
+                      {chatMessages.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={handleBeginSession}
+                          className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#C9973A] to-[#B5852F] hover:from-[#B5852F] hover:to-[#9F7224] text-stone-950 font-sans font-bold text-xs sm:text-sm shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                        >
+                          <Play className="w-4 h-4 fill-current" />
+                          <span>Begin Interactive Dialogue</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   <AnimatePresence initial={false}>
                     {chatMessages.map((msg) => {
+                      // 1. DYNAMIC SPEECH BUBBLE: THEOLOGICAL & PROPHETIC OVERVIEW
+                      if (msg.type === "overview") {
+                        return (
+                          <motion.div
+                            key={msg.id}
+                            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ duration: 0.35, ease: "easeOut" }}
+                            className="flex items-start gap-3 w-full mr-auto text-left select-text"
+                          >
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C9973A]/30 to-[#8C651E]/40 border border-[#C9973A]/50 flex items-center justify-center text-[#C9973A] shrink-0 shadow-md">
+                              <Sparkles className="w-4 h-4 text-amber-300" />
+                            </div>
+                            <div className="flex-1 bg-gradient-to-br from-[#121826] to-[#0D121D] border-2 border-[#C9973A]/50 rounded-2xl rounded-tl-none p-4 sm:p-5 shadow-2xl space-y-3.5 backdrop-blur-md">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] sm:text-xs font-mono uppercase tracking-widest text-[#C9973A] font-extrabold flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    <span>Elder Stephen • Theological & Prophetic Overview</span>
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                                  Overview Briefing
+                                </span>
+                              </div>
+
+                              <div>
+                                <h3 className="font-serif text-base sm:text-lg font-bold text-white leading-snug">
+                                  {msg.topicTitle || topicOverview.topicTitle}
+                                </h3>
+                                <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                  <span className="text-xs font-mono text-stone-400 font-medium">Anchor Scripture:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleNavigateToBibleStudy(msg.scriptureRef || topicOverview.scriptureReference)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-bold text-[#C9973A] hover:text-amber-200 bg-[#C9973A]/10 hover:bg-[#C9973A]/20 border border-[#C9973A]/30 transition-all cursor-pointer shadow-sm hover:scale-[1.02]"
+                                    title={`Open ${msg.scriptureRef || topicOverview.scriptureReference} in Bible Study module`}
+                                  >
+                                    <BookOpen className="w-3 h-3" />
+                                    <span>{msg.scriptureRef || topicOverview.scriptureReference}</span>
+                                    <ExternalLink className="w-2.5 h-2.5 opacity-75" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Historical & Theological Context */}
+                              <div className="space-y-1 bg-white/[0.03] border border-white/5 p-3 sm:p-3.5 rounded-xl">
+                                <span className="text-[11px] font-mono uppercase tracking-wider text-[#C9973A] font-bold block">
+                                  1. Historical, Cultural & Theological Setting:
+                                </span>
+                                <p className="text-xs sm:text-sm text-stone-200 font-sans leading-relaxed">
+                                  <ScriptureLinkedText
+                                    text={msg.historicalContext || topicOverview.historicalContext}
+                                    onNavigateRef={handleNavigateToBibleStudy}
+                                  />
+                                </p>
+                              </div>
+
+                              {/* Critical Importance for the Last Days */}
+                              <div className="space-y-1 bg-gradient-to-r from-amber-500/10 via-transparent to-transparent border border-amber-500/20 p-3 sm:p-3.5 rounded-xl">
+                                <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-amber-300 font-extrabold">
+                                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>2. Critical Importance for the Last Days & The Final Crisis:</span>
+                                </div>
+                                <p className="text-xs sm:text-sm text-stone-200 font-sans leading-relaxed">
+                                  <ScriptureLinkedText
+                                    text={msg.lastDaysImportance || topicOverview.lastDaysImportance}
+                                    onNavigateRef={handleNavigateToBibleStudy}
+                                  />
+                                </p>
+                              </div>
+
+                              {/* 5-Stage Study Roadmap */}
+                              <div className="space-y-1.5 pt-1 border-t border-white/5">
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-stone-400 font-bold block">
+                                  Five-Stage Exegesis Study Roadmap (3 Minutes Per Stage):
+                                </span>
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-[10px]">
+                                  {(msg.stagesOutline || topicOverview.stagesOutline).map((stg) => (
+                                    <div
+                                      key={stg.stage}
+                                      className="p-2 rounded-lg bg-white/5 border border-white/10"
+                                    >
+                                      <div className="flex items-center justify-between mb-0.5">
+                                        <span className="font-mono text-[#C9973A] font-bold">Stage {stg.stage}</span>
+                                        <span className="text-[9px] text-stone-500 font-mono">3m</span>
+                                      </div>
+                                      <span className="text-white font-semibold block truncate">{stg.title}</span>
+                                      <p className="text-[9.5px] text-stone-400 line-clamp-1 leading-tight">{stg.focus}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      }
+
+                      // 2. DYNAMIC SPEECH BUBBLE: SELECTED KEY SCRIPTURE PROOFS
+                      if (msg.type === "scripture_proof") {
+                        return (
+                          <motion.div
+                            key={msg.id}
+                            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ duration: 0.35, ease: "easeOut" }}
+                            className="flex items-start gap-3 w-full mr-auto text-left select-text"
+                          >
+                            <div className="w-9 h-9 rounded-xl bg-[#C9973A]/20 border border-[#C9973A]/40 flex items-center justify-center text-[#C9973A] shrink-0 shadow-md">
+                              <BookOpen className="w-4 h-4 text-[#C9973A]" />
+                            </div>
+                            <div className="flex-1 bg-gradient-to-br from-[#161D2C] to-[#121826] border-2 border-[#C9973A]/40 rounded-2xl rounded-tl-none p-4 sm:p-5 shadow-xl space-y-3 backdrop-blur-md">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#C9973A] font-extrabold bg-[#C9973A]/15 border border-[#C9973A]/30 px-2 py-0.5 rounded">
+                                    Key Scripture Proof {msg.scriptureIndex && msg.totalScriptures ? `(${msg.scriptureIndex} of ${msg.totalScriptures})` : ""}
+                                  </span>
+                                </div>
+
+                                {/* Direct Interactive Button navigating to Bible Study module */}
+                                {msg.scriptureRef && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleNavigateToBibleStudy(msg.scriptureRef!)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-bold bg-[#C9973A] hover:bg-[#B5852F] text-stone-950 transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                                    title={`Open ${msg.scriptureRef} directly in Bible Study module`}
+                                  >
+                                    <BookOpen className="w-3.5 h-3.5" />
+                                    <span>Open in Bible Study</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Canonical Reference Header */}
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => msg.scriptureRef && handleNavigateToBibleStudy(msg.scriptureRef)}
+                                  className="text-amber-200 hover:text-white underline underline-offset-4 decoration-[#C9973A] hover:decoration-amber-300 transition-colors cursor-pointer text-left font-serif font-bold text-sm sm:text-base flex items-center gap-1.5"
+                                  title={`Click to open ${msg.scriptureRef} in Bible reader`}
+                                >
+                                  <BookOpen className="w-3.5 h-3.5 text-[#C9973A]" />
+                                  <span>{msg.scriptureRef}</span>
+                                </button>
+                              </div>
+
+                              {/* Quoted Text with interactive scripture reference hyperlinks */}
+                              <div className="bg-[#C9973A]/10 border-l-4 border-[#C9973A] p-3.5 rounded-r-xl">
+                                <p className="font-serif text-sm sm:text-base italic text-amber-100/95 leading-relaxed">
+                                  "<ScriptureLinkedText
+                                    text={msg.scriptureText || msg.text}
+                                    onNavigateRef={handleNavigateToBibleStudy}
+                                  />"
+                                </p>
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      }
+
+                      // 3. DYNAMIC SPEECH BUBBLE: STAGE PROMPT OR STANDARD AI
                       const isAi = msg.sender === "ai";
+                      if (isAi) {
+                        return (
+                          <motion.div
+                            key={msg.id}
+                            initial={{ opacity: 0, y: 14 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-start gap-3 w-full mr-auto text-left select-text"
+                          >
+                            <div className="w-9 h-9 rounded-xl bg-[#C9973A]/20 border border-[#C9973A]/30 flex items-center justify-center text-[#C9973A] shrink-0 font-serif text-xs font-bold shadow-md">
+                              AI
+                            </div>
+                            <div className="flex-1 bg-white/[0.06] text-[#E8E4DA] border border-white/10 rounded-2xl rounded-tl-none p-4 sm:p-5 font-serif font-light leading-relaxed select-text space-y-2 shadow-md">
+                              <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5 mb-2 font-mono text-[10px] text-stone-400">
+                                <span className="font-bold uppercase tracking-wider text-[#C9973A] flex items-center gap-1.5">
+                                  <BrainCircuit className="w-3.5 h-3.5" />
+                                  <span>Elder Stephen • Bible Study Mentor</span>
+                                </span>
+                                <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              </div>
+                              <div className="whitespace-pre-wrap text-sm sm:text-base font-serif leading-relaxed text-stone-100">
+                                <ScriptureLinkedText
+                                  text={msg.text}
+                                  onNavigateRef={handleNavigateToBibleStudy}
+                                />
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      }
+
+                      // 4. USER SPEECH BUBBLE
                       return (
                         <motion.div
                           key={msg.id}
-                          initial={{ opacity: 0, y: 10 }}
+                          initial={{ opacity: 0, y: 14 }}
                           animate={{ opacity: 1, y: 0 }}
-                          className={`flex items-start gap-2.5 w-full ${isAi ? "mr-auto text-left" : "ml-auto flex-row-reverse text-right"}`}
+                          className="flex items-start gap-3 w-full ml-auto flex-row-reverse text-right select-text"
                         >
-                          <div
-                            className={`p-2 rounded-full text-xs font-serif shrink-0 ${
-                              isAi ? "bg-[#C9973A]/20 text-[#C9973A]" : "bg-white/10 text-white"
-                            }`}
-                          >
-                            {isAi ? "AI" : "You"}
+                          <div className="w-9 h-9 rounded-xl bg-[#C9973A] text-stone-950 flex items-center justify-center shrink-0 font-sans text-xs font-extrabold shadow-md">
+                            You
                           </div>
-                          <div
-                            className={`p-4 rounded-xl text-sm sm:text-base leading-relaxed whitespace-pre-wrap select-text w-full max-w-none break-words [word-break:break-word] ${
-                              isAi
-                                ? "bg-white/5 text-[#E8E4DA] border border-white/5 rounded-tl-none font-serif font-light"
-                                : "bg-[#C9973A] text-white rounded-tr-none font-sans"
-                            }`}
-                          >
-                            {msg.text}
+                          <div className="max-w-[85%] bg-[#C9973A] text-stone-950 rounded-2xl rounded-tr-none p-4 sm:p-5 font-sans leading-relaxed text-sm sm:text-base shadow-md text-left">
+                            <div className="flex items-center justify-between gap-2 border-b border-black/15 pb-1 mb-1.5 font-mono text-[10px] text-stone-900/80">
+                              <span className="font-bold uppercase tracking-wider">Your Exposition</span>
+                              <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <div className="whitespace-pre-wrap select-text font-medium text-stone-950">
+                              <ScriptureLinkedText
+                                text={msg.text}
+                                onNavigateRef={handleNavigateToBibleStudy}
+                              />
+                            </div>
                           </div>
                         </motion.div>
                       );

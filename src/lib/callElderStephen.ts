@@ -307,16 +307,9 @@ Outline your main teaching points for *${title}* in simple, accessible language.
   } else if (mode === 'Sabbath School Studies' || mode === 'Syllabus') {
     return {
       text: formatProperElderSpacing(
-`**Sabbath School Guidance**
-
-Greetings, ${name}. I am Elder Stephen, here with you to explore today's study on *${title}*.
-
-* **Key Text**: *Revelation 14:12* — “Here is the patience of the saints: here are they that keep the commandments of God, and the faith of Jesus.”
-* **Focus**: Comparing Scripture with Scripture (*Isaiah 28:10*) to unveil the sanctuary truth and Christ's high-priestly ministry.
-
-What questions or insights do you have on this lesson?`
+        `In **${title}**, Scripture reveals how God's holy law and redeeming grace unite in Christ's heavenly sanctuary ministry (*Hebrews 8:1-2*). Trusting His righteousness equips us to keep the commandments of God and the faith of Jesus (*Revelation 14:12*).`
       ),
-      commentaryMode: 'prestige'
+      commentaryMode: 'velocity'
     }
   } else {
     return {

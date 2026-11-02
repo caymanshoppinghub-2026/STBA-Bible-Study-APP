@@ -33,6 +33,25 @@ export function getSystemInstruction(req: any) {
   return `IMPORTANT DIRECTIVE: The user signed up with the name: "${name}". You MUST address the user as "${name}" (e.g. 'Brother ${name}', 'Sister ${name}', or simply '${name}') in all conversational replies, feedback, evaluations, chat responses, oral text-to-speech summaries, and headings. NEVER call them generic placeholders like "Berean", "Brother", "Sister", "Student", or "Teacher" unless prefixed by their actual name.\n\n` + CSMS_SYSTEM_INSTRUCTION;
 }
 
+export const ELDER_STEPHEN_SABBATH_SCHOOL_SYSTEM_PROMPT = `Elder Stephen: Sabbath School System Prompt
+Role & Persona:
+
+You are Elder Stephen, a wise, warm, and grounded AI spiritual mentor and Sabbath School administrator within the STBA (Study To Be Approved) platform. Your purpose is to guide users through their Sabbath School lessons with theological depth, pastoral care, and scriptural accuracy.
+
+Core Objective:
+
+Whenever a user asks a question—whether simple or complex—within the Sabbath School study mode, you must dynamically adapt your response to directly address their inquiry using the context of the current Sabbath School lesson and sound biblical exegesis. Provide concise, direct answers by default, limiting all responses to a maximum of two sentences to ensure they are quick and legible on mobile devices.
+
+Guidelines for Responding:
+
+- Concise & Direct (Strict 2-Sentence Maximum by Default): By default, limit your response to a maximum of two sentences. Answers must be direct, crisp, and immediately legible on mobile screens without preamble or filler. (Only expand beyond two sentences if the user explicitly requests an in-depth, detailed, or comprehensive study).
+- Dynamic Adaptation: Analyze the user's specific question first. Do not give generic answers; tailor your explanation directly to what they are asking, whether it's about prophecy, doctrine, historical context, or practical Christian living.
+- Lesson Integration: Ground your answers firmly in the themes, memory verses, and core teachings of the active Sabbath School lesson.
+- Scriptural Authority: Support your explanations with direct scripture references (book, chapter, and verse, e.g. *Romans 3:31* or *Hebrews 8:1-2*). Emphasize line-upon-line scriptural harmony.
+- Tone & Demeanor: Maintain an encouraging, respectful, and authoritative yet approachable elder persona. Use warm phrasing that fosters spiritual growth and active recall.
+- Clarity & Depth: Deliver meaningful theological insight within your concise two-sentence answer to genuinely enrich their Bible study experience.
+- Historic SDA Hermeneutics: Sola Scriptura (Scripture interprets Scripture under the guidance of the Holy Spirit). Christ is the focal center of every doctrine, prophecy, and sanctuary truth.`;
+
 export const CSMS_SYSTEM_INSTRUCTION = `Google AI Studio system prompt for COGNITIVE SCRIPTURE MASTERY SYSTEM (CSMS)
 
 You are the core reasoning engine for the **Cognitive Scripture Mastery System (CSMS)** inside the "Study To Be Approved" (STBA) ecosystem.
@@ -1121,6 +1140,34 @@ app.post("/api/support/ticket", async (req, res) => {
 
 app.get("/api/support/tickets", (req, res) => {
   return res.json({ tickets: supportTicketsList });
+});
+
+// Live Chat Escalation Endpoint
+app.post("/api/support/escalate", async (req, res) => {
+  const { name, email, urgency, notes, chatHistory } = req.body;
+  const ticketId = `ESC-${Date.now().toString().slice(-6)}`;
+  
+  const formattedChat = Array.isArray(chatHistory)
+    ? chatHistory.map((m: any) => `[${m.sender || "User"} (${m.time || ""})]: ${m.text || ""}`).join("\n")
+    : String(chatHistory || "No chat history recorded");
+
+  const ticket: SupportTicket = {
+    id: ticketId,
+    name: (name || "Berean Disciple").trim(),
+    email: (email || "user@stba.org").toLowerCase().trim(),
+    subject: `[URGENT ESCALATION] Live Support Inquiry (${urgency || "Normal Priority"})`,
+    message: `A user has escalated an active live support conversation to an administrator.\n\nUrgency: ${urgency || "Normal"}\nUser Note / Escalation Reason:\n${notes || "Immediate administrator assistance requested."}\n\n--- LIVE CHAT TRANSCRIPT ---\n${formattedChat}`,
+    createdAt: new Date().toISOString(),
+    status: "open"
+  };
+
+  const result = await sendSupportTicketEmail(ticket);
+  return res.json({
+    success: true,
+    ticketId: ticket.id,
+    estimatedResponseTime: urgency === "urgent" ? "Under 1 hour" : "Under 2 hours",
+    message: result.message || "Your inquiry has been escalated to an administrator."
+  });
 });
 
 // Endpoint to trigger welcome email upon account creation
@@ -5036,8 +5083,12 @@ app.post("/api/elder-stephen", async (req, res) => {
 
     let text = "";
     if (isSabbathSchool) {
-      text = `Greetings, ${actualName}. I am Elder Stephen, here to answer your questions regarding today's lesson on ${studyDoc}. How can I assist you today?`;
-      return res.json({ text: formatProperElderSpacing(text), commentaryMode: "prestige", modeUsed: "prestige", latencyMs });
+      if (!latestUserText || latestUserText.trim().toLowerCase() === "discuss" || latestUserText.trim().length === 0) {
+        text = `Greetings, ${actualName}; as your Sabbath School mentor, I am here to explore "${studyDoc}" with you. What specific question or passage from this week's lesson is on your heart today?`;
+      } else {
+        text = `In **${studyDoc}**, God's eternal law and redeeming grace meet harmoniously in Christ's heavenly sanctuary ministry (*${refText || "Hebrews 8:1-2"}*). Walking daily in His righteousness transforms our character and anchors our faith in the everlasting gospel (*Revelation 14:12*).`;
+      }
+      return res.json({ text: formatProperElderSpacing(text), commentaryMode: "velocity", modeUsed: "velocity", latencyMs });
     }
 
     if (mode === "Recall") {
@@ -5140,6 +5191,51 @@ The Seventh-day Adventist movement was raised to proclaim the everlasting gospel
 
     // User's active request text
     const userRequestText = latestUserText || `Please share your pastoral guidance on ${activePassage}.`;
+
+    // ==========================================
+    // BRANCH SS: SABBATH SCHOOL STUDY MODE (Elder Stephen Sabbath School Administrator & Mentor)
+    // ==========================================
+    const isExplicitPrestige = commentaryMode === "prestige" || latestUserText.toLowerCase().includes("6-section") || latestUserText.toLowerCase().includes("prestige commentary");
+    if (isSabbathSchool && !isExplicitPrestige) {
+      console.log(`[Elder Stephen] Executing Sabbath School Mode on "${documentTitle}" for user "${actualName}"...`);
+
+      const ssSystemInstruction = `IMPORTANT DIRECTIVE: The user signed up with the name: "${actualName}". You MUST address the user as "${actualName}" (e.g. 'Brother ${actualName}', 'Sister ${actualName}', or simply '${actualName}').\n\n` +
+        ELDER_STEPHEN_SABBATH_SCHOOL_SYSTEM_PROMPT;
+
+      const ssUserBlock = `Active Sabbath School Lesson: "${documentTitle}"
+${activePassage && activePassage !== documentTitle ? `Focal Scripture: ${activePassage}\n` : ""}${noteContent ? `Daily Lesson Excerpt / Content:\n"""\n${noteContent.slice(0, 1600)}\n"""\n` : ""}${contextSummary ? `Sabbath School Context & Cross-Mode Notes:\n"""\n${contextSummary}\n"""\n` : ""}User: "${actualName}".
+${recentHistorySummary ? `Recent Discussion: ${recentHistorySummary}\n` : ""}User Question / Inquiry: "${userRequestText}"
+
+Please respond dynamically as Elder Stephen, directly addressing the user's specific inquiry using the context of the current Sabbath School lesson and sound biblical exegesis.
+CRITICAL CONSTRAINT: Provide a concise, direct answer limited to a MAXIMUM OF TWO SENTENCES by default to ensure it is quick and legible on mobile devices.`;
+
+      const contents = [
+        ...recentHistory.slice(-4).map((msg: any) => ({
+          role: msg.role === "elder" || msg.role === "model" ? "model" : "user",
+          parts: [{ text: msg.text }]
+        })),
+        {
+          role: "user",
+          parts: [{ text: ssUserBlock }]
+        }
+      ];
+
+      const response = await generateContentWithFallback(aiClient, {
+        model: "gemini-3.1-flash-lite",
+        contents,
+        config: {
+          systemInstruction: ssSystemInstruction,
+          maxOutputTokens: 250,
+          temperature: 0.65,
+          topP: 0.85
+        },
+        timeoutMs: 18000
+      });
+
+      const responseText = formatProperElderSpacing(response?.text || `Greetings, ${actualName}. Let us examine God's Word together with prayerful hearts.`);
+      const latencyMs = Date.now() - startTime;
+      return res.json({ text: responseText, commentaryMode: "velocity", modeUsed: "velocity", latencyMs });
+    }
 
     // ==========================================
     // BRANCH A: VELOCITY MODE (Fast, Concise Elder Stephen)

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { STBA_LOGO_URL } from "../assets/branding";
 import { 
@@ -13,10 +14,13 @@ import {
   ChevronRight, 
   BookOpen,
   X,
-  FileText
+  FileText,
+  Ticket,
+  HelpCircle
 } from "lucide-react";
 
 export const Footer: React.FC = () => {
+  const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState("");
 
@@ -57,7 +61,8 @@ export const Footer: React.FC = () => {
                 { label: "The Forgetting Curve", action: () => handleScrollToSection("forgetting-curve") },
                 { label: "Cognitive Recall Platform", action: () => handleScrollToSection("cognitive-recall") },
                 { label: "Beginner Progression Map", action: () => handleScrollToSection("beginner-map") },
-                { label: "Our FAQ", action: () => handleScrollToSection("faq-section") }
+                { label: "Help Center", action: () => navigate("/help") },
+                { label: "Our FAQ", action: () => navigate("/help#faq") }
               ].map((item, idx) => (
                 <li key={idx}>
                   <button
@@ -177,17 +182,35 @@ export const Footer: React.FC = () => {
             </h4>
             
             <div className="space-y-4 text-xs font-sans text-stone-400">
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <span className="text-[10px] font-mono text-stone-500 block uppercase tracking-wider font-bold">
-                  Contact Support
+                  Support & Help Center
                 </span>
-                <a 
-                  href="mailto:STSTSApprovedMinistry@gmail.com"
-                  className="text-stone-300 hover:text-[#DFC57B] transition-all font-mono inline-flex items-center gap-1.5 hover:underline"
-                >
-                  <Mail className="w-3.5 h-3.5 text-[#C9973A]" />
-                  <span>STSTSApprovedMinistry@gmail.com</span>
-                </a>
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/help#ticket")}
+                    className="text-stone-300 hover:text-[#DFC57B] transition-all font-mono inline-flex items-center gap-1.5 hover:underline text-left cursor-pointer"
+                  >
+                    <Ticket className="w-3.5 h-3.5 text-[#C9973A]" />
+                    <span>Submit Support Ticket</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/help")}
+                    className="text-stone-300 hover:text-[#DFC57B] transition-all font-mono inline-flex items-center gap-1.5 hover:underline text-left cursor-pointer"
+                  >
+                    <Info className="w-3.5 h-3.5 text-[#C9973A]" />
+                    <span>Help Center Hub</span>
+                  </button>
+                  <a 
+                    href="mailto:STSTSApprovedMinistry@gmail.com"
+                    className="text-stone-300 hover:text-[#DFC57B] transition-all font-mono inline-flex items-center gap-1.5 hover:underline"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-[#C9973A]" />
+                    <span>STSTSApprovedMinistry@gmail.com</span>
+                  </a>
+                </div>
               </div>
 
               <div className="space-y-1">

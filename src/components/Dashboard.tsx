@@ -567,19 +567,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Listener for custom events from Sidebar/TopBar
   useEffect(() => {
-    const handleFaq = () => setShowFaqModal(true);
-    const handleTicket = () => {
-      setHelpCenterInitialView("ticket");
-      setShowHelpCenterPanel(true);
-    };
-    const handleSupport = () => {
-      setHelpCenterInitialView("overview");
-      setShowHelpCenterPanel(true);
-    };
-    const handleHelpCenter = () => {
-      setHelpCenterInitialView("overview");
-      setShowHelpCenterPanel(true);
-    };
+    const handleFaq = () => navigate("/help#faq");
+    const handleTicket = () => navigate("/help#ticket");
+    const handleSupport = () => navigate("/help#contact");
+    const handleHelpCenter = () => navigate("/help");
 
     window.addEventListener("open-stba-faq-modal", handleFaq);
     window.addEventListener("open-stba-ticket-modal", handleTicket);
@@ -1407,8 +1398,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
           <div
             id="mobile-help-center-card"
             onClick={() => {
-              setHelpCenterInitialView("overview");
-              setShowHelpCenterPanel(true);
+              navigate("/help");
             }}
             className="col-span-1 p-4 sm:p-4.5 rounded-2xl bg-gradient-to-b from-[#08172c]/95 via-[#051121]/95 to-[#030914]/95 border border-[#152a4a] hover:border-[#DFC57B]/70 shadow-[0_6px_20px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,242,168,0.06)] hover:shadow-[0_10px_28px_rgba(0,0,0,0.7),0_0_20px_rgba(223,197,123,0.22)] hover:-translate-y-1 active:scale-[0.98] transition-all duration-300 cursor-pointer flex sm:hidden flex-col items-center justify-between text-center min-h-[195px] sm:min-h-[210px] group relative overflow-hidden"
           >
@@ -1602,13 +1592,13 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
         <div className="lg:col-span-4 flex flex-col">
           <div
             id="ask-stba-ai-card"
-            className="h-full flex flex-col justify-between p-5 sm:p-6 rounded-3xl glass-card border border-[#E5B842]/40 shadow-2xl relative overflow-hidden sheen-overlay"
+            className="h-full flex flex-col justify-between p-5 sm:p-6 rounded-3xl glass-card border border-[#E5B842]/40 shadow-2xl relative overflow-hidden sheen-overlay font-lato font-['Lato',sans-serif]"
           >
             {/* Background Glow */}
             <div className="absolute top-0 right-0 w-48 h-48 bg-[#F3CF65]/10 rounded-full blur-2xl pointer-events-none" />
 
-            {/* Top Container */}
-            <div className="space-y-4">
+            {/* Main Content Container */}
+            <div className="space-y-4 flex-1 flex flex-col min-h-0">
               {/* Header */}
               <div className="flex items-center justify-between border-b border-[#0d3060] pb-3 relative z-10">
                 <div className="flex items-center gap-2.5">
@@ -1616,8 +1606,8 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                     <Sparkles className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-serif font-bold text-base text-white">Ask STBA AI</h3>
-                    <span className="text-[10px] font-mono text-[#F3CF65] font-semibold">
+                    <h3 className="font-lato font-['Lato',sans-serif] font-bold text-lg sm:text-xl text-white">Ask STBA AI</h3>
+                    <span className="text-xs sm:text-sm font-lato font-['Lato',sans-serif] text-[#F3CF65] font-semibold block">
                       Your Personal Bible Teacher
                     </span>
                   </div>
@@ -1638,7 +1628,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
                   placeholder="Ask me anything about Scripture..."
-                  className="w-full py-3.5 pl-4 pr-20 bg-[#06162c] border border-[#0d3060] focus:border-[#F3CF65] rounded-2xl text-xs sm:text-sm text-white placeholder-stone-400 focus:outline-none shadow-inner transition-all"
+                  className="w-full py-3.5 pl-4 pr-20 bg-[#06162c] border border-[#0d3060] focus:border-[#F3CF65] rounded-2xl text-sm sm:text-base text-white placeholder-stone-400 focus:outline-none shadow-inner transition-all font-lato font-['Lato',sans-serif]"
                 />
 
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
@@ -1670,85 +1660,58 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                 </div>
               </form>
 
-              {/* Dynamic Pre-loaded Answers Lineup (4 spots) */}
-              <div className="space-y-2">
+              {/* Dynamic Pre-loaded Answers Lineup with Continuous Scroll */}
+              <div className="space-y-2 flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-[#F3CF65] font-bold block">
+                  <span className="text-xs sm:text-sm font-lato font-['Lato',sans-serif] uppercase tracking-wider text-[#F3CF65] font-bold block">
                     Pre-loaded Answers Lineup:
                   </span>
-                  <span className="text-[9px] font-mono text-stone-400">
-                    4 Instant Spots
+                  <span className="text-xs font-lato font-['Lato',sans-serif] text-[#F3CF65] flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#F3CF65] animate-pulse" />
+                    {preloadedAnswers.length} Questions • Scroll
                   </span>
                 </div>
 
-                <div className="space-y-1.5">
-                  {preloadedAnswers.slice(0, 4).map((item) => (
+                <div
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Pre-loaded Scripture and Doctrine questions list"
+                  className="flex-1 min-h-0 max-h-[300px] sm:max-h-[340px] overflow-y-auto overscroll-contain space-y-2 pr-1.5 notebook-card-scroll"
+                >
+                  {preloadedAnswers.slice(0, 6).map((item) => (
                     <button
                       key={item.id}
                       type="button"
                       onClick={() => handleSelectPreloadedAnswer(item)}
-                      className="w-full px-3 py-2 rounded-xl bg-[#06162c]/70 hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/50 text-stone-200 hover:text-white transition-all flex items-center justify-between text-left cursor-pointer group text-xs font-sans"
+                      className="w-full px-3.5 py-3 sm:py-3.5 rounded-2xl bg-[#06162c]/70 hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/50 text-stone-200 hover:text-white transition-all flex items-center justify-between text-left cursor-pointer group font-lato font-['Lato',sans-serif] shadow-xs active:scale-[0.99]"
                     >
-                      <div className="flex items-center gap-2 min-w-0 pr-2">
-                        <MessageSquare className="w-3.5 h-3.5 text-stone-400 group-hover:text-[#F3CF65] shrink-0" />
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <MessageSquare className="w-4 h-4 text-stone-400 group-hover:text-[#F3CF65] shrink-0" />
                         <div className="min-w-0">
-                          <span className="truncate block font-medium group-hover:text-white text-[11.5px]">
+                          <span className="truncate block font-semibold group-hover:text-white text-sm sm:text-base text-stone-100">
                             {item.question}
                           </span>
-                          <span className="text-[9.5px] text-stone-400 block truncate">
+                          <span className="text-xs sm:text-sm text-stone-300 block truncate mt-0.5">
                             {item.reference} • {item.topic}
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
                         {item.isRecent ? (
-                          <span className="text-[8.5px] font-mono px-1.5 py-0.5 rounded bg-[#F3CF65]/15 text-[#F3CF65] border border-[#F3CF65]/30">
+                          <span className="text-[10px] sm:text-xs font-lato font-semibold px-2 py-0.5 rounded-full bg-[#F3CF65]/15 text-[#F3CF65] border border-[#F3CF65]/30">
                             Recent
                           </span>
                         ) : (
-                          <span className="text-[8.5px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300/90 border border-emerald-500/20">
+                          <span className="text-[10px] sm:text-xs font-lato font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
                             Loaded
                           </span>
                         )}
-                        <ChevronRight className="w-3.5 h-3.5 text-stone-400 group-hover:text-[#F3CF65] group-hover:translate-x-0.5 transition-transform" />
+                        <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-[#F3CF65] group-hover:translate-x-0.5 transition-transform" />
                       </div>
                     </button>
                   ))}
                 </div>
               </div>
-            </div>
-
-            {/* 3 Action Buttons */}
-            <div className="grid grid-cols-3 gap-2 pt-3 border-t border-[#0d3060] mt-4">
-              <button
-                onClick={() => {
-                  const target = activeAnswerItem || preloadedAnswers[0];
-                  handleStartBibleStudyLesson(target?.reference, target?.topic);
-                }}
-                className="py-2.5 px-1.5 sm:px-2 gold-metallic-btn rounded-xl font-mono font-bold text-[10px] sm:text-[11px] uppercase tracking-wider flex items-center justify-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95"
-                title="Bridge to interactive Bible Study Mode lesson"
-              >
-                <Play className="w-3 h-3 fill-current shrink-0" />
-                <span className="truncate">Start Lesson</span>
-              </button>
-
-              <button
-                onClick={handleAskAiButton}
-                className="py-2.5 px-1.5 sm:px-2 bg-[#06162c] hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/50 text-stone-200 rounded-xl font-mono font-bold text-[10px] sm:text-[11px] flex items-center justify-center gap-1 transition-all cursor-pointer"
-                title="Ask STBA General Assistant"
-              >
-                <Sparkles className="w-3 h-3 text-[#F3CF65] shrink-0" />
-                <span className="truncate">Ask AI</span>
-              </button>
-
-              <button
-                onClick={() => navigate("/doctrine")}
-                className="py-2.5 px-1.5 sm:px-2 bg-[#06162c] hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/50 text-stone-200 rounded-xl font-mono font-bold text-[10px] sm:text-[11px] flex items-center justify-center gap-1 transition-all cursor-pointer"
-                title="Explore 28 Fundamental Doctrines in Doctrine Navigator"
-              >
-                <Compass className="w-3.5 h-3.5 text-[#F3CF65] shrink-0" />
-                <span className="truncate">Explore Doctrine</span>
-              </button>
             </div>
           </div>
         </div>

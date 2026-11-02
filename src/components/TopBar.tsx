@@ -18,7 +18,8 @@ import {
   BookOpen,
   Shield,
   Volume2,
-  Radio
+  Radio,
+  HelpCircle
 } from "lucide-react";
 import { useSabbathMode } from "../context/SabbathMode";
 import { useApp } from "../context/AppContext";
@@ -212,6 +213,17 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* RIGHT: HUD (NOTIFICATION BELL, USER PROFILE) */}
       <div className="flex items-center space-x-2 sm:space-x-3 shrink-0" id="topbar-actions-hud">
+        {/* DIRECT HELP CENTER ACCESS */}
+        <Link
+          to="/help"
+          id="topbar-help-link"
+          className="p-2 rounded-xl bg-[#0a2246]/60 hover:bg-[#0d3060] text-stone-300 hover:text-[#F3CF65] border border-[#E5B842]/20 transition-all focus:outline-none hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
+          aria-label="Help Center & Support"
+          title="Help Center & Support"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </Link>
+
         {/* NOTIFICATIONS BELL WITH BADGE */}
         <div className="relative">
           <button

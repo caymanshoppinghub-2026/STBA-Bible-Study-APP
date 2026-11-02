@@ -81,7 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: "Support",
       icon: Headphones,
       action: () => {
-        window.dispatchEvent(new CustomEvent("open-stba-support-modal"));
+        navigate("/help#contact");
         onClose?.();
       }
     },
@@ -89,7 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: "FAQs",
       icon: HelpCircle,
       action: () => {
-        window.dispatchEvent(new CustomEvent("open-stba-faq-modal"));
+        navigate("/help#faq");
         onClose?.();
       }
     },
@@ -97,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: "Submit Ticket",
       icon: Ticket,
       action: () => {
-        window.dispatchEvent(new CustomEvent("open-stba-ticket-modal"));
+        navigate("/help#ticket");
         onClose?.();
       }
     },
@@ -105,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: "Help Center",
       icon: Info,
       action: () => {
-        window.dispatchEvent(new CustomEvent("open-stba-help-center-modal"));
+        navigate("/help");
         onClose?.();
       }
     }

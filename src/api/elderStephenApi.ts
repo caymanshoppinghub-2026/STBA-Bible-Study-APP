@@ -79,8 +79,16 @@ export async function askElderStephen(params: ElderStephenParams): Promise<Elder
   }
 
   if (params.currentMode === "Sabbath School Studies" || params.currentMode === "Syllabus") {
+    if (!userText || userText.trim().toLowerCase() === "discuss" || userText.trim().length === 0) {
+      return {
+        text: `Greetings, ${name}; as your Sabbath School mentor, I am here to explore "${title}" with you. What specific question or passage from this week's lesson is on your heart today?`,
+        commentaryMode: "velocity"
+      };
+    }
+
     return {
-      text: `Greetings, ${name}. I am Elder Stephen, here to help answer your questions about today's study on ${title}.`
+      text: `In **${title}**, Scripture reveals how God's holy law and redeeming grace unite in Christ's heavenly sanctuary ministry (*Hebrews 8:1-2*). Trusting His righteousness equips us to keep the commandments of God and the faith of Jesus (*Revelation 14:12*).`,
+      commentaryMode: "velocity"
     };
   }
 

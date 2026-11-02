@@ -181,6 +181,89 @@ The Seven Trumpets of Revelation 8-11 portray sequential divine retributive judg
 ### 6. Application & Discussion
 * End-Time Preparedness: Can you explain how the sounding of the Seventh Trumpet in Revelation 11:15-19 points believers directly to the sanctuary and the investigative judgment?
 * Explore Deeper: Click any scripture button above or Start Lesson to explore the Seven Trumpets in Bible Study Mode!`
+  },
+  {
+    id: "sanctuary-daniel-8-14",
+    question: "What is the Sanctuary doctrine in Daniel 8:14?",
+    topic: "The 2,300 Days & Cleansing of the Heavenly Sanctuary",
+    reference: "Daniel 8:14",
+    date: "Pre-loaded Guide",
+    answer: `### Study Summary
+Daniel 8:14 declares the foundational prophetic cornerstone of Seventh-day Adventist eschatology: “Unto two thousand and three hundred days; then shall the sanctuary be cleansed.” As Ellen White writes in The Great Controversy, p. 423: “The scripture which above all others had been both the foundation and the central pillar of the advent faith was the declaration: ‘Unto two thousand and three hundred days; then shall the sanctuary be cleansed.’” In Seventh-day Adventist theology, the 2,300 prophetic days (symbolic years using the year-day principle of Numbers 14:34 and Ezekiel 4:6) began in 457 B.C. with Artaxerxes' decree (Ezra 7) and reached to October 22, 1844. At this terminal point, Jesus Christ our Great High Priest entered the Most Holy Place of the heavenly sanctuary to inaugurate the final phase of His redemptive ministry—the investigative judgment and final cleansing of sin.
+
+### 1. Context & Scriptural Foundation
+* Vision Context: Daniel 8:13-14 answers the anguished question of the holy ones: “How long shall be the vision concerning the daily sacrifice, and the transgression of desolation, to give both the sanctuary and the host to be trodden under foot?”
+* Primary Scripture Passage: Daniel 8:14 — “And he said unto me, Unto two thousand and three hundred days; then shall the sanctuary be cleansed.”
+* Foundation Cross-References: Daniel 9:24-27 (the 70 weeks cut off from the 2300 days), Leviticus 16 (the Day of Atonement cleansing), Hebrews 8:1-2, Hebrews 9:23-28, and Revelation 14:6-7.
+
+### 2. Key Terms & Original Language
+* Ereb Boqer (עֶרֶב בֹּקֶר) — “Evening-mornings.” Echoing the Genesis 1 creation week units, representing complete prophetic days (years).
+* Nitsdaq (נִצְדַּק) — “Shall be cleansed, justified, vindicated, or restored to its rightful state.” The heavenly sanctuary is vindicated against Satan's accusations and cleansed from confessed sins.
+* Chazown (חָזוֹן) vs. Mareh (מַרְאֶה) — The overarching vision (chazown) of Daniel 8 and the specific vision of the 2,300 evenings and mornings (mareh) which Gabriel returns to explain in Daniel 9:21-27.
+
+### 3. Exegetical Insight
+* The Year-Day Principle: In biblical prophecy, a prophetic day represents a literal solar year (Numbers 14:34; Ezekiel 4:6). The 2,300 days span 2,300 literal years.
+* The 70 Weeks Connection: Daniel 9:24 explains that 70 weeks (490 years) were “determined” (chathak, literally “cut off”) for the Jewish nation from the 2,300-day vision. Both prophecies share the same starting point: 457 B.C.
+* Cleansing the Heavenly Sanctuary: Hebrews 9:23 declares: “It was therefore necessary that the patterns of things in the heavens should be purified with these; but the heavenly things themselves with better sacrifices than these.” Christ's blood does not defile the sanctuary; it pardons the sinner and transfers the record of sin to the heavenly sanctuary until the final Day of Atonement.
+
+### 4. Spirit of Prophecy (Ellen White Insights)
+* The Great Controversy, p. 423:
+> “The scripture which above all others had been both the foundation and the central pillar of the advent faith was the declaration: ‘Unto two thousand and three hundred days; then shall the sanctuary be cleansed.’”
+* The Great Controversy, p. 480:
+> “Attended by heavenly angels, our great High Priest enters the holy of holies, and there appears in the presence of God, to engage in the last acts of His ministration in behalf of man,—to perform the work of investigative judgment, and to make an atonement for all who are shown to be entitled to its benefits.”
+* Evangelism, p. 221:
+> “The correct understanding of the ministration in the heavenly sanctuary is the foundation of our faith.”
+
+### 5. Theological Meaning (SDA Hermeneutics)
+* The First Angel's Message: Revelation 14:7 announces: “The hour of his judgment is come.” This present-tense reality began in 1844 when Christ entered the investigative judgment in the Most Holy Place.
+* Vindication of God's Character: The final judgment demonstrates before unfallen worlds that God is both entirely just and the gracious justifier of everyone who trusts in Jesus.
+
+### 6. Application & Discussion
+* Living in the Antitypical Day of Atonement: In ancient Israel, the Day of Atonement was a solemn time of heart-searching, prayer, and deep assurance in the High Priest. We live each day under the shelter of Christ's righteousness.
+* Explore Deeper: Click the scripture references above to study Daniel 8:14 and the Sanctuary doctrine in Bible Study Mode!`
+  },
+  {
+    id: "state-of-the-dead",
+    question: "Explain the State of the Dead and Resurrection.",
+    topic: "Biblical Mortality, Soul Sleep & Resurrection Hope",
+    reference: "Ecclesiastes 9:5-6, 1 Thess 4:16-17",
+    date: "Pre-loaded Guide",
+    answer: `### Study Summary
+Scripture consistently teaches conditional immortality: God alone possesses inherent immortality (1 Timothy 6:16), while human beings are mortal creatures whose conscious existence ceases entirely at physical death until the glorious resurrection at Christ's Second Coming. As Ellen White affirms in The Great Controversy, p. 545: “Upon the fundamental error of natural immortality rests the doctrine of consciousness in death... a doctrine that, like Rome, is the masterpiece of deception.” In Seventh-day Adventist theology, death is metaphorically described by Jesus and the prophets as a peaceful, dreamless sleep (John 11:11-14). The righteous dead do not go immediately to heaven upon dying, nor do the wicked burn in an endless torment; rather, all rest in the grave awaiting the call of the Life-giver at the First Resurrection (1 Thessalonians 4:16-17; Revelation 20:5-6).
+
+### 1. Context & Scriptural Foundation
+* Creation Formula: Genesis 2:7 — “And the Lord God formed man of the dust of the ground, and breathed into his nostrils the breath of life; and man became a living soul.” (Dust + Breath = Living Soul; remove breath = return to dust).
+* Total Unconsciousness in Death: Ecclesiastes 9:5-6, 10 — “For the living know that they shall die: but the dead know not any thing... their love, and their hatred, and their envy, is now perished.”
+* The Psalmists' Testimony: Psalm 115:17 (“The dead praise not the Lord, neither any that go down into silence”) and Psalm 146:4 (“His breath goeth forth, he returneth to his earth; in that very day his thoughts perish”).
+* Jesus Calls Death a Sleep: John 11:11-14 — “Our friend Lazarus sleepeth; but I go, that I may awake him out of sleep... Then said Jesus unto them plainly, Lazarus is dead.”
+* The Blessed Hope of Resurrection: 1 Corinthians 15:51-54 and 1 Thessalonians 4:16-17 (“For the Lord himself shall descend from heaven with a shout... and the dead in Christ shall rise first”).
+
+### 2. Key Terms & Original Language
+* Nephesh (נֶפֶשׁ) / Psyche (ψυχή) — A living being, breathing person, or life; never depicted in Scripture as an immortal, disembodied entity independent of the body.
+* Ruach (רוּחַ) / Pneuma (πνεῦμα) — Breath, wind, or divine life-principle that animates the organism, returning to God who gave it (Ecclesiastes 12:7).
+* Sheol (שְׁאוֹל) / Hades (ᾅδης) — The unseen realm of the grave, silence, and decay; not a place of conscious subterranean torture.
+* Athanasia (ἀθανασία) — Immortality; a divine quality given to mortal believers only at the last trump (1 Corinthians 15:53).
+
+### 3. Exegetical Insight
+* The Fall and the Lie of the Serpent: In Genesis 3:4, Satan proclaimed the first recorded lie in human history: “Ye shall not surely die.” To teach natural immortality is to corroborate the serpent's deceptive falsehood against God's solemn warning in Genesis 2:17.
+* David Has Not Ascended to Heaven: On the Day of Pentecost in Acts 2:29, 34, Peter declared under Holy Ghost inspiration: “Men and brethren, let me freely speak unto you of the patriarch David, that he is both dead and buried, and his sepulchre is with us unto this day. For David is not ascended into the heavens.”
+* Immortality is a Gift, Not an Inherent Right: Romans 2:7 states we are to “seek for glory and honour and immortality,” which would be nonsensical if we already possessed it.
+
+### 4. Spirit of Prophecy (Ellen White Insights)
+* The Great Controversy, p. 550:
+> “The theory of the immortality of the soul was one of those false doctrines that Rome, borrowing from the paganism, incorporated into the religion of Christendom. Martin Luther classed it with the ‘monstrous fables that form part of the Roman dunghill of decretals.’”
+* The Great Controversy, p. 545:
+> “Nowhere in the Sacred Scriptures is found the statement that the righteous go to their reward or the wicked to their punishment at death. The patriarchs and prophets have left no such assurance. Christ and His apostles have given no hint of it.”
+* The Desire of Ages, p. 530:
+> “To the believer, death is but a small matter. Christ speaks of it as if it were of little moment. ‘If a man keep My saying, he shall never see death,’ ‘he shall never taste of death.’ To the Christian, death is but a sleep, a moment of silence and darkness. The life is hid with Christ in God, and ‘when Christ, who is our life, shall appear, then shall ye also appear with Him in glory.’”
+
+### 5. Theological Meaning (SDA Hermeneutics)
+* Protection Against Spiritualism: In the last days, Satan uses the deception of natural immortality through spiritualism, apparitions, and communication with supposed spirits of the dead. Knowing the dead know nothing is an impenetrable biblical shield.
+* The Value of the Resurrection: If souls went immediately to heaven at death, the resurrection would be superfluous. The resurrection of the body at the Second Coming is the grand climax of redemption.
+
+### 6. Application & Discussion
+* Comfort for the Grieving: 1 Thessalonians 4:13-18 bids us sorrow not as those who have no hope. Our sleeping loved ones in Christ rest peacefully until the trumpet wakes them to everlasting life.
+* Explore Deeper: Click the scripture references above to study Biblical Mortality and the Resurrection in Bible Study Mode!`
   }
 ];
 
@@ -192,7 +275,14 @@ export function getStoredPreloadedAnswers(): PreloadedAnswer[] {
     if (!raw) return DEFAULT_PRELOADED_ANSWERS;
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.slice(0, 4);
+      // Merge in any default answers missing from local storage so user gets all question buttons
+      const merged: PreloadedAnswer[] = [...parsed];
+      for (const def of DEFAULT_PRELOADED_ANSWERS) {
+        if (!merged.some((item) => item.id === def.id || item.question.toLowerCase().trim() === def.question.toLowerCase().trim())) {
+          merged.push(def);
+        }
+      }
+      return merged.slice(0, 8);
     }
   } catch (e) {
     console.warn("Failed to parse preloaded answers from storage:", e);
@@ -245,8 +335,8 @@ export function savePreloadedAnswer(
       (item) => item.question.toLowerCase().trim() !== question.toLowerCase().trim()
     );
 
-    // Keep exactly 4 items, placing the newest answer at index 0
-    const updated = [newEntry, ...filtered].slice(0, 4);
+    // Keep up to 8 items, placing the newest answer at index 0
+    const updated = [newEntry, ...filtered].slice(0, 8);
     localStorage.setItem(STORAGE_KEY_PRELOADED, JSON.stringify(updated));
     return updated;
   } catch (err) {
