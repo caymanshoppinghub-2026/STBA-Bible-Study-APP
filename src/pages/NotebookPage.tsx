@@ -1096,8 +1096,8 @@ export const NotebookPage: React.FC = () => {
   // Interactive scripture query helpers
   const [clickedScripture, setClickedScripture] = useState('')
 
-  // FontSize, Theme, and Download states
-  const [editorFontSize, setEditorFontSize] = useState<number>(13)
+  // FontSize, Theme, and Download states (16px minimum base readability)
+  const [editorFontSize, setEditorFontSize] = useState<number>(16)
   const [isDownloadOpen, setIsDownloadOpen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('stba_notebook_theme') as 'light' | 'dark') || 'dark'
@@ -2645,7 +2645,7 @@ export const NotebookPage: React.FC = () => {
                   <div className="relative">
                     <button
                       onClick={() => setIsDownloadOpen(!isDownloadOpen)}
-                      className={`p-1 px-2.5 h-[28px] rounded-lg border flex items-center gap-1 text-[11px] font-semibold cursor-pointer transition-all ${
+                      className={`min-h-[44px] sm:min-h-[32px] p-1 px-2.5 rounded-lg border flex items-center gap-1 text-[11px] font-semibold cursor-pointer transition-all ${
                         theme === 'light'
                           ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50 hover:text-[var(--nb-gold)] hover:border-stone-300'
                           : 'border-[var(--nb-border)] bg-stone-900 text-[var(--nb-text)] hover:border-[var(--nb-border-gold)] hover:text-[var(--nb-gold)]'
@@ -2669,7 +2669,7 @@ export const NotebookPage: React.FC = () => {
                               downloadNoteAsText(activeNote.title || 'Note', activeNote.content || '')
                               setIsDownloadOpen(false)
                             }}
-                            className={`w-full text-left px-3.5 py-2 transition-colors cursor-pointer border-b font-mono ${
+                            className={`w-full min-h-[44px] sm:min-h-[36px] text-left px-3.5 py-2 transition-colors cursor-pointer border-b font-mono ${
                               theme === 'light'
                                 ? 'text-stone-700 hover:bg-stone-50 hover:text-[var(--nb-gold)] border-stone-100 bg-white'
                                 : 'text-[var(--nb-text-muted)] hover:bg-stone-900 hover:text-[var(--nb-gold)] border-white/5'
@@ -2683,7 +2683,7 @@ export const NotebookPage: React.FC = () => {
                               downloadCSMSSummaryAsText(activeNote.title || 'Note')
                               setIsDownloadOpen(false)
                             }}
-                            className={`w-full text-left px-3.5 py-2 transition-colors cursor-pointer border-b font-mono ${
+                            className={`w-full min-h-[44px] sm:min-h-[36px] text-left px-3.5 py-2 transition-colors cursor-pointer border-b font-mono ${
                               theme === 'light'
                                 ? 'text-stone-700 hover:bg-stone-50 hover:text-[var(--nb-gold)] border-stone-100 bg-white'
                                 : 'text-[var(--nb-text-muted)] hover:bg-stone-900 hover:text-[var(--nb-gold)] border-white/5'
@@ -2697,7 +2697,7 @@ export const NotebookPage: React.FC = () => {
                               downloadElderChatAsText(activeNote.title || 'Note')
                               setIsDownloadOpen(false)
                             }}
-                            className={`w-full text-left px-3.5 py-2 transition-colors cursor-pointer border-b font-mono ${
+                            className={`w-full min-h-[44px] sm:min-h-[36px] text-left px-3.5 py-2 transition-colors cursor-pointer border-b font-mono ${
                               theme === 'light'
                                 ? 'text-stone-700 hover:bg-stone-50 hover:text-[var(--nb-gold)] border-stone-100 bg-white'
                                 : 'text-[var(--nb-text-muted)] hover:bg-stone-900 hover:text-[var(--nb-gold)] border-white/5'
@@ -2711,7 +2711,7 @@ export const NotebookPage: React.FC = () => {
                               downloadWord(activeNote.title || 'Note', activeNote.content || '')
                               setIsDownloadOpen(false)
                             }}
-                            className={`w-full text-left px-3.5 py-2 transition-colors cursor-pointer border-b ${
+                            className={`w-full min-h-[44px] sm:min-h-[36px] text-left px-3.5 py-2 transition-colors cursor-pointer border-b ${
                               theme === 'light'
                                 ? 'text-stone-700 hover:bg-stone-50 hover:text-[var(--nb-gold)] border-stone-100 bg-white'
                                 : 'text-[var(--nb-text-muted)] hover:bg-stone-900 hover:text-[var(--nb-gold)] border-white/5'
@@ -2725,7 +2725,7 @@ export const NotebookPage: React.FC = () => {
                               downloadPDF(activeNote.title || 'Note', activeNote.content || '')
                               setIsDownloadOpen(false)
                             }}
-                            className={`w-full text-left px-3.5 py-2 transition-colors cursor-pointer ${
+                            className={`w-full min-h-[44px] sm:min-h-[36px] text-left px-3.5 py-2 transition-colors cursor-pointer ${
                               theme === 'light'
                                 ? 'text-stone-700 hover:bg-stone-50 hover:text-[var(--nb-gold)] bg-white'
                                 : 'text-[var(--nb-text-muted)] hover:bg-stone-900 hover:text-[var(--nb-gold)]'

@@ -58,7 +58,7 @@ export const GeminiRecallModule: React.FC<GeminiRecallModuleProps> = ({
   initialScripture,
   onPracticeInGym
 }) => {
-  const { showConfetti } = useApp();
+  const { showConfetti, hasTierAccess, openUpgradeModal, userTier } = useApp();
   const [selectedScripture, setSelectedScripture] = useState<Scripture>(
     initialScripture || DEFAULT_SCRIPTURE
   );
@@ -69,7 +69,18 @@ export const GeminiRecallModule: React.FC<GeminiRecallModuleProps> = ({
     }
   }, [initialScripture]);
 
-  const [difficulty, setDifficulty] = useState<"beginner" | "scholar" | "apologist">("scholar");
+  const [difficulty, setDifficulty] = useState<"beginner" | "scholar" | "apologist">(() =>
+    hasTierAccess("Scholar") ? "scholar" : "beginner"
+  );
+
+  useEffect(() => {
+    if (!hasTierAccess("Scholar") && difficulty !== "beginner") {
+      setDifficulty("beginner");
+    } else if (!hasTierAccess("Leader") && difficulty === "apologist") {
+      setDifficulty(hasTierAccess("Scholar") ? "scholar" : "beginner");
+    }
+  }, [userTier, hasTierAccess, difficulty]);
+
   const [userRecallAttempt, setUserRecallAttempt] = useState<string>("");
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState<boolean>(false);
   const [activePromptData, setActivePromptData] = useState<PromptResponse | null>(null);
@@ -178,23 +189,37 @@ export const GeminiRecallModule: React.FC<GeminiRecallModuleProps> = ({
         </span>
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
           {[
-            { id: "beginner" as const, label: "Beginner: Guided Retrieval", icon: Lightbulb },
-            { id: "scholar" as const, label: "Scholar: Verbatim Precision", icon: Brain },
-            { id: "apologist" as const, label: "Apologist: Complete Defense", icon: ShieldCheck }
-          ].map(lvl => (
-            <button
-              key={lvl.id}
-              onClick={() => setDifficulty(lvl.id)}
-              className={`shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-sans font-semibold transition-all border cursor-pointer ${
-                difficulty === lvl.id
-                  ? "bg-[#0d3060] text-white border-[#DFC57B] shadow-[0_0_12px_rgba(223,197,123,0.35)] ring-1 ring-[#DFC57B]"
-                  : "bg-[#06162c] text-stone-200 border-[#DFC57B]/70 hover:border-[#F3CF65] hover:bg-[#0d3060]/70"
-              }`}
-            >
-              <lvl.icon className="w-3.5 h-3.5 text-[#DFC57B]" />
-              <span>{lvl.label}</span>
-            </button>
-          ))}
+            { id: "beginner" as const, label: "Beginner: Guided Retrieval", icon: Lightbulb, reqTier: "Beginner" as const },
+            { id: "scholar" as const, label: "Scholar: Verbatim Precision", icon: Brain, reqTier: "Scholar" as const },
+            { id: "apologist" as const, label: "Apologist: Complete Defense", icon: ShieldCheck, reqTier: "Leader" as const }
+          ].map(lvl => {
+            const locked = !hasTierAccess(lvl.reqTier);
+            return (
+              <button
+                key={lvl.id}
+                onClick={() => {
+                  if (locked) {
+                    openUpgradeModal(lvl.reqTier === "Leader" ? "Leader" : "Scholar", lvl.label);
+                    return;
+                  }
+                  setDifficulty(lvl.id);
+                }}
+                className={`min-h-[44px] sm:min-h-[40px] shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-sans font-semibold transition-all border cursor-pointer ${
+                  difficulty === lvl.id
+                    ? "bg-[#0d3060] text-white border-[#DFC57B] shadow-[0_0_12px_rgba(223,197,123,0.35)] ring-1 ring-[#DFC57B]"
+                    : "bg-[#06162c] text-stone-200 border-[#DFC57B]/70 hover:border-[#F3CF65] hover:bg-[#0d3060]/70"
+                }`}
+              >
+                <lvl.icon className="w-3.5 h-3.5 text-[#DFC57B]" />
+                <span>{lvl.label}</span>
+                {locked && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded bg-[#DFC57B]/20 text-[#F3CF65] text-[10px] font-bold uppercase">
+                    🔒 {lvl.reqTier}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 

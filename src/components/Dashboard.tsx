@@ -268,7 +268,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const navigate = useNavigate();
   const userName = user?.name || "Noble Berean";
 
-  const { completedVerseIds = [], favoriteScriptures = [] } = useApp();
+  const { completedVerseIds = [], favoriteScriptures = [], userTier, openUpgradeModal } = useApp();
+  const [isExegesisDownloadOpen, setIsExegesisDownloadOpen] = useState(false);
 
   // Weekly Study Recap State
   const [isGeneratingRecap, setIsGeneratingRecap] = useState(false);
@@ -291,7 +292,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       if (rawCache) {
         const parsed = JSON.parse(rawCache);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.slice(0, 3).forEach((item: any) => {
+          parsed.slice(0, 6).forEach((item: any) => {
             list.push({
               reference: item.reference || "Hebrews 8:1–6",
               topic: item.topic || "Sanctuary Exegesis",
@@ -322,6 +323,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
           topic: "The Fourth Commandment Memorial & Seal",
           date: "May 20",
           tag: "Decalogue"
+        },
+        {
+          reference: "Daniel 8:14",
+          topic: "The 2,300 Days & Cleansing of the Sanctuary",
+          date: "May 18",
+          tag: "Prophecy"
+        },
+        {
+          reference: "Romans 8:1–4",
+          topic: "The Law of the Spirit of Life in Christ Jesus",
+          date: "May 16",
+          tag: "Doctrine"
+        },
+        {
+          reference: "Leviticus 16:15–22",
+          topic: "The Day of Atonement & Eradication of Sin",
+          date: "May 14",
+          tag: "Sanctuary"
         }
       ];
     }
@@ -584,6 +603,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
       window.removeEventListener("open-stba-help-center-modal", handleHelpCenter);
     };
   }, []);
+
+  // Lock background page scroll when Weekly Scripture Mastery & Doctrinal Recap modal is open
+  useEffect(() => {
+    if (showRecapModal && weeklyRecap) {
+      const originalBodyOverflow = document.body.style.overflow;
+      const originalHtmlOverflow = document.documentElement.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalBodyOverflow;
+        document.documentElement.style.overflow = originalHtmlOverflow;
+      };
+    }
+  }, [showRecapModal, weeklyRecap]);
 
   // Select and immediately view a pre-loaded answer with zero lag
   const handleSelectPreloadedAnswer = (item: PreloadedAnswer) => {
@@ -1266,19 +1299,41 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
         {/* Subtle Ambient Gold Sheen on Bar */}
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#DFC57B]/5 to-transparent opacity-0 group-hover/bar:opacity-100 transition-opacity duration-700 pointer-events-none" />
 
-        {/* Left: Lightning Icon & Typography with Concept-Art Styling */}
-        <div className="flex items-center gap-3.5 shrink-0 z-10">
-          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-[#0e274a] via-[#091b35] to-[#040e1c] border border-[#DFC57B]/70 shadow-[0_4px_16px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,242,168,0.3)] flex items-center justify-center text-[#F3CF65] shrink-0">
-            <Zap className="w-5.5 h-5.5 sm:w-6 sm:h-6 stroke-[2.2] fill-[#F3CF65]/15 text-[#F3CF65] drop-shadow-[0_0_8px_rgba(243,207,101,0.6)]" />
+        {/* Left: Lightning Icon, Typography & Active Tier / Upgrade Action */}
+        <div className="flex items-center justify-between lg:justify-start gap-3.5 shrink-0 z-10">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-[#0e274a] via-[#091b35] to-[#040e1c] border border-[#DFC57B]/70 shadow-[0_4px_16px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,242,168,0.3)] flex items-center justify-center text-[#F3CF65] shrink-0">
+              <Zap className="w-5.5 h-5.5 sm:w-6 sm:h-6 stroke-[2.2] fill-[#F3CF65]/15 text-[#F3CF65] drop-shadow-[0_0_8px_rgba(243,207,101,0.6)]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-serif font-bold text-base sm:text-lg text-[#DFC57B] tracking-wide leading-tight drop-shadow-xs">
+                  Quick Access
+                </h3>
+                <span className="px-2 py-0.5 rounded-md bg-[#DFC57B]/15 border border-[#DFC57B]/40 text-[#F3CF65] text-[10px] font-bold uppercase tracking-wider font-heading">
+                  {userTier} Plan
+                </span>
+              </div>
+              <p className="text-xs text-sky-200/80 font-sans">
+                Get what you need, when you need it.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-serif font-bold text-base sm:text-lg text-[#DFC57B] tracking-wide leading-tight drop-shadow-xs">
-              Quick Access
-            </h3>
-            <p className="text-xs text-sky-200/80 font-sans">
-              Get what you need, when you need it.
-            </p>
-          </div>
+          {userTier !== "Leader" && (
+            <button
+              type="button"
+              onClick={() =>
+                openUpgradeModal(
+                  userTier === "Beginner" ? "Scholar" : "Leader",
+                  "Scholar & Leader Discipleship Suite"
+                )
+              }
+              className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl gold-metallic-btn text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 font-heading"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Upgrade</span>
+            </button>
+          )}
         </div>
 
         {/* Center: Horizontally Centered Extended Action Buttons with Refined #DFC57B Gold Trim */}
@@ -1723,37 +1778,37 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
           {/* CARD A: WEEKLY STUDY RECAP */}
           <div
             id="dashboard-weekly-study-recap-card"
-            className="flex-1 flex flex-col justify-between p-5 rounded-3xl glass-card border border-[#0d3060] shadow-xl sheen-overlay space-y-3.5"
+            className="flex-1 flex flex-col justify-between p-4 sm:p-5 rounded-3xl glass-card border border-[#0d3060] shadow-xl sheen-overlay space-y-3.5 font-lato font-['Lato',sans-serif]"
           >
             {/* Card Header */}
-            <div className="flex items-center justify-between border-b border-[#0d3060] pb-3">
+            <div className="flex items-center justify-between border-b border-[#0d3060] pb-3 shrink-0">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#F3CF65]" />
-                <h3 className="font-serif font-bold text-sm text-white">Weekly Study Recap</h3>
+                <Sparkles className="w-4 h-4 text-[#F3CF65] shrink-0" />
+                <h3 className="font-lato font-bold text-base sm:text-lg text-white">Weekly Study Recap</h3>
               </div>
-              <span className="text-[10px] font-mono text-[#DFC57B] bg-[#06162c] px-2 py-0.5 rounded-full border border-[#0d3060]">
+              <span className="text-xs sm:text-sm font-lato font-semibold text-[#DFC57B] bg-[#06162c] px-2.5 py-1 rounded-full border border-[#0d3060] shrink-0">
                 AI Mastery Engine
               </span>
             </div>
 
             {/* AI Recap Action Button & Active Recap Pill */}
-            <div className="space-y-2">
+            <div className="space-y-2 shrink-0">
               <button
                 id="generate-weekly-recap-btn"
                 type="button"
                 onClick={handleGenerateWeeklyRecap}
                 disabled={isGeneratingRecap}
-                className="w-full py-2.5 px-3 gold-metallic-btn rounded-xl font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.98] disabled:opacity-60"
+                className="w-full py-2.5 sm:py-3 px-3.5 gold-metallic-btn rounded-xl font-lato font-bold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.98] disabled:opacity-60"
                 title="Generate an AI-powered Weekly Study Recap analyzing Tracks and Memory Vault progress"
               >
                 {isGeneratingRecap ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-950" />
+                    <Loader2 className="w-4 h-4 animate-spin text-stone-950" />
                     <span>Analyzing Tracks & Memory Vault...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 text-stone-950 fill-stone-950" />
+                    <Sparkles className="w-4 h-4 text-stone-950 fill-stone-950" />
                     <span>Generate Weekly Study Recap</span>
                   </>
                 )}
@@ -1761,26 +1816,16 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
 
               {weeklyRecap && (
                 <div
-                  onClick={() => setShowRecapModal(true)}
-                  className="p-3 rounded-2xl bg-[#06162c] hover:bg-[#0d3060] border border-[#E5B842]/40 transition-all cursor-pointer flex flex-col gap-2 group shadow-sm hover:shadow-md"
+                  className="p-3 sm:p-3.5 rounded-2xl bg-[#06162c] border border-[#E5B842]/40 flex flex-col shadow-sm font-lato font-['Lato',sans-serif]"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-[#F3CF65] text-xs font-serif font-bold">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span className="truncate">{weeklyRecap.title || "Weekly Recap Ready"}</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-[#DFC57B] group-hover:text-white shrink-0 flex items-center gap-0.5">
-                      View Breakdown →
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] font-mono text-stone-300">
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-lato text-stone-300">
+                    <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-medium">
                       {weeklyRecap.masteredConcepts?.length || 3} Mastered
                     </span>
-                    <span className="px-1.5 py-0.5 rounded bg-[#E5B842]/10 text-[#F3CF65] border border-[#E5B842]/20">
+                    <span className="px-2 py-0.5 rounded-lg bg-[#E5B842]/10 text-[#F3CF65] border border-[#E5B842]/20 font-medium">
                       {weeklyRecap.suggestedReviewAreas?.length || 3} Review Areas
                     </span>
-                    <span className="text-stone-400 ml-auto">
+                    <span className="text-stone-300 ml-auto font-medium">
                       {weeklyRecap.stats?.overallMastery || 84}% Mastery
                     </span>
                   </div>
@@ -1788,76 +1833,49 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
               )}
             </div>
 
-            {/* Recent Studies Section */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#F3CF65] font-bold flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-[#F3CF65]" />
+            {/* Recent Studies Section with Continuous Vertical Scroll Container */}
+            <div className="space-y-2 min-h-0 flex-1 flex flex-col justify-start">
+              <div className="flex items-center justify-between shrink-0">
+                <span className="text-xs sm:text-sm font-lato uppercase tracking-wider text-[#F3CF65] font-bold flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-[#F3CF65] shrink-0" />
                   Recent Studies:
                 </span>
-                <span className="text-[10px] font-mono text-stone-400">
+                <span className="text-xs sm:text-sm font-lato text-stone-300">
                   Resume
                 </span>
               </div>
 
-              <div className="space-y-1.5">
-                {recentStudiesList.slice(0, 3).map((study, idx) => (
+              <div
+                id="weekly-recap-recent-studies-scroll-container"
+                tabIndex={0}
+                role="region"
+                aria-label="Recent Studies list"
+                className="space-y-2 overflow-y-auto overscroll-contain max-h-[175px] sm:max-h-[200px] notebook-card-scroll pr-1 focus:outline-none"
+              >
+                {recentStudiesList.slice(0, 6).map((study, idx) => (
                   <div
                     key={idx}
                     onClick={() => handleStartBibleStudyLesson(study.reference, study.topic)}
-                    className="p-2 sm:p-2.5 rounded-xl bg-[#06162c] hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/40 transition-all cursor-pointer flex items-center justify-between gap-2 group"
+                    className="p-2.5 sm:p-3 rounded-xl bg-[#06162c] hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/40 transition-all cursor-pointer flex items-center justify-between gap-2.5 group shrink-0"
                   >
-                    <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-serif font-bold text-xs text-[#F3CF65] group-hover:underline truncate">
+                        <span className="font-lato font-bold text-sm sm:text-base text-[#F3CF65] group-hover:underline truncate">
                           {study.reference}
                         </span>
-                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-[#0d3060] text-stone-300 border border-[#1b3a6b]">
+                        <span className="text-[10px] sm:text-xs font-lato px-2 py-0.5 rounded-full bg-[#0d3060] text-stone-200 border border-[#1b3a6b] font-medium shrink-0">
                           {study.tag}
                         </span>
                       </div>
-                      <p className="text-[11px] text-stone-300 truncate font-sans">
+                      <p className="text-xs sm:text-sm text-stone-300 truncate font-lato">
                         {study.topic}
                       </p>
                     </div>
-                    <div className="p-1 rounded-lg bg-[#0d3060]/70 group-hover:bg-[#E5B842] text-[#F3CF65] group-hover:text-stone-950 transition-colors shrink-0">
-                      <Play className="w-3 h-3 fill-current" />
+                    <div className="p-1.5 rounded-lg bg-[#0d3060]/70 group-hover:bg-[#E5B842] text-[#F3CF65] group-hover:text-stone-950 transition-colors shrink-0">
+                      <Play className="w-3.5 h-3.5 fill-current" />
                     </div>
                   </div>
                 ))}
-              </div>
-            </div>
-
-            {/* Dynamically Generated Buttons for Each Study Mode (Excluding Notebook Mode) */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#F3CF65] font-bold block">
-                  Active Study Modes:
-                </span>
-                <span className="text-[10px] font-mono text-stone-400">
-                  6 Modes
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {studyModes
-                  .filter((mode) => mode.id !== "notebook")
-                  .map((mode) => {
-                    const Icon = mode.icon;
-                    return (
-                      <button
-                        key={mode.id}
-                        id={`study-mode-btn-${mode.id}`}
-                        type="button"
-                        onClick={() => navigate(mode.path)}
-                        className="py-2.5 px-2 bg-[#06162c] hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/50 text-stone-200 hover:text-white rounded-xl font-mono font-bold text-[10px] sm:text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer group shadow-xs hover:shadow-md active:scale-95"
-                        title={`Launch ${mode.title}`}
-                      >
-                        <Icon className="w-3.5 h-3.5 text-[#F3CF65] group-hover:scale-110 transition-transform shrink-0" />
-                        <span className="truncate">{mode.title.replace(" Mode", "")}</span>
-                      </button>
-                    );
-                  })}
               </div>
             </div>
           </div>
@@ -2182,27 +2200,51 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                             </button>
                           )}
 
-                          {/* Download PDF Button */}
-                          <button
-                            type="button"
-                            onClick={handleDownloadPDF}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#06162c] hover:bg-[#0d3060] text-[#F3CF65] border border-[#DFC57B]/40 hover:border-[#F3CF65] font-mono text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-xs shrink-0"
-                            title="Download exegesis guide as formatted PDF (.pdf)"
-                          >
-                            <FileDown className="w-3.5 h-3.5" />
-                            <span>Download PDF</span>
-                          </button>
-
-                          {/* Download Doc Button */}
-                          <button
-                            type="button"
-                            onClick={handleDownloadDoc}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#06162c] hover:bg-[#0d3060] text-stone-200 border border-[#0d3060] hover:border-stone-400 font-mono text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-xs shrink-0"
-                            title="Download exegesis guide as Word Document (.doc)"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span>Download Doc</span>
-                          </button>
+                          {/* Unified Download Dropdown (PDF / DOCS) */}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setIsExegesisDownloadOpen((prev) => !prev)}
+                              className="min-h-[44px] sm:min-h-[38px] flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#06162c] hover:bg-[#0d3060] text-[#F3CF65] border border-[#DFC57B]/40 hover:border-[#F3CF65] font-mono text-xs font-semibold transition-all cursor-pointer active:scale-95 shadow-xs shrink-0"
+                              title="Download exegesis guide as PDF or DOCS"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Download</span>
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                            {isExegesisDownloadOpen && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-40"
+                                  onClick={() => setIsExegesisDownloadOpen(false)}
+                                />
+                                <div className="absolute left-0 mt-1.5 w-48 rounded-xl bg-[#06162c] border border-[#DFC57B]/50 shadow-2xl z-50 py-1.5 overflow-hidden">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsExegesisDownloadOpen(false);
+                                      handleDownloadPDF();
+                                    }}
+                                    className="w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-left text-xs font-mono font-semibold text-[#F3CF65] hover:bg-[#0d3060] flex items-center gap-2 transition-colors cursor-pointer border-b border-white/10"
+                                  >
+                                    <FileDown className="w-4 h-4 shrink-0" />
+                                    <span>Download PDF (.pdf)</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsExegesisDownloadOpen(false);
+                                      handleDownloadDoc();
+                                    }}
+                                    className="w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-left text-xs font-mono font-semibold text-stone-200 hover:bg-[#0d3060] flex items-center gap-2 transition-colors cursor-pointer"
+                                  >
+                                    <FileText className="w-4 h-4 shrink-0" />
+                                    <span>Download DOCS (.doc)</span>
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
 
                         {/* Simplified Voice Selector: 2 Male & 2 Female American Voices */}
@@ -2992,13 +3034,13 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
         {showRecapModal && weeklyRecap && (
           <div
             id="weekly-study-recap-modal"
-            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-[#06162c]/85 backdrop-blur-md overflow-y-auto"
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-[#06162c]/85 backdrop-blur-md overflow-hidden overscroll-none"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="w-full max-w-2xl lg:max-w-3xl glass-card border border-[#E5B842]/50 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5 text-left max-h-[92vh] overflow-y-auto sheen-overlay my-auto notebook-card-scroll"
+              className="w-full max-w-2xl lg:max-w-3xl glass-card border border-[#E5B842]/50 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5 text-left max-h-[90vh] overflow-y-auto overscroll-contain notebook-card-scroll font-lato font-['Lato',sans-serif]"
             >
               {/* Modal Header */}
               <div className="flex items-start justify-between border-b border-[#0d3060] pb-4 gap-3">
@@ -3008,14 +3050,14 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-serif font-black text-lg sm:text-xl text-white tracking-tight truncate">
+                      <h3 className="font-lato font-black text-lg sm:text-xl text-white tracking-tight truncate">
                         {weeklyRecap.title || "Weekly Scripture Mastery & Doctrinal Recap"}
                       </h3>
-                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#E5B842]/15 text-[#F3CF65] border border-[#E5B842]/30">
+                      <span className="text-xs sm:text-sm font-lato font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#E5B842]/15 text-[#F3CF65] border border-[#E5B842]/30">
                         {weeklyRecap.period || "Current Week"}
                       </span>
                     </div>
-                    <p className="text-xs font-mono text-stone-300 mt-0.5">
+                    <p className="text-xs sm:text-sm font-lato text-stone-300 mt-0.5">
                       Cognitive Discipleship Engine • Sola Scriptura • 2 Tim 2:15
                     </p>
                   </div>

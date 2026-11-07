@@ -14,12 +14,15 @@ export interface Track {
   iconName: "book" | "shield" | "flame" | "clock" | "bookmark" | "stars" | "calendar" | "video";
 }
 
+export type SubscriptionTier = "Beginner" | "Scholar" | "Leader";
+
 export interface UserAccount {
   name: string;
   email: string;
   isSda: boolean;
   firstTrack: string;
   role?: "Teacher" | "Student" | "Pastor" | "SabbathSchoolTeacher" | "LayEvangelist";
+  tier?: SubscriptionTier;
   isGuest?: boolean;
   emailVerified: boolean;
   googleId?: string;
@@ -34,3 +37,4 @@ export interface Scripture {
   text: string;
   keywords: string[];
 }
+

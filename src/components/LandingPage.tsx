@@ -509,7 +509,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <motion.h1
             initial="hidden"
             animate="visible"
-            className="text-[1.28rem] min-[390px]:text-[1.42rem] sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-serif font-extrabold text-white tracking-tight leading-[1.2] sm:leading-[1.24] md:leading-[1.28] drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)]"
+            className="text-[1.28rem] min-[390px]:text-[1.42rem] sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-serif font-extrabold text-white tracking-tight leading-[1.08] drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)]"
           >
             {/* Slide up from 0% opacity for Frame 1 */}
             <motion.span
@@ -518,7 +518,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 visible: { opacity: 1, y: 0 }
               }}
               transition={{ duration: 0.7, ease: "easeOut" }}
-              className="block drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]"
+              className="block leading-[1.08] drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]"
             >
               You read it,
             </motion.span>
@@ -530,7 +530,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 visible: { opacity: 1, y: 0 }
               }}
               transition={{ duration: 0.8, delay: 0.5, ease: "easeOut" }}
-              className="block mt-3 sm:mt-4 md:mt-6 text-[#DFC57B] drop-shadow-[0_4px_20px_rgba(0,0,0,0.95)]"
+              className="block mt-[8px] sm:mt-[12px] md:mt-[16px] leading-[1.08] text-[#DFC57B] drop-shadow-[0_4px_20px_rgba(0,0,0,0.95)]"
             >
               <span className="inline-block whitespace-nowrap">
                 <span>but do you </span>
@@ -1224,7 +1224,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </motion.div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch pt-4">
             
             {/* TIER 1 - Free Tier Beginner */}
             <motion.div
@@ -1232,21 +1232,30 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ type: "spring", stiffness: 150, damping: 18, mass: 0.7 }}
-              whileHover={{ y: -8 }}
-              className="bg-stone-900/35 border border-stone-850 p-8 rounded-2xl flex flex-col justify-between relative overflow-hidden group hover:border-[#DFC57B] hover:shadow-[0_0_25px_rgba(201,151,58,0.2)] transition-all duration-300"
+              whileHover={{
+                y: -10,
+                scale: 1.015,
+                transition: { type: "spring", stiffness: 280, damping: 20 }
+              }}
+              className="lg:my-2 bg-[#0B1228]/70 backdrop-blur-md border border-stone-800/90 p-8 rounded-2xl flex flex-col justify-between relative overflow-hidden group hover:border-[#DFC57B] hover:shadow-[0_20px_45px_rgba(0,0,0,0.5),0_0_28px_rgba(201,151,58,0.22)] transition-[border-color,box-shadow,background-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
             >
+              {/* Top-edge radial highlight on hover */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#DFC57B]/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+              {/* Diagonal specular light sweep */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#DFC57B]/[0.07] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+
               {/* Ribbon added per user request */}
               <div className="absolute top-0 right-0 bg-[#C9973A] text-[#090B0F] px-4 py-1.5 font-mono text-[9px] font-extrabold tracking-widest uppercase rounded-bl-xl shadow-md z-10">
                 Free Tier
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-6 relative z-10">
                 <div>
                   <span className="font-mono text-[9px] tracking-widest uppercase text-stone-500 font-bold">Free Sandbox</span>
                   <h3 className="text-2xl font-serif font-extrabold text-[#C9973A] mt-1">Beginner</h3>
                 </div>
 
-                <div className="flex items-baseline space-x-1 border-b border-stone-850 pb-5">
+                <div className="flex items-baseline space-x-1 border-b border-stone-800/80 pb-5">
                   <span className="text-5xl font-serif font-bold text-stone-100">$0</span>
                   <span className="text-stone-500 text-xs font-mono">/ Month-to-month</span>
                 </div>
@@ -1272,25 +1281,33 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
               <button
                 onClick={() => handleStart(false, "beginner")}
-                className="w-full py-3.5 border border-stone-800/80 hover:border-stone-700 hover:bg-stone-800/35 text-stone-300 hover:text-stone-100 text-xs font-mono font-extrabold tracking-widest uppercase rounded-xl transition-all cursor-pointer"
+                className="relative z-10 w-full py-3.5 border border-stone-800/80 group-hover:border-[#C9973A]/50 hover:bg-[#C9973A]/10 text-stone-300 group-hover:text-stone-100 text-xs font-mono font-extrabold tracking-widest uppercase rounded-xl transition-[border-color,background-color,color,box-shadow,transform] duration-300 group-hover:shadow-[0_0_20px_rgba(201,151,58,0.2)] cursor-pointer"
               >
                 Get Started Free
               </button>
             </motion.div>
 
-            {/* TIER 2 - Scholar Tier (Highlighted with continuous gold edge halo animation) */}
+            {/* TIER 2 - Scholar Tier (Elevated Podium Centerpiece with continuous gold edge halo animation) */}
             <motion.div
               initial={{ opacity: 0, y: 40 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ type: "spring", stiffness: 150, damping: 18, mass: 0.7, delay: 0.05 }}
-              whileHover={{ y: -8 }}
-              className="bg-[#11141C] border-2 border-[#C9973A] p-8 rounded-2xl flex flex-col justify-between relative overflow-hidden shadow-2xl group hover:border-[#DFC57B] hover:shadow-[0_0_35px_rgba(201,151,58,0.35)] transition-all duration-300"
+              whileHover={{
+                y: -10,
+                scale: 1.015,
+                transition: { type: "spring", stiffness: 280, damping: 20 }
+              }}
+              className="lg:-translate-y-4 lg:scale-[1.03] z-20 bg-[#11141C] border-2 border-[#C9973A] p-8 rounded-2xl flex flex-col justify-between relative overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.6),0_0_40px_rgba(201,151,58,0.18)] group hover:border-[#DFC57B] hover:shadow-[0_25px_60px_rgba(0,0,0,0.75),0_0_45px_rgba(201,151,58,0.4)] transition-[border-color,box-shadow,background-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
             >
+              {/* Top-edge radial highlight on hover */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#DFC57B]/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+              {/* Diagonal specular light sweep */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#DFC57B]/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
               {/* Continuous subtle golden glowing halo backdrop animation */}
               <div className="absolute inset-x-0 -top-40 h-80 bg-[#C9973A]/10 filter blur-[60px] animate-pulse pointer-events-none" />
 
-              <div className="absolute top-0 right-0 bg-[#C9973A] text-[#090B0F] px-4 py-1.5 font-mono text-[9px] font-extrabold tracking-widest uppercase rounded-bl-xl shadow-md">
+              <div className="absolute top-0 right-0 bg-[#C9973A] text-[#090B0F] px-4 py-1.5 font-mono text-[9px] font-extrabold tracking-widest uppercase rounded-bl-xl shadow-md z-10">
                 Most Popular
               </div>
 
@@ -1301,15 +1318,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
 
                 <div className="flex items-baseline flex-wrap gap-x-2 border-b border-stone-800 pb-5">
-                  {billingPeriod === "yearly" && (
-                    <span className="text-3xl font-serif font-medium text-stone-500 line-through decoration-[#EF4444] decoration-2 mr-1">
-                      $7.99
-                    </span>
-                  )}
-                  <span className="text-5xl font-serif font-bold text-stone-100">
-                    {billingPeriod === "monthly" ? "$7.99" : "$6.58"}
-                  </span>
-                  <span className="text-stone-400 text-xs font-mono">/ mo {billingPeriod === "yearly" && "($79/yr billed annually)"}</span>
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={billingPeriod}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.22, ease: "easeOut" }}
+                      className="flex items-baseline flex-wrap gap-x-2"
+                    >
+                      {billingPeriod === "yearly" && (
+                        <span className="text-3xl font-serif font-medium text-stone-500 line-through decoration-[#EF4444] decoration-2 mr-1">
+                          $7.99
+                        </span>
+                      )}
+                      <span className="text-5xl font-serif font-bold text-stone-100">
+                        {billingPeriod === "monthly" ? "$7.99" : "$6.58"}
+                      </span>
+                      <span className="text-stone-400 text-xs font-mono">/ mo {billingPeriod === "yearly" && "($79/yr billed annually)"}</span>
+                    </motion.div>
+                  </AnimatePresence>
 
                   {billingPeriod === "yearly" && (
                     <div className="flex flex-wrap gap-2 w-full mt-3">
@@ -1348,7 +1376,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
               <button
                 onClick={() => handleStart(false, "scholar")}
-                className="w-full py-4 bg-[#C9973A] hover:bg-[#DFC57B] text-[#090B0F] text-xs font-mono font-extrabold tracking-widest uppercase rounded-xl transition-all cursor-pointer shadow-lg shadow-[#C9973A]/20"
+                className="relative z-10 w-full py-4 bg-[#C9973A] hover:bg-[#DFC57B] text-[#090B0F] text-xs font-mono font-extrabold tracking-widest uppercase rounded-xl transition-[background-color,box-shadow,transform] duration-300 cursor-pointer shadow-lg shadow-[#C9973A]/20 group-hover:shadow-[0_0_25px_rgba(201,151,58,0.45)] group-hover:-translate-y-0.5"
               >
                 Start Trial Account
               </button>
@@ -1360,30 +1388,50 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ type: "spring", stiffness: 150, damping: 18, mass: 0.7, delay: 0.1 }}
-              whileHover={{ y: -8 }}
-              className="bg-stone-900/35 border border-stone-850 p-8 rounded-2xl flex flex-col justify-between relative overflow-hidden group hover:border-[#DFC57B] hover:shadow-[0_0_25px_rgba(201,151,58,0.2)] transition-all duration-300"
+              whileHover={{
+                y: -10,
+                scale: 1.015,
+                transition: { type: "spring", stiffness: 280, damping: 20 }
+              }}
+              className="lg:my-2 bg-[#0B1228]/70 backdrop-blur-md border border-stone-800/90 p-8 rounded-2xl flex flex-col justify-between relative overflow-hidden group hover:border-[#DFC57B] hover:shadow-[0_20px_45px_rgba(0,0,0,0.5),0_0_28px_rgba(201,151,58,0.22)] transition-[border-color,box-shadow,background-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
             >
+              {/* Top-edge radial highlight on hover */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#DFC57B]/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+              {/* Diagonal specular light sweep */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#DFC57B]/[0.07] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+
               {/* Ribbon added per user request */}
               <div className="absolute top-0 right-0 bg-[#C9973A] text-[#090B0F] px-4 py-1.5 font-mono text-[9px] font-extrabold tracking-widest uppercase rounded-bl-xl shadow-md z-10">
                 Premium Access
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-6 relative z-10">
                 <div>
                   <span className="font-mono text-[9px] tracking-widest uppercase text-stone-500 font-bold">Premium Tier</span>
                   <h3 className="text-2xl font-serif font-extrabold text-[#C9973A] mt-1">Leader</h3>
                 </div>
 
-                <div className="flex items-baseline flex-wrap gap-x-2 border-b border-stone-850 pb-5">
-                  {billingPeriod === "yearly" && (
-                    <span className="text-3xl font-serif font-medium text-stone-500 line-through decoration-[#EF4444] decoration-2 mr-1">
-                      $14.99
-                    </span>
-                  )}
-                  <span className="text-5xl font-serif font-bold text-stone-100">
-                    {billingPeriod === "monthly" ? "$14.99" : "$11.58"}
-                  </span>
-                  <span className="text-stone-500 text-xs font-mono">/ mo {billingPeriod === "yearly" && "($139/yr billed annually)"}</span>
+                <div className="flex items-baseline flex-wrap gap-x-2 border-b border-stone-800/80 pb-5">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={billingPeriod}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.22, ease: "easeOut" }}
+                      className="flex items-baseline flex-wrap gap-x-2"
+                    >
+                      {billingPeriod === "yearly" && (
+                        <span className="text-3xl font-serif font-medium text-stone-500 line-through decoration-[#EF4444] decoration-2 mr-1">
+                          $14.99
+                        </span>
+                      )}
+                      <span className="text-5xl font-serif font-bold text-stone-100">
+                        {billingPeriod === "monthly" ? "$14.99" : "$11.58"}
+                      </span>
+                      <span className="text-stone-500 text-xs font-mono">/ mo {billingPeriod === "yearly" && "($139/yr billed annually)"}</span>
+                    </motion.div>
+                  </AnimatePresence>
 
                   {billingPeriod === "yearly" && (
                     <div className="flex flex-wrap gap-2 w-full mt-3">
@@ -1418,7 +1466,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
               <button
                 onClick={() => handleStart(false, "leader")}
-                className="w-full py-3.5 border border-stone-800 hover:border-[#C9973A]/40 text-[#DFC57B] text-xs font-mono font-extrabold tracking-widest uppercase rounded-xl transition-all cursor-pointer hover:bg-[#C9973A]/5"
+                className="relative z-10 w-full py-3.5 border border-stone-800 group-hover:border-[#C9973A]/60 text-[#DFC57B] text-xs font-mono font-extrabold tracking-widest uppercase rounded-xl transition-[border-color,background-color,box-shadow,transform] duration-300 cursor-pointer hover:bg-[#C9973A]/10 group-hover:shadow-[0_0_20px_rgba(201,151,58,0.25)]"
               >
                 Initiate Leader Suite
               </button>

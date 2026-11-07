@@ -1000,7 +1000,7 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
                 </span>
               </div>
               <h4 className="text-xs sm:text-sm font-serif font-bold text-navy leading-snug">
-                {quizData.reflectionQ.prompt}
+                {quizData.reflectionQ?.prompt || "How does this truth transform your walk with Christ today?"}
               </h4>
             </div>
 
@@ -1010,7 +1010,7 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
                 Quick Devotional Anchors (Tap to choose):
               </span>
               <div className="space-y-1.5">
-                {quizData.reflectionQ.quickAnchors.map((anchor, idx) => {
+                {(quizData.reflectionQ?.quickAnchors || []).map((anchor, idx) => {
                   const isSelected = selectedAnchor === anchor;
                   return (
                     <button

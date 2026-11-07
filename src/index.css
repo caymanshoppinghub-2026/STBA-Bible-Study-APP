@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@config "../tailwind.config.ts";
 
 @theme {
   --font-sans: "Plus Jakarta Sans", "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -7,7 +8,23 @@
   --font-cinzel: "Cinzel", Georgia, serif;
   --font-lato: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-apple: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "San Francisco", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  
+
+  /* Global minimum font size scale (12px / 0.75rem floor) */
+  --text-2xs: 0.75rem;
+  --text-2xs--line-height: 1.125rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.375rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.85rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+
   --color-cream: #F5F2EB;
   --color-dark-bg: #06162c;
   --color-navy: #0d3060;
@@ -21,10 +38,29 @@
   --color-text-muted: #94A3B8;
 }
 
+/* Global minimum font size baseline clamp for micro utility classes (<12px -> 12px / 0.75rem) */
+.text-\[8px\],
+.text-\[8\.5px\],
+.text-\[9px\],
+.text-\[9\.5px\],
+.text-\[10px\],
+.text-\[10\.5px\],
+.text-\[11px\],
+.text-\[11\.5px\] {
+  font-size: 0.75rem !important;
+  line-height: 1.125rem !important;
+}
+
+html {
+  font-size: 16px;
+}
+
 body {
   background-color: #06162c;
   color: #F8FAFC;
   font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
   overflow-x: hidden;
 }
 
@@ -318,6 +354,33 @@ body {
 }
 
 .notebook-card-scroll::-webkit-scrollbar-thumb:hover {
+  background: #f3cf65 !important;
+}
+
+/* Blackboard custom scrollbar */
+.blackboard-scroll {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(201, 151, 58, 0.5) rgba(18, 28, 22, 0.8) !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.blackboard-scroll::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+  background: rgba(18, 28, 22, 0.8) !important;
+}
+
+.blackboard-scroll::-webkit-scrollbar-track {
+  background: rgba(18, 28, 22, 0.8) !important;
+  border-radius: 8px !important;
+}
+
+.blackboard-scroll::-webkit-scrollbar-thumb {
+  background: rgba(201, 151, 58, 0.5) !important;
+  border-radius: 8px !important;
+}
+
+.blackboard-scroll::-webkit-scrollbar-thumb:hover {
   background: #f3cf65 !important;
 }
 

@@ -1,134 +1,130 @@
-# Verification & Redo: Scripture Mastery & Ellen White Notes System
+# STBA Launch Polish: Strict Tier Paywall & Pricing Modal, Sub-800ms AI Latency, 3-Font 16px Hierarchy & Mobile Touch Ergonomics
 
-Comprehensive overhaul and verification to redo all recent updates across the Sabbath School curriculum viewer and STBA Bible study engine, ensuring that all Ellen G. White quotes are completely relocated to the dedicated notes section, formatted in a standard non-italicized font within the original yellow bounding box and orange accents, and that the Scripture Reference Explorer accurately captures all biblical references with a transparent backdrop modal and STBA deep-study routing.
+This plan delivers the final production polish for the **Study To Be Approved (STBA)** platform: enforcing strict paywall gating across all modules with deterministic offline entitlement behavior and an interactive **Scholar & Leader Upgrade Pricing Modal**, achieving sub-800ms Time to First Token (TTFT) across Elder Stephen AI triggers, standardizing typography to three fonts (`Plus Jakarta Sans`, `Playfair Display`, `Noto Serif`) with a `16px` base size, enforcing `44px × 44px` minimum mobile touch targets, locking background scroll on study modals, consolidating download dropdowns, and preserving the existing Note Studio interface.
 
----
-
-### User Review & Critical Decisions
+## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following design choices were confirmed via user interview:
-> - **Font Family**: Standard non-italicized clean modern sans-serif (`font-['Lato',sans-serif] font-normal not-italic`) for all Ellen G. White notes.
-> - **Quotation Marks**: Preserved clean typographical double quotes (`“...”`) around note paragraphs.
-> - **Note Titles**: Explicitly titled `Ellen White Notes on [Specific Daily Topic]` replacing legacy `E.G. White Notes`.
-> - **Modal Backdrop**: Completely transparent click-outside backdrop (`bg-transparent pointer-events-auto`) with no background blur or graying-out.
-> - **Deep-Study Flow**: `Study Deeper` button routes directly to STBA Scripture Study mode (`/stba?ref=...&tool=visual`) with query pre-loaded in the search input and passage opened.
+> All core architectural, performance, paywall, and usability specifications are defined below:
+
+- **Confirmed Decision 1 — Strict Paywall Gating, Pricing Modal & Offline Fallback**:
+  - Users on the **Beginner (`$0/mo`)** tier are strictly gated from accessing **Scholar** (`$7.99/mo` or `$6.58/mo` billed annually at `$79/yr`) or **Leader** (`$14.99/mo` or `$11.58/mo` billed annually at `$139/yr`) features across all modules without an active subscription.
+  - All `"Upgrade to Scholar (Free)"` messaging is replaced with an interactive **Upgrade Pricing Modal** displaying clear Scholar and Leader pricing tiers before prompting payment.
+  - **Offline Paywall & Entitlement Fallback**: Subscription tier entitlements are cached deterministically in local storage (`stba_user_tier` + `stba_tier_entitlement_v1`) so existing **Scholar** and **Leader** subscribers retain uninterrupted offline access to their unlocked tools, while **Beginner** users remain strictly gated offline (zero offline paywall bypass). If a Beginner user initiates payment while `navigator.onLine === false`, the modal displays a clear offline notice and queues remote Supabase profile synchronization (`saveProfileToSupabase`) until connectivity resumes.
+- **Confirmed Decision 2 — Numerical AI Latency Budgets (`TTFT < 800ms`)**:
+  - **Pre-Flight Client Overhead**: `< 10ms` (eliminate blocking Supabase auth/database reads before dispatching `/api/elder-stephen` or `/api/teach/chat`).
+  - **Optimistic UI Feedback**: `< 50ms` (immediate transition to active thinking indicator and disabled duplicate trigger state).
+  - **Time to First Token (TTFT)**: `< 800ms` target via `ThinkingLevel.LOW` on interactive Gemini 3.8 Flash / Gemini 4 endpoints, backed by a deterministic `6500ms` `AbortController` timeout that seamlessly engages Elder Stephen's doctrinally aligned local fallback if the network degrades.
+- **Confirmed Decision 3 — Standardized 3-Font Hierarchy (`≥16px` Base) & Mobile Touch Targets (`≥44px × 44px`)**:
+  - Enforce **Plus Jakarta Sans** for headings, **Playfair Display** for accents, and **Noto Serif** for body text at a minimum `16px` (`1rem`) base size.
+  - Enforce a minimum interactive touch target size of **`44px × 44px`** (`min-h-[44px] min-w-[44px]`) on mobile viewports (`40px × 40px` on desktop) across all buttons, tabs, dropdown triggers, tier selectors, and modal controls.
+- **Confirmed Decision 4 — Preserve Existing Note Studio Interface**:
+  - Maintain the current Note Studio layout where drafting, reading, and Elder Stephen AI interactions function seamlessly without structural UI changes, while enforcing strict tier gating on its Scholar (Cornell Outline) and Leader (Homiletics Prompter) tabs and providing a consolidated Download dropdown.
 
 ---
 
-### 1. Overview & Core Concept
+## 1. Overview & Core Concept
 
-- **What It Does**:
-  1. Relocates every Ellen G. White quote out of the daily Sabbath School exposition paragraphs and places them into the dedicated **Ellen White Notes** accordion section (`FurtherThought.tsx`).
-  2. Renders all Ellen White notes in standard non-italicized modern sans-serif typography within the yellow bounding box (`border-2 border-amber-400/90`), orange quote glyph `”`, orange section title `Ellen White Notes on [Specific Daily Topic]`, and an orange left vertical accent bar, broken into readable 2–3 sentence paragraph sections.
-  3. Upgrades the scripture reference regex parser across both daily lesson views to capture every Bible reference (including abbreviations like `Exod. 17:14`, `Ezek. 4:1–8`, and comma-separated lists like `Heb. 1:1 , 2` and `Matt. 26:36 , 37`) as yellow pill links (`bg-[#FEF9C3] border-[#FACC15] text-[#78350F]`).
-  4. Provides the floating **Scripture Reference Explorer** modal (`VerseModal.tsx`) featuring instant translation switching across **KJV**, **NKJV**, **ESV**, and **NASB**, a completely transparent backdrop that does not gray out or blur background text, and a `Study Deeper` button that routes to `/stba?ref=...` in the STBA Bible study engine.
-
-- **Target Audience**: Sabbath School students, teachers, and theological researchers using the CSMS system for daily lesson devotion, active recall, and deep exegesis.
-
----
-
-### 2. User Experience & Visual Design
-
-#### A. Ellen White Notes Styling & Typography
-- **Container**: Rounded yellow bounding box (`border-2 border-amber-400/90 rounded-2xl bg-[#FFFDF7] dark:bg-[#14120D] dark:border-amber-500/50 p-6 sm:p-7 md:p-8 shadow-xs`).
-- **Header**:
-  - Orange double quote mark glyph `”` (`text-orange-500 font-serif font-black text-2xl sm:text-3xl select-none`).
-  - Title: `Ellen White Notes on [Specific Daily Topic]` in uppercase orange font (`text-orange-500 dark:text-orange-400 font-mono font-bold tracking-wider text-xs sm:text-sm`).
-  - Day tag badge on the right (`Day 1`, `Day 2`, etc.).
-- **Body**:
-  - Orange left vertical accent bar (`border-l-2 border-l-orange-500 dark:border-l-orange-400 pl-4 sm:pl-5 my-1`).
-  - **Typography (Standard Non-Italicized)**: `font-['Lato',sans-serif] font-normal not-italic leading-relaxed sm:leading-loose text-stone-850 dark:text-neutral-100`.
-  - **Paragraph Chunking**: `formatEgwParagraphChunks` breaking long quotes into readable 2–3 sentence sections with quotation marks preserved.
-- **Footer**:
-  - Author and source citation: `Ellen White • [Book Citation]`.
-  - `Copy Note` interactive button with clipboard feedback.
-
-#### B. Scripture Reference Explorer & Pill Links
-- **In-Text Scripture Links**: Yellow pill badge matching user attachment (`bg-[#FEF9C3] hover:bg-[#FEF08A] text-[#78350F] border border-[#FACC15] rounded-md px-2 py-0.5 font-mono font-bold text-xs sm:text-sm underline decoration-[#CA8A04]/60`).
-- **Modal Design**:
-  - **Backdrop**: Centered floating card with a 100% transparent click-outside backdrop (`bg-transparent pointer-events-auto`) that leaves the underlying Sabbath School text completely crisp and legible.
-  - **Header**: Book icon, serif gold title of the clicked reference, uppercase monospace `SCRIPTURE REFERENCE EXPLORER`, and a circular `X` close button.
-  - **Translation Tabs**: Horizontal segmented controls for `KJV`, `NKJV`, `ESV`, and `NASB`, with active tab highlighted in bright amber (`#F59E0B`).
-  - **Verse Box**: Clean, readable verse text with quotation marks, translation badge, and Adventech Scripture Engine attribution.
-  - **Footer Actions**:
-    - `[ 📖 Study Deeper ]`: Pre-loads reference into STBA search state and navigates to `/stba?ref=...&tool=visual`.
-    - `[ Done ]`: Closes the modal.
+- **What It Does**: Finalizes STBA for public launch by enforcing subscription boundaries between **Beginner**, **Scholar**, and **Leader** tiers (both online and offline) with a conversion-ready pricing and checkout modal, optimizing Elder Stephen's AI pipeline to sub-800ms TTFT, unifying the 3-font `16px` typography system, enforcing `44px × 44px` mobile touch ergonomics, and locking background scroll on study modals.
+- **Target Audience / Persona**: Seventh-day Adventist students, Sabbath School teachers, Berean scholars, and lay evangelists studying across mobile and desktop devices.
+- **Key Value**:
+  - **Sub-800ms AI Responsiveness**: Eliminates pre-request blocking database queries so Elder Stephen responds almost instantaneously across all study tracks.
+  - **Bulletproof Online & Offline Paywall**: Prevents unauthorized tier switching on the Beginner tier under all network conditions while protecting paid subscribers' access during offline study.
+  - **Mobile-First Ergonomics & Readability**: Standardized 3-font hierarchy at `16px+` base text size, `44px × 44px` touch targets, and scroll-isolated modals guarantee effortless mobile usability.
 
 ---
 
-### 3. Technical Architecture & Component Flow
+## 2. User Experience & Visual Design
+
+- **Key User Flows**:
+  1. **Strict Paywall Enforcement, Interactive Upgrade Modal & Offline Behavior**:
+     - Default unsubscribed users start on the **Beginner** tier (`stba_user_tier = "Beginner"`).
+     - Clicking any locked Scholar/Leader control (*Cornell Synthesis*, *Leader Tools*, *Scholar Verbatim Recall*, *Unlock Scholar Tier*, *Teach It Studio Leader Homiletics*, or any *Upgrade* CTA) opens the global **STBA Upgrade & Pricing Modal** (and handles the global `open-stba-upgrade-modal` event).
+     - **Step 1 (Plan Comparison)**: Displays a Monthly / Annual billing toggle (`Save 17%`, `min-h-[44px]` touch target) and side-by-side cards for:
+       - **Scholar Plan (Most Popular)**: `$7.99 / month` (or `$6.58 / month` billed annually at `$79 / year`) — Full active recall mastery mechanics, Cornell Synthesis outlines, deep Elder Stephen exegesis, weekly analytics, and cloud synchronization.
+       - **Leader Plan (Premium Access)**: `$14.99 / month` (or `$11.58 / month` billed annually at `$139 / year`) — Everything in Scholar plus Teach It Interactive Studio 5-stage live coaching, Leader Homiletics Prompter, Sabbath School group curriculum tools, and full PDF/DOCS export suite.
+     - **Step 2 (Payment Prompt & Offline-Safe Activation)**: Selecting **Continue to Payment** opens the interactive payment checkout step inside the modal. If the device is offline (`!navigator.onLine`), the checkout form displays an explicit offline banner preventing failed network charges until connection is restored, or upon confirmed payment persists the signed entitlement locally (`stba_tier_entitlement_v1`) and queues background cloud sync (`stba_pending_tier_sync`) so the upgrade is resilient across reloads.
+  2. **Sub-800ms Elder Stephen AI Triggers**:
+     - Clicking any Elder Stephen prompt button transitions the UI in `< 50ms`, bypasses synchronous Supabase pre-fetches (`< 10ms` client overhead), and streams/returns the model response with a `< 800ms` TTFT target.
+  3. **Scroll-Isolated Modals & `44px × 44px` Mobile Touch Targets**:
+     - Opening *Active Recall*, *Weekly Scripture Mastery & Doctrinal Recap*, or the *Upgrade Pricing Modal* locks `document.body.style.overflow = "hidden"` while keeping the modal interior smoothly scrollable (`overscroll-contain overflow-y-auto`).
+     - All interactive modal buttons, close icons, tab switches, and download dropdown items enforce `min-h-[44px] min-w-[44px]` on mobile screens for thumb-friendly precision.
+  4. **Consolidated Download Dropdowns**:
+     - Export actions in study views are unified into a **Download** dropdown menu (`min-h-[44px]` trigger and option rows) offering **PDF (`.pdf`)** and **DOCS (`.doc`) / Text** options.
+- **Visual Identity & Theme**:
+  - *Aesthetic Direction*: Reverent Berean sanctuary aesthetic with deep midnight navy (`#06162c`), elevated obsidian cards (`#11141C`), and brushed gold (`#C9973A` / `#DFC57B`) highlights.
+  - *Typography & Hierarchy*:
+    - **Headings**: `Plus Jakarta Sans` (600–700 weight).
+    - **Accents**: `Playfair Display` (500–700 weight).
+    - **Body & Scripture Text**: `Noto Serif` (`16px` minimum base font size, `1.7` line-height).
+- **Interactive Feedback & Motion Budgets**:
+  - Optimistic UI state transition: `< 50ms`.
+  - Micro-interaction & hover settling: `≤ 200ms` (`cubic-bezier(0.16, 1, 0.3, 1)`).
+  - AI Time to First Token (TTFT): `< 800ms` target (`ThinkingLevel.LOW` on fast interactive endpoints).
+
+---
+
+## 3. Key Product Decisions & Trade-Offs
+
+- **Decision 1: Deterministic Local-First Paywall & Offline Entitlement Guard**
+  - *Chosen Approach*: Store `userTier: "Beginner" | "Scholar" | "Leader"` and a structured entitlement record (`stba_tier_entitlement_v1`) in `AppContext` + `localStorage` (defaulting strictly to `"Beginner"`). When offline, `hasTierAccess` reads the verified local entitlement so paid **Scholar** and **Leader** users never get locked out during offline study, while **Beginner** users remain strictly blocked from accessing paid features offline. Any tier upgrade completed or queued syncs to Supabase (`saveProfileToSupabase`) automatically when online.
+  - *Why*: Guarantees zero false lockouts for paying subscribers in low-connectivity church/Sabbath settings while preventing any offline bypass by free-tier users.
+- **Decision 2: Sub-800ms Non-Blocking AI Trigger Pipeline**
+  - *Chosen Approach*: Read cached track progress synchronously (`< 10ms`) from local state (`stba_cached_track_progress`), refresh Supabase progress asynchronously in a non-blocking background promise, configure interactive server endpoints (`/api/elder-stephen` and `/api/teach/chat`) with `ThinkingLevel.LOW` for `< 800ms` TTFT, and wrap client fetches in a `6500ms` `AbortController` with automatic doctrinal fallback.
+  - *Why*: Eliminates the 400ms–1500ms pre-request database bottleneck that previously delayed every Elder Stephen interaction.
+- **Decision 3: Mobile Touch Target Floor (`44px × 44px`) & Preserve Note Studio Layout**
+  - *Chosen Approach*: Apply `min-h-[44px]` touch target sizing to interactive buttons, tabs, and dropdown items on mobile viewports while keeping Note Studio's existing drafting, reading, and AI review panel structure intact.
+  - *Why*: Satisfies WCAG AAA / Apple HIG mobile touch target ergonomics (`44px × 44px`) without disrupting the established Note Studio workflow.
+
+---
+
+## 4. Technical Architecture & Data Strategy *(Technical Reference)*
+
+- **Architecture & Component Diagram**:
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Sabbath School Lesson Data                      │
-└────────────────────────────────────┬───────────────────────────────────┘
-                                     │
-                    separateLessonAndEgwNotes(content)
-                                     │
-           ┌─────────────────────────┴────────────────────────┐
-           ▼                                                  ▼
-┌──────────────────────────────────────┐  ┌──────────────────────────────────────┐
-│       Daily Lesson Exposition        │  │       Dedicated EGW Notes Section     │
-│ (CollapsibleDailyLessonsSection.tsx) │  │        (FurtherThought.tsx)          │
-│                                      │  │                                      │
-│ • Ellen White quotes EXCLUDED        │  │ • Replaces legacy/conflicting notes  │
-│ • getScriptureRegex() matches ALL    │  │ • Title: "Ellen White Notes on ..."  │
-│   Bible books/abbrs/ranges           │  │ • Yellow bounding box border-2       │
-│ • Yellow pill badges:                │  │ • Orange quote glyph ” & accent bar  │
-│   bg-[#FEF9C3] border-[#FACC15]      │  │ • Standard NON-ITALICIZED sans font  │
-│                                      │  │ • 2-3 sentence paragraph chunks      │
-└──────────────────┬───────────────────┘  └──────────────────────────────────────┘
-                   │ Click Scripture Pill
-                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                   Scripture Reference Explorer Modal                   │
-│                          (VerseModal.tsx)                              │
-│                                                                        │
-│ • Transparent click-outside backdrop (no gray-out / no blur)           │
-│ • Translation Tabs: [ KJV ] [ NKJV ] [ ESV ] [ NASB ]                  │
-│ • Close on backdrop click, 'X', or 'Done' button                       │
-│ • [ Study Deeper ] button                                              │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │ Routes to /stba?ref=...
-                                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       STBA Bible Study Engine                          │
-│                        (STBAStudyMode.tsx)                             │
-│                                                                        │
-│ • Receives 'ref' and 'tool=visual' from URL parameters                 │
-│ • Pre-loads search input and initiates passage lookup                  │
-│ • Opens parallel Bible reader with selected scripture                  │
-└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│            GLOBAL TYPOGRAPHY, TOUCH ERGONOMICS & MODAL LAYER               │
+│  • 3 Fonts: Plus Jakarta Sans (Headings), Playfair Display (Accents),      │
+│             Noto Serif (Body & Scripture, ≥16px Base Size)                 │
+│  • Mobile Touch Targets: ≥44px × 44px (Desktop ≥40px × 40px)               │
+│  • Scroll-Locked Modals: Active Recall, Weekly Recap, Upgrade Pricing      │
+└─────────────────────────────────────┬──────────────────────────────────────┘
+                                      │
+┌─────────────────────────────────────▼──────────────────────────────────────┐
+│         STRICT SUBSCRIPTION PAYWALL, PRICING & OFFLINE GUARD               │
+│  • Default Tier: 'Beginner' ($0/mo) — Zero free-bypass buttons             │
+│  • Scholar Plan: $7.99/mo or $6.58/mo ($79/yr billed annually)             │
+│  • Leader Plan:  $14.99/mo or $11.58/mo ($139/yr billed annually)          │
+│  • Offline Guard: Cached Entitlement Verification + Queued Cloud Sync      │
+└───────┬─────────────────────────────┬──────────────────────────────┬───────┘
+        │                             │                              │
+┌───────▼───────────┐       ┌─────────▼──────────┐       ┌───────────▼───────┐
+│   STUDY MODULES   │       │  TEACH IT STUDIO   │       │    NOTE STUDIO    │
+│ • Ask The Scholar │       │ • Left: Dialogue   │       │ • Preserved UI    │
+│ • Active Recall   │       │ • Right: Slate     │       │ • Gated Cornell & │
+│ • Bible Study     │       │ • PDF/DOCS Export  │       │   Leader Tools    │
+│ • Sabbath School  │       │   Dropdown         │       │ • Upgrade Trigger │
+└───────┬───────────┘       └─────────┬──────────┘       └───────────┬───────┘
+        │                             │                              │
+        └─────────────────────────────┼──────────────────────────────┘
+                                      │
+┌─────────────────────────────────────▼──────────────────────────────────────┐
+│          SUB-800ms TTFT ELDER STEPHEN AI TRIGGER PIPELINE                  │
+│  • Pre-Flight Overhead: <10ms (Synchronous Local Cache, Async Cloud Sync)  │
+│  • Optimistic UI State: <50ms  |  Target TTFT: <800ms (ThinkingLevel.LOW)  │
+│  • Timeout Guard: 6500ms AbortController ──► Instant Doctrinal Fallback    │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-### 4. Implementation Steps (Plan of Action)
-
-1. **`src/components/sabbathSchool/FurtherThought.tsx`**:
-   - Verify and ensure all Ellen White quotes strictly use **standard non-italicized font** (`font-['Lato',sans-serif] font-normal not-italic`).
-   - Remove any remaining `italic` or `font-serif italic` classes from quote paragraphs.
-   - Retain clean quotation marks around paragraphs.
-   - Ensure the yellow bounding box (`border-2 border-amber-400/90`), orange quote glyph `”`, orange left vertical accent bar (`border-l-2 border-l-orange-500 pl-4`), and `Ellen White Notes on [Specific Daily Topic]` header are consistently applied.
-   - Verify that relocated quotes from daily lessons replace existing content without collisions.
-
-2. **`src/utils/sabbathUtils.ts`**:
-   - Re-verify `separateLessonAndEgwNotes`: ensure every paragraph citing Ellen White, Spirit of Prophecy books, or author variants is cleanly extracted into `egwParagraphs` and removed from `mainParagraphs`.
-   - Re-verify `getScriptureRegex()`: ensure full coverage for all 66 Bible books, abbreviations (`Exod.`, `Ezek.`, `Heb.`, `2 Tim.`, `2 Pet.`, etc.), non-breaking spaces `\u00A0`, and multi-verse/range notations (`Heb. 1:1 , 2`, `Matt. 26:36 , 37`).
-   - Ensure `formatEgwParagraphChunks` cleanly groups long quotes into 2–3 sentence blocks without breaking quotation marks.
-
-3. **`src/components/sabbathSchool/CollapsibleDailyLessonsSection.tsx` & `DailyLessonView.tsx`**:
-   - Ensure `separateLessonAndEgwNotes(content)` is called so daily lesson exposition never renders EGW quotes.
-   - Ensure `getScriptureRegex()` generates yellow pill badges (`bg-[#FEF9C3] border-[#FACC15] text-[#78350F] underline decoration-[#CA8A04]/60`) matching Attachment 1.
-   - Verify click handler calls `handleOpenVerseModal(fullMatch)` with cleaned references.
-
-4. **`src/components/VerseModal.tsx`**:
-   - Ensure the backdrop is 100% transparent (`fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent pointer-events-auto`) without blur or darkening filter.
-   - Ensure translation tabs (`KJV`, `NKJV`, `ESV`, `NASB`) switch smoothly.
-   - Ensure `Study Deeper` sets `stba_pending_search_ref` and navigates to `/stba?ref=...&tool=visual`.
-   - Ensure verse text displays in a clean, non-italicized, high-legibility font.
-
-5. **Verification & Testing**:
-   - Run `lint_applet` and `compile_applet` to confirm zero TypeScript compilation errors or broken imports.
-   - Verify visual hierarchy, typography, and interaction flows across Sabbath School and STBA modules.
+- **Data Model & State**:
+  - `SubscriptionTier`: `'Beginner' | 'Scholar' | 'Leader'` stored in `AppContext` and `stba_user_tier` (default `'Beginner'`).
+  - `TierEntitlementRecord` (`stba_tier_entitlement_v1`): `{ tier: SubscriptionTier; billingCycle: 'monthly' | 'annual'; activatedAt: string; pendingCloudSync: boolean }`.
+  - `LatencyMetrics`: `{ clientPreFlightMs: number; ttftMs: number; totalRoundTripMs: number }` logged for verification against the `< 800ms` TTFT target.
+- **Interactive Component & State Mapping**:
+  - **Paywall & Offline Fallback Enforcement Across Modules**:
+    - *Note Studio (`MasteryReview`)*: Default `stba_user_tier` to `'Beginner'`. Selecting `Scholar` or `Leader` level, `Cornell Review`, or `Leader Tools` while on the `Beginner` tier (or `Leader` while on `Scholar`) invokes `openUpgradeModal()`. Replace `"Upgrade to Scholar (Free)"` with `"Upgrade to Scholar"` (`min-h-[44px]`).
+    - *Ask The Scholar & RightPaneTools*: Clicking `"Unlock Scholar Tier"` or attempting Scholar-only deep exegesis on the Beginner tier dispatches `open-stba-upgrade-modal` and opens the Upgrade Modal.
+    - *Active Recall (`GeminiRecallModule`)*: Selecting `"Scholar: Verbatim Precision"` while on the Beginner tier opens the Upgrade Modal.
+    - *Teach It Studio*: Attempting to use Leader Homiletic Outline verification while below the Leader tier opens the Upgrade Modal.
+    - *Offline Sync Recovery*: A `window.addEventListener('online', ...)` listener in `AppContext` automatically flushes any `pendingCloudSync` entitlement update to Supabase when connectivity returns.

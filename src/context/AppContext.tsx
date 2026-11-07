@@ -3,13 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { UserAccount, Track, Scripture } from "../types";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { UserAccount, Track, Scripture, SubscriptionTier } from "../types";
 import { saveProfileToSupabase, fetchProfileFromSupabase } from "../lib/notebookSync";
+
+export interface UpgradeModalState {
+  isOpen: boolean;
+  requiredTier: "Scholar" | "Leader";
+  featureName?: string;
+}
 
 interface AppContextType {
   user: UserAccount | null;
   setUser: (u: UserAccount | null) => void;
+  userTier: SubscriptionTier;
+  setUserTier: (tier: SubscriptionTier, billingCycle?: "monthly" | "annual") => void;
+  hasTierAccess: (requiredTier: SubscriptionTier) => boolean;
+  upgradeModalState: UpgradeModalState;
+  openUpgradeModal: (requiredTier?: "Scholar" | "Leader", featureName?: string) => void;
+  closeUpgradeModal: () => void;
   completedVerseIds: string[];
   addCompletedVerseId: (id: string) => void;
   selectedTrackId: string;
@@ -27,6 +39,20 @@ interface AppContextType {
   setIsBottomBarVisible: (visible: boolean) => void;
   resetBottomBarTimer: (delay?: number) => void;
   logOut: () => void;
+}
+
+const TIER_RANK: Record<SubscriptionTier, number> = {
+  Beginner: 0,
+  Scholar: 1,
+  Leader: 2,
+};
+
+function normalizeTier(raw?: string | null): SubscriptionTier {
+  if (!raw) return "Beginner";
+  const lower = raw.toLowerCase();
+  if (lower.includes("leader")) return "Leader";
+  if (lower.includes("scholar")) return "Scholar";
+  return "Beginner";
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -59,9 +85,116 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return null;
       }
     }
-    // Start as unauthenticated (null) by default as requested.
     return null;
   });
+
+  // Strict subscription tier resolution: only honor verified paid entitlement or explicit profile tier; default strictly to "Beginner"
+  const [userTier, setUserTierState] = useState<SubscriptionTier>(() => {
+    try {
+      const entitlementRaw = localStorage.getItem("stba_tier_entitlement_v1");
+      if (entitlementRaw) {
+        const entitlement = JSON.parse(entitlementRaw);
+        if (entitlement && entitlement.verified === true && (entitlement.tier === "Scholar" || entitlement.tier === "Leader")) {
+          return entitlement.tier;
+        }
+      }
+      const savedProfile = localStorage.getItem("stba_user_profile");
+      if (savedProfile) {
+        const parsed = JSON.parse(savedProfile);
+        if (parsed?.tier && (parsed.tier === "Scholar" || parsed.tier === "Leader")) {
+          return parsed.tier;
+        }
+      }
+    } catch (e) {}
+    localStorage.setItem("stba_user_tier", "beginner");
+    return "Beginner";
+  });
+
+  const [upgradeModalState, setUpgradeModalState] = useState<UpgradeModalState>({
+    isOpen: false,
+    requiredTier: "Scholar",
+    featureName: undefined,
+  });
+
+  const setUserTier = useCallback((tier: SubscriptionTier, billingCycle: "monthly" | "annual" = "monthly") => {
+    const normalized = normalizeTier(tier);
+    setUserTierState(normalized);
+    localStorage.setItem("stba_user_tier", normalized.toLowerCase());
+
+    const entitlement = {
+      tier: normalized,
+      verified: normalized !== "Beginner",
+      billingCycle,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem("stba_tier_entitlement_v1", JSON.stringify(entitlement));
+
+    setUserState((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, tier: normalized };
+      localStorage.setItem("stba_user_profile", JSON.stringify(updated));
+      if (!updated.isGuest) {
+        if (typeof navigator !== "undefined" && navigator.onLine) {
+          saveProfileToSupabase(updated);
+        } else {
+          localStorage.setItem("stba_pending_tier_sync", JSON.stringify(entitlement));
+        }
+      }
+      return updated;
+    });
+
+    window.dispatchEvent(new CustomEvent("stba-tier-updated", { detail: { tier: normalized } }));
+  }, []);
+
+  const hasTierAccess = useCallback(
+    (requiredTier: SubscriptionTier): boolean => {
+      return TIER_RANK[userTier] >= TIER_RANK[requiredTier];
+    },
+    [userTier]
+  );
+
+  const openUpgradeModal = useCallback((requiredTier: "Scholar" | "Leader" = "Scholar", featureName?: string) => {
+    setUpgradeModalState({
+      isOpen: true,
+      requiredTier,
+      featureName,
+    });
+  }, []);
+
+  const closeUpgradeModal = useCallback(() => {
+    setUpgradeModalState((prev) => ({ ...prev, isOpen: false }));
+  }, []);
+
+  // Listen globally for 'open-stba-upgrade-modal' custom events & offline-to-online tier sync
+  useEffect(() => {
+    const handleOpenUpgradeEvent = (evt: Event) => {
+      const customEvt = evt as CustomEvent<{ requiredTier?: "Scholar" | "Leader"; featureName?: string }>;
+      const reqTier = customEvt.detail?.requiredTier || "Scholar";
+      const feat = customEvt.detail?.featureName;
+      openUpgradeModal(reqTier, feat);
+    };
+
+    const handleOnlineSync = () => {
+      try {
+        const pendingSync = localStorage.getItem("stba_pending_tier_sync");
+        const savedProfile = localStorage.getItem("stba_user_profile");
+        if (pendingSync && savedProfile) {
+          const parsedProfile = JSON.parse(savedProfile);
+          if (parsedProfile && !parsedProfile.isGuest) {
+            saveProfileToSupabase(parsedProfile);
+            localStorage.removeItem("stba_pending_tier_sync");
+          }
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener("open-stba-upgrade-modal", handleOpenUpgradeEvent);
+    window.addEventListener("online", handleOnlineSync);
+    return () => {
+      window.removeEventListener("open-stba-upgrade-modal", handleOpenUpgradeEvent);
+      window.removeEventListener("online", handleOnlineSync);
+    };
+  }, [openUpgradeModal]);
 
   const [completedVerseIds, setCompletedVerseIds] = useState<string[]>(() => {
     const savedUser = localStorage.getItem("stba_user_profile");
@@ -76,7 +209,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } catch (e) {}
     }
-    // Default stats are zeroed out initially
     return [];
   });
 
@@ -125,6 +257,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const setUser = (u: UserAccount | null) => {
     setUserState(u);
     if (u) {
+      if (u.tier) {
+        const normalized = normalizeTier(u.tier);
+        setUserTierState(normalized);
+        localStorage.setItem("stba_user_tier", normalized.toLowerCase());
+      }
       localStorage.setItem("stba_user_profile", JSON.stringify(u));
       if (!u.isGuest) {
         saveProfileToSupabase(u);
@@ -139,6 +276,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem("stba_ss_daily_lessons");
       localStorage.removeItem("stba_ss_deck_cards");
       localStorage.removeItem("stba_memory_vault_list");
+      localStorage.removeItem("stba_tier_entitlement_v1");
+      localStorage.setItem("stba_user_tier", "beginner");
+      setUserTierState("Beginner");
       try {
         if (typeof sessionStorage !== "undefined") {
           sessionStorage.removeItem("stba_ss_welcomed");
@@ -165,7 +305,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (profileRemote) {
               setUserState(profileRemote);
               localStorage.setItem("stba_user_profile", JSON.stringify(profileRemote));
-              // Trigger a state reload if settings changed
+              if (profileRemote.tier) {
+                const remoteTier = normalizeTier(profileRemote.tier);
+                setUserTierState(remoteTier);
+                localStorage.setItem("stba_user_tier", remoteTier.toLowerCase());
+              }
               window.dispatchEvent(new Event("stba_voice_changed"));
             }
           }
@@ -178,7 +322,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const addCompletedVerseId = (id: string) => {
-    // Only capture and track stat information after signup and email verification
     if (!user || !user.emailVerified) {
       console.warn("STBA Guardian: Stats tracking blocked. Email verification is required.");
       return;
@@ -191,7 +334,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Real and simulated email verification checking
   const verifyUserEmail = async (code?: string): Promise<boolean> => {
     if (!user) return false;
     try {
@@ -201,11 +343,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: JSON.stringify({ email: user.email, code })
       });
       if (response.ok) {
-        const payload = await response.json();
+        await response.json();
         const updatedUser = { ...user, emailVerified: true };
         setUser(updatedUser);
         
-        // Re-align or load completed verse indices if they were in transition
         const saved = localStorage.getItem("stba_completed_verses");
         if (saved) {
           try {
@@ -281,7 +422,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem("stba_selected_track", selectedTrackId);
   }, [selectedTrackId]);
 
-  // Derive variable checking if profile is active and verified
   const trackStatsAllowed = !!(user && user.emailVerified);
 
   const logOut = () => {
@@ -294,6 +434,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       value={{
         user,
         setUser,
+        userTier,
+        setUserTier,
+        hasTierAccess,
+        upgradeModalState,
+        openUpgradeModal,
+        closeUpgradeModal,
         completedVerseIds,
         addCompletedVerseId,
         selectedTrackId,
@@ -325,3 +471,4 @@ export const useApp = () => {
   }
   return context;
 };
+

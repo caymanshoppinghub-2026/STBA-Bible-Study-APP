@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { StudyNote, CSMSReview, MasteryQuestion } from '../../types/notebook'
 import { useNavigate } from 'react-router-dom'
 import { callElderStephen } from '../../lib/callElderStephen'
+import { useApp } from '../../context/AppContext'
 import { 
   BookOpen, 
   Brain, 
@@ -150,6 +151,7 @@ const formatBigIdea = (text: string): string => {
 
 export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) => {
   const navigate = useNavigate()
+  const { userTier, hasTierAccess, openUpgradeModal } = useApp()
   const [selectedMode, setSelectedMode] = useState<StudyMode>('STBA Mode')
   const [review, setReview] = useState<CSMSReview | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -161,39 +163,26 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
   const [activeReviewTab, setActiveReviewTab] = useState<'csms' | 'cornell' | 'leader_tools'>('csms')
   const [cornellReview, setCornellReview] = useState<CornellReview | null>(null)
 
-  // Real-time user tier detection
-  const [detectedTier, setDetectedTier] = useState<'basic' | 'scholar' | 'leader'>(() => {
-    const raw = localStorage.getItem('stba_user_tier')?.toLowerCase() || 'scholar'
-    if (raw.includes('begin') || raw.includes('basic')) return 'basic'
-    if (raw.includes('scholar')) return 'scholar'
-    if (raw.includes('lead')) return 'leader'
-    return 'scholar'
-  })
+  // Real-time user tier detection strictly bound to verified AppContext tier
+  const detectedTier: 'basic' | 'scholar' | 'leader' =
+    userTier === 'Leader' ? 'leader' : userTier === 'Scholar' ? 'scholar' : 'basic'
 
-  // Synchronize dynamic tier changes
+  // Synchronize dynamic tier changes with strict entitlement check
   const [selectedTier, setSelectedTier] = useState<MasteryTier>(() => {
-    const current = localStorage.getItem('stba_user_tier')?.toLowerCase() || 'scholar'
-    if (current.includes('begin') || current.includes('basic')) return 'Beginner Tier'
-    if (current.includes('lead')) return 'Leader Tier'
-    return 'Scholar Tier'
+    if (userTier === 'Leader') return 'Leader Tier'
+    if (userTier === 'Scholar') return 'Scholar Tier'
+    return 'Beginner Tier'
   })
 
   useEffect(() => {
-    const raw = selectedTier.toLowerCase()
-    let tierCode: 'basic' | 'scholar' | 'leader' = 'scholar'
-    let textRep = "Scholar"
-
-    if (raw.includes('begin') || raw.includes('basic')) {
-      tierCode = 'basic'
-      textRep = 'Beginner'
-    } else if (raw.includes('lead')) {
-      tierCode = 'leader'
-      textRep = 'Leader'
+    if (userTier === 'Leader') {
+      setSelectedTier('Leader Tier')
+    } else if (userTier === 'Scholar') {
+      setSelectedTier((prev) => (prev === 'Leader Tier' ? 'Scholar Tier' : prev))
+    } else {
+      setSelectedTier('Beginner Tier')
     }
-
-    setDetectedTier(tierCode)
-    localStorage.setItem('stba_user_tier', textRep)
-  }, [selectedTier])
+  }, [userTier])
   
   // Custom dialog on scripture click
   const [activeScriptureDialog, setActiveScriptureDialog] = useState<string | null>(null)
@@ -344,8 +333,9 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
   }
 
   const handleGenerateCornellReview = async () => {
-    if (detectedTier === 'basic') {
+    if (!hasTierAccess('Scholar')) {
       setActiveReviewTab('cornell')
+      openUpgradeModal('Scholar', 'Cornell Lesson Synthesis')
       return;
     }
 
@@ -539,7 +529,7 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
         </div>
         <button
           onClick={onClose}
-          className="p-1 px-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-white transition-all text-xs border border-white/5 cursor-pointer font-mono"
+          className="min-h-[44px] sm:min-h-[36px] p-1 px-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-white transition-all text-xs border border-white/5 cursor-pointer font-mono"
         >
           Close Drawer
         </button>
@@ -550,7 +540,7 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
         <div className="flex items-center justify-between py-1 border-b border-white/5 pb-2">
           <button
             onClick={() => setSettingsExpanded(!settingsExpanded)}
-            className="flex items-center gap-1.5 text-xs font-mono font-bold tracking-wider text-[#C5A059] uppercase cursor-pointer hover:opacity-80 select-none"
+            className="min-h-[44px] sm:min-h-[36px] flex items-center gap-1.5 text-xs font-mono font-bold tracking-wider text-[#C5A059] uppercase cursor-pointer hover:opacity-80 select-none"
             id="study-settings-toggle"
           >
             <span>Study Settings</span>
@@ -560,9 +550,20 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
               }`} 
             />
           </button>
-          <span className="text-[9px] font-mono font-bold uppercase tracking-wide bg-amber-500/10 text-amber-500 border border-amber-500/25 px-1.5 py-0.5 rounded">
-            {detectedTier} TIER
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] font-mono font-bold uppercase tracking-wide bg-amber-500/10 text-amber-500 border border-amber-500/25 px-1.5 py-0.5 rounded">
+              {userTier} TIER
+            </span>
+            {userTier !== 'Leader' && (
+              <button
+                type="button"
+                onClick={() => openUpgradeModal(userTier === 'Beginner' ? 'Scholar' : 'Leader', 'Discipleship Tier Upgrade')}
+                className="text-[10px] font-mono font-bold uppercase tracking-wide bg-[#C5A059]/20 hover:bg-[#C5A059]/30 text-[#ffe16d] border border-[#C5A059]/40 px-2 py-0.5 rounded cursor-pointer transition-colors"
+              >
+                Upgrade
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Parent Container (Study Settings + Action Buttons) */}
@@ -580,7 +581,7 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
                     <button
                       key={mode}
                       onClick={() => setSelectedMode(mode)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-sans font-medium border transition-all cursor-pointer select-none ${
+                      className={`min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-full text-xs font-sans font-medium border transition-all cursor-pointer select-none ${
                         active
                           ? 'bg-teal-500/20 text-teal-300 border-teal-500/40 shadow-sm shadow-teal-500/5 font-semibold'
                           : 'bg-[#1e2020] text-gray-400 hover:text-white border-white/5'
@@ -601,17 +602,26 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
               <div className="flex gap-2">
                 {(['Beginner Tier', 'Scholar Tier', 'Leader Tier'] as MasteryTier[]).map((tier) => {
                   const active = selectedTier === tier
+                  const reqTier = tier === 'Leader Tier' ? 'Leader' : tier === 'Scholar Tier' ? 'Scholar' : 'Beginner'
+                  const isLocked = !hasTierAccess(reqTier)
                   return (
                     <button
                       key={tier}
-                      onClick={() => setSelectedTier(tier)}
-                      className={`flex-1 px-2.5 py-1.5 rounded text-[11px] font-sans font-medium border text-center transition-all cursor-pointer select-none ${
+                      onClick={() => {
+                        if (isLocked) {
+                          openUpgradeModal(reqTier === 'Leader' ? 'Leader' : 'Scholar', `${tier} Discipleship Review`)
+                          return
+                        }
+                        setSelectedTier(tier)
+                      }}
+                      className={`min-h-[44px] sm:min-h-[36px] flex-1 px-2.5 py-1.5 rounded text-[11px] font-sans font-medium border text-center transition-all cursor-pointer select-none flex items-center justify-center gap-1 ${
                         active
                           ? 'bg-[#ffe16d]/20 text-[#ffe16d] border-[#ffe16d]/40 font-semibold'
                           : 'bg-[#1e2020] text-gray-400 hover:text-white border-white/5'
                       }`}
                     >
-                      {tier.replace(' Tier', '')}
+                      {isLocked && <Lock className="w-3 h-3 text-amber-400 shrink-0" />}
+                      <span>{tier.replace(' Tier', '')}</span>
                     </button>
                   )
                 })}
@@ -623,7 +633,7 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
               <button
                 onClick={handleGenerateReview}
                 disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 p-2.5 bg-[#C5A059] hover:bg-[#b08c4a] text-black font-bold text-xs font-mono uppercase tracking-wider rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed select-none shadow"
+                className="min-h-[44px] w-full flex items-center justify-center gap-2 p-2.5 bg-[#C5A059] hover:bg-[#b08c4a] text-black font-bold text-xs font-mono uppercase tracking-wider rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed select-none shadow"
               >
                 {isLoading && activeReviewTab === 'csms' ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -636,11 +646,13 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
               <button
                 onClick={handleGenerateCornellReview}
                 disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 p-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs font-mono uppercase tracking-wider rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed select-none shadow"
+                className="min-h-[44px] w-full flex items-center justify-center gap-2 p-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs font-mono uppercase tracking-wider rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed select-none shadow"
                 id="btn-cornell-synthesis"
               >
                 {isLoading && activeReviewTab === 'cornell' ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : !hasTierAccess('Scholar') ? (
+                  <Lock className="w-3.5 h-3.5" />
                 ) : (
                   <BookOpen className="w-3.5 h-3.5" />
                 )}
@@ -656,7 +668,7 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
         <div className="px-4 py-2 border-b border-white/5 flex gap-2 shrink-0 select-none bg-stone-950/20">
           <button
             onClick={() => setActiveReviewTab('csms')}
-            className={`flex-grow text-[10px] font-mono py-1 rounded text-center transition-all cursor-pointer ${
+            className={`min-h-[44px] sm:min-h-[36px] flex-grow text-[10px] font-mono py-1 rounded text-center transition-all cursor-pointer ${
               activeReviewTab === 'csms' ? 'bg-[#C5A059]/20 text-[#C5A059] border border-[#C5A059]/30 font-bold' : 'text-gray-500 hover:text-gray-300'
             }`}
           >
@@ -664,27 +676,36 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
           </button>
           <button
             onClick={() => {
+              if (!hasTierAccess('Scholar')) {
+                setActiveReviewTab('cornell')
+                openUpgradeModal('Scholar', 'Cornell Lesson Synthesis')
+                return
+              }
               setActiveReviewTab('cornell')
-              if (detectedTier !== 'basic' && !cornellReview) {
+              if (!cornellReview) {
                 handleGenerateCornellReview()
               }
             }}
-            className={`flex-grow text-[10px] font-mono py-1 rounded text-center transition-all cursor-pointer ${
+            className={`min-h-[44px] sm:min-h-[36px] flex-grow text-[10px] font-mono py-1 rounded text-center transition-all cursor-pointer ${
               activeReviewTab === 'cornell' ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30 font-bold' : 'text-gray-500 hover:text-gray-300'
             }`}
           >
-            {detectedTier === 'basic' ? '🔒 Cornell Review' : 'Cornell Outline'}
+            {!hasTierAccess('Scholar') ? '🔒 Cornell Review' : 'Cornell Outline'}
           </button>
-          {detectedTier === 'leader' && (
-            <button
-              onClick={() => setActiveReviewTab('leader_tools')}
-              className={`flex-grow text-[10px] font-mono py-1 rounded text-center transition-all cursor-pointer ${
-                activeReviewTab === 'leader_tools' ? 'bg-amber-500/20 text-[#ffe16d] border border-amber-500/30 font-bold' : 'text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              👑 Leader Tools
-            </button>
-          )}
+          <button
+            onClick={() => {
+              if (!hasTierAccess('Leader')) {
+                openUpgradeModal('Leader', 'Leader Tools & Sabbath School Dialogue Architect')
+                return
+              }
+              setActiveReviewTab('leader_tools')
+            }}
+            className={`min-h-[44px] sm:min-h-[36px] flex-grow text-[10px] font-mono py-1 rounded text-center transition-all cursor-pointer ${
+              activeReviewTab === 'leader_tools' ? 'bg-amber-500/20 text-[#ffe16d] border border-amber-500/30 font-bold' : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            {hasTierAccess('Leader') ? '👑 Leader Tools' : '🔒 Leader Tools'}
+          </button>
         </div>
       )}
 
@@ -720,36 +741,33 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
             </div>
             <button
               onClick={activeReviewTab === 'csms' ? handleGenerateReview : handleGenerateCornellReview}
-              className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 rounded text-rose-200 border border-rose-500/30 font-mono transition-all cursor-pointer"
+              className="min-h-[44px] px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 rounded text-rose-200 border border-rose-500/30 font-mono transition-all cursor-pointer"
             >
               Retry Generation
             </button>
           </div>
         ) : activeReviewTab === 'cornell' ? (
           /* Tier-Based Conditional: Locked state for basic level */
-          detectedTier === 'basic' ? (
+          !hasTierAccess('Scholar') ? (
             <div className="flex flex-col items-center justify-center py-16 text-center space-y-5 animate-fade-in" id="locked-cornell-state">
               <div className="w-12 h-12 rounded-full bg-red-500/5 border border-red-500/20 flex items-center justify-center">
                 <Lock className="w-5 h-5 text-red-400" />
               </div>
               <div className="max-w-xs space-y-2">
-                <h4 className="text-sm font-semibold text-gray-100">Cornell Review Unprepared</h4>
+                <h4 className="text-sm font-semibold text-gray-100">Cornell Review Locked</h4>
                 <p className="text-[11.5px] text-gray-400 leading-relaxed font-sans">
-                  Detailed architectural Cornell Outlines and practical sermon/lesson worksheets are reserved for <strong>Scholar</strong> and <strong>Leader</strong> discipleship tiers.
+                  Detailed architectural Cornell Outlines and practical sermon/lesson worksheets require an active <strong>Scholar</strong> ($7.99/mo) or <strong>Leader</strong> ($14.99/mo) subscription.
                 </p>
               </div>
               <div className="text-[11px] font-mono text-[var(--nb-text-muted)] select-none">
-                Current Level: <span className="text-amber-500 font-bold uppercase">Basic</span>
+                Current Level: <span className="text-amber-500 font-bold uppercase">{userTier}</span>
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedTier('Scholar Tier');
-                  triggerToast("Discipleship level upgraded to Scholar!");
-                }}
-                className="px-4 py-2 rounded-md bg-[#ffe16d]/10 hover:bg-[#ffe16d]/20 text-xs text-[#ffe16d] border border-[#ffe16d]/30 font-mono transition-all cursor-pointer"
+                onClick={() => openUpgradeModal('Scholar', 'Cornell Lesson Synthesis')}
+                className="min-h-[44px] px-5 py-2.5 rounded-lg bg-[#ffe16d]/15 hover:bg-[#ffe16d]/25 text-xs font-bold text-[#ffe16d] border border-[#ffe16d]/40 font-mono transition-all cursor-pointer"
               >
-                Upgrade to Scholar (Free)
+                Upgrade to Scholar or Leader
               </button>
             </div>
           ) : !cornellReview ? (

@@ -4632,7 +4632,7 @@ export const LessonPreTestPage: React.FC = () => {
                 <Brain className="w-5 h-5" />
               </div>
               <h2 className="font-serif text-md md:text-lg font-extrabold text-[#1C2333] leading-relaxed">
-                {activePrompt.prompt}
+                {activePrompt?.prompt || "Recall the key biblical teachings of this passage."}
               </h2>
             </div>
 

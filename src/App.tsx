@@ -34,6 +34,7 @@ import { NotebookPage } from "./pages/NotebookPage";
 import { UserStatsPage } from "./components/UserStatsPage";
 import { Confetti } from "./components/Confetti";
 import { RecallPopupModal } from "./components/recall/RecallPopupModal";
+import { UpgradePricingModal } from "./components/UpgradePricingModal";
 import { HelpCenterPage } from "./pages/HelpCenterPage";
 
 import { AppProvider, useApp } from "./context/AppContext";
@@ -472,6 +473,7 @@ function AnimatedRoutes() {
         </Routes>
         <Confetti />
         <RecallPopupModal />
+        <UpgradePricingModal />
       </motion.div>
     </AnimatePresence>
   );

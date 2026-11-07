@@ -2022,7 +2022,7 @@ ${scriptureOutlines}
                             Active Recall Challenge Prompt
                           </span>
                           <p className="text-xs sm:text-sm font-serif italic text-stone-800 leading-relaxed">
-                            "{activePrompt.prompt}"
+                            "{activePrompt?.prompt || "Without looking, try to recall and write down the key theological message of this passage."}"
                           </p>
                         </div>
 

@@ -169,24 +169,34 @@ function recordSessionObservation(passage: string, observation: string) {
  * Send the unified payload to the server-side Elder Stephen AI backend.
  */
 export async function callElderStephen(partialPayload: Partial<ElderStephenPayload>): Promise<{ text: string; commentaryMode?: 'prestige' | 'velocity'; modeUsed?: 'prestige' | 'velocity'; latencyMs?: number }> {
+  const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now()
   const payload = buildUnifiedPayload(partialPayload)
 
-  // Fetch track progress from Supabase to provide Elder Stephen with long-term memory
+  // Fast < 10ms pre-flight: read cached track_progress synchronously from localStorage
+  // and refresh Supabase asynchronously in the background without blocking AI trigger dispatch
   if (!payload.progress) {
     try {
-      const sbUser = await ensureSupabaseAuth();
-      if (sbUser) {
-        const { data, error } = await supabase
-          .from("track_progress")
-          .select("*")
-          .eq("user_id", sbUser.id);
-        if (!error && data) {
-          payload.progress = data;
-        }
+      const cachedProgress = localStorage.getItem('stba_cached_track_progress')
+      if (cachedProgress) {
+        payload.progress = JSON.parse(cachedProgress)
       }
-    } catch (err) {
-      console.warn("Failed to fetch track_progress in callElderStephen:", err);
-    }
+    } catch (e) {}
+
+    // Non-blocking background sync to keep cache fresh for subsequent turns
+    Promise.resolve()
+      .then(async () => {
+        const sbUser = await ensureSupabaseAuth()
+        if (sbUser) {
+          const { data, error } = await supabase
+            .from('track_progress')
+            .select('*')
+            .eq('user_id', sbUser.id)
+          if (!error && data) {
+            localStorage.setItem('stba_cached_track_progress', JSON.stringify(data))
+          }
+        }
+      })
+      .catch(() => {})
   }
 
   // Auto-record active user reflections, observations, explanations, and thoughts
@@ -213,15 +223,20 @@ export async function callElderStephen(partialPayload: Partial<ElderStephenPaylo
     }
   }
 
-  // Call the production full-stack endpoint with resilient offline fallback
+  // Call the production full-stack endpoint with 6500ms AbortController guard & resilient offline fallback
   try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 6500)
+
     const response = await fetch('/api/elder-stephen', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     })
+    clearTimeout(timeoutId)
 
     if (response.ok) {
       const data = await response.json()
@@ -231,11 +246,15 @@ export async function callElderStephen(partialPayload: Partial<ElderStephenPaylo
           data.text = ensureElderStephenOutlineCompletion(data.text, payload.passage || payload.base_verse || payload.verse, payload.noteTitle, payload.userAction);
         }
         data.text = formatProperElderSpacing(data.text)
-        return data
+        const elapsed = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime)
+        return {
+          ...data,
+          latencyMs: data.latencyMs ?? elapsed
+        }
       }
     }
   } catch (netErr) {
-    console.warn("[ElderStephen] Network connection fallback engaged:", netErr)
+    console.warn("[ElderStephen] Network connection or timeout fallback engaged:", netErr)
   }
 
   // Graceful offline pastoral fallback response (SDA doctrinally aligned)
