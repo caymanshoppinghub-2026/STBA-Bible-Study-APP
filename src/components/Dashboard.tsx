@@ -72,6 +72,9 @@ import {
 import { SCRIPTURE_DATABASE } from "../data/scriptureDb";
 import { loadNotes, saveResponseAsNewNote } from "../data/notebookData";
 import { aggregateUserStats } from "../utils/userStatsAggregator";
+import { supabase } from "../lib/supabase";
+import { fetchNotesFromSupabase } from "../lib/notebookSync";
+import { resolveTrackName } from "../lib/trackSync";
 
 // Concept-art custom icons matching Study Modes Icons reference
 const RoadTrackIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
@@ -168,88 +171,6 @@ function cleanNoteSummary(summary?: string, content?: string): string {
   return stripped.slice(0, 255).trim() + "...";
 }
 
-// Curated default notebook entries for immediate theological enrichment
-const DEFAULT_NOTEBOOK_ENTRIES = [
-  {
-    id: "note-1",
-    title: "Understanding the New Covenant",
-    category: "Theology",
-    date: "Today",
-    summary:
-      "The New Covenant (Hebrews 8:10, Jeremiah 31:33) is God's law written upon the heart by grace through faith in Jesus Christ.",
-    preview:
-      "The New Covenant (Hebrews 8:10, Jeremiah 31:33) is God's law written upon the heart by grace through faith in Jesus Christ.",
-    content:
-      "# Understanding the New Covenant\n\nThe New Covenant is the fulfillment of Jeremiah 31:31-34. Under this everlasting covenant, God writes His moral law not upon cold tablets of stone, but upon the fleshy tables of the renewed heart through the indwelling of the Holy Spirit.\n\nKey themes:\n- Salvation purely by grace through faith in Christ\n- Internal transformation vs. external formalism\n- Christ as the Mediator of a better covenant founded upon better promises",
-    verses: ["Hebrews 8:10", "Jeremiah 31:33", "Ezekiel 36:26"]
-  },
-  {
-    id: "note-2",
-    title: "Romans 8 Study",
-    category: "Biblical Studies",
-    date: "Yesterday",
-    summary:
-      "No condemnation in Christ Jesus. The law of the Spirit of life sets us free from the law of sin and death.",
-    preview:
-      "No condemnation in Christ Jesus. The law of the Spirit of life sets us free from the law of sin and death.",
-    content:
-      "# Romans 8 Study\n\nThere is therefore now no condemnation to them which are in Christ Jesus, who walk not after the flesh, but after the Spirit.\n\nPaul demonstrates that while the law was weakened through sinful human nature, God sent His own Son in the likeness of sinful flesh to condemn sin and fulfill the righteous requirement of the law in us.",
-    verses: ["Romans 8:1", "Romans 8:14", "Romans 8:28"]
-  },
-  {
-    id: "note-3",
-    title: "Doctrine of the Sabbath",
-    category: "Theology",
-    date: "May 20",
-    summary:
-      "Memorial of Creation (Genesis 2:1-3, Exodus 20:8-11) and sign of sanctification (Ezekiel 20:12, 20).",
-    preview:
-      "Memorial of Creation (Genesis 2:1-3, Exodus 20:8-11) and sign of sanctification (Ezekiel 20:12, 20).",
-    content:
-      "# Doctrine of the Sabbath\n\nThe seventh-day Sabbath stands as God's perpetual sign between Him and His people. It points backward to the completed Creation and forward to the ultimate rest of redemption in Christ.\n\nResting on God's holy day demonstrates total dependence on Him as Creator and Sanctifier.",
-    verses: ["Exodus 20:8-11", "Isaiah 58:13", "Mark 2:27-28"]
-  },
-  {
-    id: "note-4",
-    title: "Seven Trumpets Teaching Outline",
-    category: "Prophecy",
-    date: "May 18",
-    summary:
-      "Historical-grammatical exegesis of Revelation 8–9. Sequential prophetic milestones through Church history.",
-    preview:
-      "Historical-grammatical exegesis of Revelation 8–9. Sequential prophetic milestones through Church history.",
-    content:
-      "# Seven Trumpets Teaching Outline\n\nHistorical-grammatical exegesis of Revelation 8–9. Sequential prophetic milestones through Church history representing judgments upon the persecutors of God's covenant people from the fall of Western Rome to the sounding of the seventh trumpet.",
-    verses: ["Revelation 8:2", "Revelation 8:7", "Revelation 9:1"]
-  },
-  {
-    id: "note-5",
-    title: "Sanctuary Types & Shadows",
-    category: "Theology",
-    date: "May 15",
-    summary:
-      "Exegesis of Hebrews 9: The earthly sanctuary service prefiguring the heavenly ministry of Christ our High Priest.",
-    preview:
-      "Exegesis of Hebrews 9: The earthly sanctuary service prefiguring the heavenly ministry of Christ our High Priest.",
-    content:
-      "# Sanctuary Types & Shadows\n\nThe earthly tabernacle constructed by Moses according to the pattern shown on Mount Sinai served as an illustration for the present time. Christ entered the greater and more perfect tabernacle in heaven with His own blood.",
-    verses: ["Hebrews 9:11-14", "Leviticus 16:16", "Daniel 8:14"]
-  },
-  {
-    id: "note-6",
-    title: "Three Angels' Messages Exegesis",
-    category: "Prophecy",
-    date: "May 12",
-    summary:
-      "Revelation 14:6–12 — The everlasting gospel in the context of the judgment-hour message, the fall of Babylon, and the mark of the beast.",
-    preview:
-      "Revelation 14:6–12 — The everlasting gospel in the context of the judgment-hour message, the fall of Babylon, and the mark of the beast.",
-    content:
-      "# Three Angels' Messages Exegesis\n\nThe proclamation of Revelation 14:6-12 represents God's final warning of mercy to the world before the Second Advent of Christ. It calls humanity to worship the Creator, reject Babylon's falsehoods, and keep the commandments of God and the faith of Jesus.",
-    verses: ["Revelation 14:6-12", "Revelation 18:1-4"]
-  }
-];
-
 interface DashboardProps {
   user: UserAccount;
   isSabbathMode?: boolean;
@@ -284,68 +205,160 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [recapSavedToast, setRecapSavedToast] = useState(false);
   const [recapCopiedToast, setRecapCopiedToast] = useState(false);
 
-  // Recent Studies dynamic dataset with fallback
-  const [recentStudiesList] = useState<{ reference: string; topic: string; date: string; tag: string }[]>(() => {
-    const list: { reference: string; topic: string; date: string; tag: string }[] = [];
-    try {
-      const rawCache = localStorage.getItem(`stba_study_exegesis_cache_${user?.email || "guest"}`);
-      if (rawCache) {
-        const parsed = JSON.parse(rawCache);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.slice(0, 6).forEach((item: any) => {
-            list.push({
-              reference: item.reference || "Hebrews 8:1–6",
-              topic: item.topic || "Sanctuary Exegesis",
-              date: "Recent",
-              tag: item.reference?.startsWith("Rev") ? "Prophecy" : item.reference?.startsWith("Dan") ? "Prophecy" : "Doctrine"
-            });
+  // Recent Studies dynamic dataset: strictly fetched from Supabase track_progress & active_recall_mastery
+  const [recentStudiesList, setRecentStudiesList] = useState<{ reference: string; topic: string; date: string; tag: string }[]>([]);
+  const [isRecentStudiesLoading, setIsRecentStudiesLoading] = useState(true);
+
+  // Live Spiritual Learning Journey stats calculated strictly from Supabase live state (defaults to 0 for new user)
+  const [journeyStats, setJourneyStats] = useState({
+    scriptureMastery: 0,
+    doctrineMastery: 0,
+    activeRecall: 0,
+    teachingConfidence: 0
+  });
+
+  // Strictly fetch user state & study data directly from Supabase upon login & load
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLiveDashboardData = async () => {
+      if (!user) {
+        if (isMounted) {
+          setRecentStudiesList([]);
+          setIsRecentStudiesLoading(false);
+          setJourneyStats({ scriptureMastery: 0, doctrineMastery: 0, activeRecall: 0, teachingConfidence: 0 });
+        }
+        return;
+      }
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const activeUserId = session?.user?.id || user.id;
+
+        if (!activeUserId) {
+          if (isMounted) {
+            setRecentStudiesList([]);
+            setIsRecentStudiesLoading(false);
+            setJourneyStats({ scriptureMastery: 0, doctrineMastery: 0, activeRecall: 0, teachingConfidence: 0 });
+          }
+          return;
+        }
+
+        // 1. Fetch live active recall mastery from Supabase
+        const { data: recallRows } = await supabase
+          .from("active_recall_mastery")
+          .select("verse_reference, track_id, mastery_level, attempts, successes, last_review_at, updated_at")
+          .eq("user_id", activeUserId)
+          .order("updated_at", { ascending: false });
+
+        // 2. Fetch live track progress from Supabase
+        const { data: trackRows } = await supabase
+          .from("track_progress")
+          .select("track_id, track_name, pre_test_score, studied_texts, active_recall, teach_it, updated_at")
+          .eq("user_id", activeUserId)
+          .order("updated_at", { ascending: false });
+
+        // Build live recent studies list strictly from database records (no mock data!)
+        const liveStudies: { reference: string; topic: string; date: string; tag: string }[] = [];
+        const seen = new Set<string>();
+
+        if (recallRows && Array.isArray(recallRows)) {
+          recallRows.forEach((r: any) => {
+            if (r.verse_reference && !seen.has(r.verse_reference)) {
+              seen.add(r.verse_reference);
+              liveStudies.push({
+                reference: r.verse_reference,
+                topic: resolveTrackName(r.track_id),
+                date: formatNoteDate(r.last_review_at || r.updated_at),
+                tag: r.track_id?.includes("sanctuary") ? "Sanctuary" : r.track_id?.includes("three-angels") ? "Prophecy" : "Doctrine"
+              });
+            }
           });
         }
-      }
-    } catch (e) {}
 
-    if (list.length === 0) {
-      return [
-        {
-          reference: "Hebrews 8:1–6",
-          topic: "The Heavenly Sanctuary & Better Covenant",
-          date: "2 days ago",
-          tag: "Sanctuary"
-        },
-        {
-          reference: "Revelation 14:6–12",
-          topic: "Three Angels' Messages & Remnant Calling",
-          date: "3 days ago",
-          tag: "Prophecy"
-        },
-        {
-          reference: "Exodus 20:8–11",
-          topic: "The Fourth Commandment Memorial & Seal",
-          date: "May 20",
-          tag: "Decalogue"
-        },
-        {
-          reference: "Daniel 8:14",
-          topic: "The 2,300 Days & Cleansing of the Sanctuary",
-          date: "May 18",
-          tag: "Prophecy"
-        },
-        {
-          reference: "Romans 8:1–4",
-          topic: "The Law of the Spirit of Life in Christ Jesus",
-          date: "May 16",
-          tag: "Doctrine"
-        },
-        {
-          reference: "Leviticus 16:15–22",
-          topic: "The Day of Atonement & Eradication of Sin",
-          date: "May 14",
-          tag: "Sanctuary"
+        if (trackRows && Array.isArray(trackRows)) {
+          trackRows.forEach((t: any) => {
+            if (Array.isArray(t.studied_texts)) {
+              t.studied_texts.forEach((verse: string) => {
+                if (!seen.has(verse)) {
+                  seen.add(verse);
+                  liveStudies.push({
+                    reference: verse,
+                    topic: t.track_name || resolveTrackName(t.track_id),
+                    date: formatNoteDate(t.updated_at),
+                    tag: t.track_id?.includes("sanctuary") ? "Sanctuary" : t.track_id?.includes("three-angels") ? "Prophecy" : "Doctrine"
+                  });
+                }
+              });
+            }
+          });
         }
-      ];
-    }
-    return list;
-  });
+
+        // Compute 4 learning journey stats strictly from live database values
+        let totalVersesMastered = 0;
+        let totalAttempts = 0;
+        let totalSuccesses = 0;
+        if (recallRows && Array.isArray(recallRows)) {
+          recallRows.forEach((r: any) => {
+            if (r.mastery_level >= 2) totalVersesMastered++;
+            totalAttempts += r.attempts || 0;
+            totalSuccesses += r.successes || 0;
+          });
+        }
+
+        let totalStudiedTexts = 0;
+        let totalTeachScore = 0;
+        let teachCount = 0;
+        let recallScoreSum = 0;
+        let recallCount = 0;
+
+        if (trackRows && Array.isArray(trackRows)) {
+          trackRows.forEach((t: any) => {
+            if (Array.isArray(t.studied_texts)) totalStudiedTexts += t.studied_texts.length;
+            if (t.teach_it && typeof t.teach_it.score === "number" && t.teach_it.score > 0) {
+              totalTeachScore += t.teach_it.score;
+              teachCount++;
+            }
+            if (t.active_recall && typeof t.active_recall.score === "number" && t.active_recall.score > 0) {
+              recallScoreSum += t.active_recall.score;
+              recallCount++;
+            }
+          });
+        }
+
+        // Calculate accurate percentages (strictly 0 for new or empty database states)
+        const scriptureMastery = Math.min(100, Math.round((totalVersesMastered / 10) * 100));
+        const doctrineMastery = Math.min(100, Math.round((totalStudiedTexts / 28) * 100));
+        const activeRecall = totalAttempts > 0
+          ? Math.min(100, Math.round((totalSuccesses / totalAttempts) * 100))
+          : recallCount > 0
+          ? Math.min(100, Math.round(recallScoreSum / recallCount))
+          : 0;
+        const teachingConfidence = teachCount > 0
+          ? Math.min(100, Math.round(totalTeachScore / teachCount))
+          : 0;
+
+        if (isMounted) {
+          setRecentStudiesList(liveStudies.slice(0, 6));
+          setIsRecentStudiesLoading(false);
+          setJourneyStats({
+            scriptureMastery,
+            doctrineMastery,
+            activeRecall,
+            teachingConfidence
+          });
+        }
+      } catch (err) {
+        console.warn("Failed fetching live dashboard telemetry from Supabase:", err);
+        if (isMounted) {
+          setRecentStudiesList([]);
+          setIsRecentStudiesLoading(false);
+          setJourneyStats({ scriptureMastery: 0, doctrineMastery: 0, activeRecall: 0, teachingConfidence: 0 });
+        }
+      }
+    };
+
+    fetchLiveDashboardData();
+  }, [user, completedVerseIds]);
 
   // Local SDA theological fallback for Weekly Study Recap
   const createLocalWeeklyRecapFallback = (
@@ -407,26 +420,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const periodStr = `${startOfWeek.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
 
     const vaultCount = vaultList.length > 0 ? vaultList.length : completedVersesCount;
+    const hasActivity = vaultCount > 0 || completedVersesCount > 0;
 
     return {
       title: "Weekly Scripture Mastery & Doctrinal Recap",
       period: periodStr,
-      overview: `Brother/Sister ${name}, your discipleship journey this week demonstrates faithful momentum across Scripture retention and historic Adventist doctrine. You have reinforced critical pillars in your Memory Vault (${vaultCount} active verses) while maintaining structured study habits across your tracks.`,
+      overview: hasActivity
+        ? `Brother/Sister ${name}, your discipleship journey this week demonstrates faithful momentum across Scripture retention and historic Adventist doctrine. You have reinforced critical pillars in your Memory Vault (${vaultCount} active verses) while maintaining structured study habits across your tracks.`
+        : `Brother/Sister ${name}, welcome to your spiritual study journal. You have no recorded verse completions or active track milestones yet. Explore a theological study track or start an Active Recall session to generate your personalized weekly mastery report.`,
       stats: {
-        masteredCount: Math.max(vaultCount, 6),
-        streakDays: 7,
-        totalMinutes: 120,
-        overallMastery: 84
+        masteredCount: vaultCount,
+        streakDays: hasActivity && user ? 1 : 0,
+        totalMinutes: completedVersesCount * 15,
+        overallMastery: completedVersesCount > 0 ? Math.min(100, completedVersesCount * 10) : 0
       },
-      masteredConcepts: defaultMastered,
-      suggestedReviewAreas: defaultReviews,
-      scriptureMilestones: [
+      masteredConcepts: hasActivity ? defaultMastered.slice(0, Math.min(defaultMastered.length, vaultCount || 1)) : [],
+      suggestedReviewAreas: hasActivity ? defaultReviews : [],
+      scriptureMilestones: hasActivity ? [
         { ref: "2 Timothy 2:15", desc: "Rightly dividing the word of truth as an approved workman" },
         { ref: "Revelation 14:12", desc: "Here is the patience of the saints, keeping the commandments of God" },
         { ref: "Daniel 8:14", desc: "Unto two thousand and three hundred days; then shall the sanctuary be cleansed" }
-      ],
+      ] : [],
       pastoralEncouragement: `“Study to shew thyself approved unto God, a workman that needeth not to be ashamed” (2 Timothy 2:15). Beloved student, true scripture mastery is not merely intellectual accumulation; it is letting the Holy Spirit write God's living law upon the fleshy tables of your heart. Continue abiding in Christ, our living High Priest in the heavenly sanctuary.`,
-      nextAction: "Focus on Daniel 8–9 prophetic timeline exegesis in Bible Study Mode to solidify your sanctuary proofs."
+      nextAction: hasActivity 
+        ? "Focus on Daniel 8–9 prophetic timeline exegesis in Bible Study Mode to solidify your sanctuary proofs."
+        : "Begin your first study in Theological Study Tracks to establish your foundational mastery."
     };
   };
 
@@ -443,30 +461,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
         }
       } catch (e) {}
 
-      if (!vaultVerses || vaultVerses.length === 0) {
-        vaultVerses = [
-          { reference: "2 Timothy 2:15", text: "Study to shew thyself approved...", trackLabel: "28 Fundamentals", recallsCount: 3, notes: "Baseline for personal theological discipline." },
-          { reference: "Revelation 14:12", text: "Here is the patience of the saints: here are they that keep the commandments of God, and the faith of Jesus.", trackLabel: "Three Angels", recallsCount: 2, notes: "Climax statement summarizing remnant character." },
-          { reference: "Daniel 8:14", text: "Unto two thousand and three hundred days; then shall the sanctuary be cleansed.", trackLabel: "Sanctuary Doctrine", recallsCount: 4, notes: "Investigative judgment prophetic timeline." },
-          { reference: "Exodus 20:8-11", text: "Remember the sabbath day, to keep it holy...", trackLabel: "Sabbath School", recallsCount: 3, notes: "Creation memorial in Decalogue." },
-          { reference: "Hebrews 8:1-2", text: "We have such an high priest...", trackLabel: "Sanctuary Doctrine", recallsCount: 3, notes: "Christ minister of the true tabernacle." }
-        ];
-      }
-
       try {
         const rawTracks = localStorage.getItem("stba_tracks_progress");
         if (rawTracks) {
           tracksProgress = JSON.parse(rawTracks);
         }
       } catch (e) {}
-
-      if (!tracksProgress || tracksProgress.length === 0) {
-        tracksProgress = [
-          { title: "28 Fundamental Beliefs", completed: Math.max(completedVerseIds.length, 6), total: 26 },
-          { title: "Three Angels' Messages", completed: 4, total: 12 },
-          { title: "Sanctuary Doctrine", completed: 3, total: 9 }
-        ];
-      }
 
       const recentPayload = recentStudiesList.map(s => `${s.reference} (${s.topic})`);
       const statsSnapshot = aggregateUserStats(user, completedVerseIds, favoriteScriptures);
@@ -1120,48 +1120,38 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
     };
   };
 
-  // Dynamically load all saved notes from Notebook storage, merged with default entries
-  const [allNotebookEntries, setAllNotebookEntries] = useState(() => {
-    try {
-      const stored = loadNotes();
-      if (stored && stored.length > 0) {
-        const mapped = stored.map(mapStudyNoteToEntry);
-        const existingTitles = new Set(mapped.map((m) => m.title.toLowerCase()));
-        const additionalDefaults = DEFAULT_NOTEBOOK_ENTRIES.filter(
-          (d) => !existingTitles.has(d.title.toLowerCase())
-        );
-        return [...mapped, ...additionalDefaults];
-      }
-    } catch (e) {
-      console.warn("Failed loading notebook notes in Dashboard", e);
-    }
-    return DEFAULT_NOTEBOOK_ENTRIES;
-  });
+  // Dynamically load saved notes directly from Supabase (strictly reflecting live database state)
+  const [allNotebookEntries, setAllNotebookEntries] = useState<any[]>([]);
 
   useEffect(() => {
-    const refreshNotes = () => {
+    let isMounted = true;
+    const loadLiveNotes = async () => {
       try {
-        const stored = loadNotes();
-        if (stored && stored.length > 0) {
-          const mapped = stored.map(mapStudyNoteToEntry);
-          const existingTitles = new Set(mapped.map((m) => m.title.toLowerCase()));
-          const additionalDefaults = DEFAULT_NOTEBOOK_ENTRIES.filter(
-            (d) => !existingTitles.has(d.title.toLowerCase())
-          );
-          setAllNotebookEntries([...mapped, ...additionalDefaults]);
+        const liveNotes = await fetchNotesFromSupabase();
+        if (isMounted) {
+          setAllNotebookEntries(liveNotes.map(mapStudyNoteToEntry));
         }
       } catch (e) {
-        console.warn("Error refreshing notes in Dashboard", e);
+        if (isMounted) {
+          setAllNotebookEntries([]);
+        }
       }
+    };
+
+    loadLiveNotes();
+
+    const refreshNotes = () => {
+      loadLiveNotes();
     };
 
     window.addEventListener("storage", refreshNotes);
     window.addEventListener("stba_notebook_updated", refreshNotes);
     return () => {
+      isMounted = false;
       window.removeEventListener("storage", refreshNotes);
       window.removeEventListener("stba_notebook_updated", refreshNotes);
     };
-  }, []);
+  }, [user]);
 
   // Backward-compatible alias for legacy references
   const notebookEntries = allNotebookEntries;
@@ -1511,10 +1501,10 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
             {/* 4 Circular Gauge Progress Rings with smooth animations */}
             <div className="grid grid-cols-4 gap-2 my-auto py-2">
               {[
-                { label: "Scripture Mastery", value: 72, color: "#F3CF65" },
-                { label: "Doctrine Mastery", value: 68, color: "#2A9D8F" },
-                { label: "Active Recall", value: 81, color: "#E76F51" },
-                { label: "Teaching Confidence", value: 63, color: "#E9C46A" }
+                { label: "Scripture Mastery", value: journeyStats.scriptureMastery, color: "#F3CF65" },
+                { label: "Doctrine Mastery", value: journeyStats.doctrineMastery, color: "#2A9D8F" },
+                { label: "Active Recall", value: journeyStats.activeRecall, color: "#E76F51" },
+                { label: "Teaching Confidence", value: journeyStats.teachingConfidence, color: "#E9C46A" }
               ].map((item, idx) => {
                 const radius = 22;
                 const circumference = 2 * Math.PI * radius;
@@ -1716,14 +1706,10 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
               </form>
 
               {/* Dynamic Pre-loaded Answers Lineup with Continuous Scroll */}
-              <div className="space-y-2 flex-1 flex flex-col min-h-0">
-                <div className="flex items-center justify-between">
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex items-center justify-center text-center pt-1 pb-3">
                   <span className="text-xs sm:text-sm font-lato font-['Lato',sans-serif] uppercase tracking-wider text-[#F3CF65] font-bold block">
                     Pre-loaded Answers Lineup:
-                  </span>
-                  <span className="text-xs font-lato font-['Lato',sans-serif] text-[#F3CF65] flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#F3CF65] animate-pulse" />
-                    {preloadedAnswers.length} Questions • Scroll
                   </span>
                 </div>
 
@@ -1733,38 +1719,48 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                   aria-label="Pre-loaded Scripture and Doctrine questions list"
                   className="flex-1 min-h-0 max-h-[300px] sm:max-h-[340px] overflow-y-auto overscroll-contain space-y-2 pr-1.5 notebook-card-scroll"
                 >
-                  {preloadedAnswers.slice(0, 6).map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => handleSelectPreloadedAnswer(item)}
-                      className="w-full px-3.5 py-3 sm:py-3.5 rounded-2xl bg-[#06162c]/70 hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/50 text-stone-200 hover:text-white transition-all flex items-center justify-between text-left cursor-pointer group font-lato font-['Lato',sans-serif] shadow-xs active:scale-[0.99]"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                        <MessageSquare className="w-4 h-4 text-stone-400 group-hover:text-[#F3CF65] shrink-0" />
-                        <div className="min-w-0">
-                          <span className="truncate block font-semibold group-hover:text-white text-sm sm:text-base text-stone-100">
-                            {item.question}
-                          </span>
-                          <span className="text-xs sm:text-sm text-stone-300 block truncate mt-0.5">
-                            {item.reference} • {item.topic}
-                          </span>
+                  {preloadedAnswers.length === 0 ? (
+                    <div className="p-6 text-center rounded-2xl bg-[#06162c]/50 border border-dashed border-[#0d3060] text-stone-400 font-lato">
+                      <MessageSquare className="w-6 h-6 mx-auto mb-2 text-[#F3CF65]/60" />
+                      <p className="text-sm text-stone-300 font-semibold">No questions answered yet</p>
+                      <p className="text-xs text-stone-400 mt-1 max-w-xs mx-auto">
+                        Type any Scripture reference or theological topic above to generate your first Berean answer lineup.
+                      </p>
+                    </div>
+                  ) : (
+                    preloadedAnswers.slice(0, 6).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleSelectPreloadedAnswer(item)}
+                        className="w-full px-3.5 py-3 sm:py-3.5 rounded-2xl bg-[#06162c]/70 hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/50 text-stone-200 hover:text-white transition-all flex items-center justify-between text-left cursor-pointer group font-lato font-['Lato',sans-serif] shadow-xs active:scale-[0.99]"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                          <MessageSquare className="w-4 h-4 text-stone-400 group-hover:text-[#F3CF65] shrink-0" />
+                          <div className="min-w-0">
+                            <span className="truncate block font-semibold group-hover:text-white text-sm sm:text-base text-stone-100">
+                              {item.question}
+                            </span>
+                            <span className="text-xs sm:text-sm text-stone-300 block truncate mt-0.5">
+                              {item.reference} • {item.topic}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {item.isRecent ? (
-                          <span className="text-[10px] sm:text-xs font-lato font-semibold px-2 py-0.5 rounded-full bg-[#F3CF65]/15 text-[#F3CF65] border border-[#F3CF65]/30">
-                            Recent
-                          </span>
-                        ) : (
-                          <span className="text-[10px] sm:text-xs font-lato font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                            Loaded
-                          </span>
-                        )}
-                        <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-[#F3CF65] group-hover:translate-x-0.5 transition-transform" />
-                      </div>
-                    </button>
-                  ))}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {item.isRecent ? (
+                            <span className="text-[10px] sm:text-xs font-lato font-semibold px-2 py-0.5 rounded-full bg-[#F3CF65]/15 text-[#F3CF65] border border-[#F3CF65]/30">
+                              Recent
+                            </span>
+                          ) : (
+                            <span className="text-[10px] sm:text-xs font-lato font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                              Loaded
+                            </span>
+                          )}
+                          <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-[#F3CF65] group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -1820,13 +1816,13 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                 >
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-lato text-stone-300">
                     <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-medium">
-                      {weeklyRecap.masteredConcepts?.length || 3} Mastered
+                      {weeklyRecap.masteredConcepts?.length ?? 0} Mastered
                     </span>
                     <span className="px-2 py-0.5 rounded-lg bg-[#E5B842]/10 text-[#F3CF65] border border-[#E5B842]/20 font-medium">
-                      {weeklyRecap.suggestedReviewAreas?.length || 3} Review Areas
+                      {weeklyRecap.suggestedReviewAreas?.length ?? 0} Review Areas
                     </span>
                     <span className="text-stone-300 ml-auto font-medium">
-                      {weeklyRecap.stats?.overallMastery || 84}% Mastery
+                      {weeklyRecap.stats?.overallMastery ?? 0}% Mastery
                     </span>
                   </div>
                 </div>
@@ -1852,30 +1848,43 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                 aria-label="Recent Studies list"
                 className="space-y-2 overflow-y-auto overscroll-contain max-h-[175px] sm:max-h-[200px] notebook-card-scroll pr-1 focus:outline-none"
               >
-                {recentStudiesList.slice(0, 6).map((study, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => handleStartBibleStudyLesson(study.reference, study.topic)}
-                    className="p-2.5 sm:p-3 rounded-xl bg-[#06162c] hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/40 transition-all cursor-pointer flex items-center justify-between gap-2.5 group shrink-0"
-                  >
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-lato font-bold text-sm sm:text-base text-[#F3CF65] group-hover:underline truncate">
-                          {study.reference}
-                        </span>
-                        <span className="text-[10px] sm:text-xs font-lato px-2 py-0.5 rounded-full bg-[#0d3060] text-stone-200 border border-[#1b3a6b] font-medium shrink-0">
-                          {study.tag}
-                        </span>
-                      </div>
-                      <p className="text-xs sm:text-sm text-stone-300 truncate font-lato">
-                        {study.topic}
-                      </p>
-                    </div>
-                    <div className="p-1.5 rounded-lg bg-[#0d3060]/70 group-hover:bg-[#E5B842] text-[#F3CF65] group-hover:text-stone-950 transition-colors shrink-0">
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                    </div>
+                {recentStudiesList.length === 0 ? (
+                  <div className="p-3 text-center rounded-xl bg-[#06162c]/50 border border-[#0d3060] text-stone-400 text-xs font-sans">
+                    No recent study sessions recorded yet. Start your first lesson in{" "}
+                    <Link to="/tracks" className="text-[#F3CF65] hover:underline">
+                      Study Tracks
+                    </Link>{" "}
+                    or{" "}
+                    <Link to="/stba" className="text-[#F3CF65] hover:underline">
+                      Bible Study Mode
+                    </Link>.
                   </div>
-                ))}
+                ) : (
+                  recentStudiesList.slice(0, 6).map((study, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleStartBibleStudyLesson(study.reference, study.topic)}
+                      className="p-2.5 sm:p-3 rounded-xl bg-[#06162c] hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/40 transition-all cursor-pointer flex items-center justify-between gap-2.5 group shrink-0"
+                    >
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-lato font-bold text-sm sm:text-base text-[#F3CF65] group-hover:underline truncate">
+                            {study.reference}
+                          </span>
+                          <span className="text-[10px] sm:text-xs font-lato px-2 py-0.5 rounded-full bg-[#0d3060] text-stone-200 border border-[#1b3a6b] font-medium shrink-0">
+                            {study.tag}
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-stone-300 truncate font-lato">
+                          {study.topic}
+                        </p>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-[#0d3060]/70 group-hover:bg-[#E5B842] text-[#F3CF65] group-hover:text-stone-950 transition-colors shrink-0">
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -2866,7 +2875,6 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
               {(() => {
                 const note =
                   allNotebookEntries.find((n) => n.id === showNoteModal) ||
-                  DEFAULT_NOTEBOOK_ENTRIES.find((n) => n.id === showNoteModal) ||
                   (() => {
                     const fallbackStored = loadNotes().find((n) => n.id === showNoteModal);
                     return fallbackStored ? mapStudyNoteToEntry(fallbackStored) : null;
@@ -3078,7 +3086,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                     Mastered Verses
                   </span>
                   <div className="text-xl sm:text-2xl font-serif font-black text-[#F3CF65]">
-                    {weeklyRecap.stats?.masteredCount || completedVerseIds.length || 6}
+                    {weeklyRecap.stats?.masteredCount ?? completedVerseIds.length ?? 0}
                   </div>
                   <span className="text-[9px] font-mono text-emerald-400 flex items-center justify-center gap-0.5">
                     <CheckCircle2 className="w-2.5 h-2.5" /> Memory Vault
@@ -3090,7 +3098,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                     Study Streak
                   </span>
                   <div className="text-xl sm:text-2xl font-serif font-black text-[#DFC57B]">
-                    {weeklyRecap.stats?.streakDays || 7} Days
+                    {weeklyRecap.stats?.streakDays ?? 0} Days
                   </div>
                   <span className="text-[9px] font-mono text-[#F3CF65] flex items-center justify-center gap-0.5">
                     <Flame className="w-2.5 h-2.5" /> Active Momentum
@@ -3102,7 +3110,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                     Time in Word
                   </span>
                   <div className="text-xl sm:text-2xl font-serif font-black text-[#F3CF65]">
-                    {weeklyRecap.stats?.totalMinutes || 120} Min
+                    {weeklyRecap.stats?.totalMinutes ?? 0} Min
                   </div>
                   <span className="text-[9px] font-mono text-stone-400 flex items-center justify-center gap-0.5">
                     <Clock className="w-2.5 h-2.5" /> Deep Exegesis
@@ -3114,7 +3122,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                     Mastery Score
                   </span>
                   <div className="text-xl sm:text-2xl font-serif font-black text-emerald-400">
-                    {weeklyRecap.stats?.overallMastery || 84}%
+                    {weeklyRecap.stats?.overallMastery ?? 0}%
                   </div>
                   <span className="text-[9px] font-mono text-emerald-400 flex items-center justify-center gap-0.5">
                     <Award className="w-2.5 h-2.5" /> Approved Workman

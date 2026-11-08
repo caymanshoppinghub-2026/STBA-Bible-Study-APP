@@ -111,18 +111,16 @@ export const SEED_NOTES: StudyNote[] = [
   }
 ]
 
-const LS_KEY = 'stba_notebook_notes'
+const LS_KEY = 'stba_notebook_notes_v2'
 
 export function loadNotes(): StudyNote[] {
   try {
+    localStorage.removeItem('stba_notebook_notes')
+    localStorage.removeItem('stba_study_notes')
     const s = localStorage.getItem(LS_KEY)
     let rawNotes: StudyNote[] = []
     if (!s) {
-      rawNotes = SEED_NOTES.map((n, idx) => ({
-        ...n,
-        expanded: false,
-        order: typeof n.order === 'number' ? n.order : idx
-      }))
+      return []
     } else {
       const parsed = JSON.parse(s)
       if (Array.isArray(parsed)) {
@@ -143,11 +141,7 @@ export function loadNotes(): StudyNote[] {
           }
         })
       } else {
-        rawNotes = SEED_NOTES.map((n, idx) => ({
-          ...n,
-          expanded: false,
-          order: typeof n.order === 'number' ? n.order : idx
-        }))
+        return []
       }
     }
 
@@ -187,11 +181,7 @@ export function loadNotes(): StudyNote[] {
 
     return rawNotes;
   } catch {
-    return SEED_NOTES.map((n, idx) => ({
-      ...n,
-      expanded: false,
-      order: typeof n.order === 'number' ? n.order : idx
-    }))
+    return []
   }
 }
 

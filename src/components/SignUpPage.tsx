@@ -27,6 +27,8 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { useApp } from "../context/AppContext";
 import { STBA_LOGO_URL } from "../assets/branding";
+import { supabase } from "../lib/supabase";
+import { ensureInitialUserTrackProgress } from "../lib/trackSync";
 
 // Cloudinary Background Videos per Tier
 const TIER_VIDEOS: Record<TierType, string> = {
@@ -442,17 +444,69 @@ export const SignUpPage: React.FC = () => {
       const tierCapitalized = (selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)) as "Beginner" | "Scholar" | "Leader";
       localStorage.setItem("stba_user_tier", tierCapitalized);
 
+      // Authenticate / Register in Supabase Auth
+      let authUserId: string | null = null;
+      let resolvedCreatedAt = new Date().toISOString();
+      try {
+        const { data: authData, error: authErr } = await supabase.auth.signUp({
+          email: email.trim(),
+          password: password,
+          options: {
+            data: {
+              name: fullName.trim(),
+              role: (selectedTier === "leader" ? "Pastor" : "STBAScholar"),
+              isSda: true,
+              firstTrack: "fundamental-beliefs",
+              tier: tierCapitalized,
+              stba_user_tier: tierCapitalized,
+              emailVerified: true,
+              createdAt: resolvedCreatedAt
+            }
+          }
+        });
+        if (authData?.user) {
+          authUserId = authData.user.id;
+          resolvedCreatedAt =
+            authData.user.user_metadata?.createdAt ||
+            authData.user.user_metadata?.created_at ||
+            authData.user.created_at ||
+            resolvedCreatedAt;
+        } else if (authErr) {
+          const { data: signInData } = await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password: password
+          });
+          if (signInData?.user) {
+            authUserId = signInData.user.id;
+            resolvedCreatedAt =
+              signInData.user.user_metadata?.createdAt ||
+              signInData.user.user_metadata?.created_at ||
+              signInData.user.created_at ||
+              resolvedCreatedAt;
+          }
+        }
+      } catch (sbErr) {
+        console.warn("Supabase auth registration exception:", sbErr);
+      }
+
       const registeredUser = {
         name: fullName.trim(),
         email: email.trim(),
         isSda: true,
         firstTrack: "fundamental-beliefs",
         role: (selectedTier === "leader" ? "Pastor" : "STBAScholar") as any,
+        tier: tierCapitalized,
         isGuest: false,
-        emailVerified: true
+        emailVerified: true,
+        createdAt: resolvedCreatedAt
       };
 
       setUser(registeredUser);
+
+      // Initialize baseline live records in Supabase
+      if (authUserId) {
+        await ensureInitialUserTrackProgress(authUserId, "fundamental-beliefs");
+      }
 
       localStorage.setItem("stba_onboarding_explain_first", "true");
       localStorage.setItem("stba_onboarding_pending", "true");

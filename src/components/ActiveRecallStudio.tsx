@@ -149,10 +149,69 @@ export const ActiveRecallStudio: React.FC = () => {
     checkScroll();
     const el = tabsContainerRef.current;
     if (!el) return;
+
+    let startX = 0;
+    let startY = 0;
+    let startScrollLeft = 0;
+    let isHorizontalSwipe = false;
+
+    // Intercept horizontal trackpad/wheel gestures to prevent browser Back/Forward page navigation
+    // and ensure identical smooth scrolling in both right-to-left and left-to-right directions.
+    const handleWheel = (e: WheelEvent) => {
+      const absX = Math.abs(e.deltaX);
+      const absY = Math.abs(e.deltaY);
+      if (absX > 0 || e.shiftKey) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        e.stopPropagation();
+        const delta = absX >= absY ? e.deltaX : e.deltaY;
+        el.scrollLeft += delta;
+        checkScroll();
+      }
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      startScrollLeft = el.scrollLeft;
+      isHorizontalSwipe = false;
+      e.stopPropagation();
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const currentX = e.touches[0].clientX;
+      const currentY = e.touches[0].clientY;
+      const dx = currentX - startX;
+      const dy = currentY - startY;
+
+      if (!isHorizontalSwipe && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 3) {
+        isHorizontalSwipe = true;
+      }
+
+      if (isHorizontalSwipe) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        e.stopPropagation();
+        el.scrollLeft = startScrollLeft - dx;
+        checkScroll();
+      }
+    };
+
     el.addEventListener("scroll", checkScroll, { passive: true });
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    el.addEventListener("touchstart", handleTouchStart, { passive: true });
+    el.addEventListener("touchmove", handleTouchMove, { passive: false });
     window.addEventListener("resize", checkScroll);
+
     return () => {
       el.removeEventListener("scroll", checkScroll);
+      el.removeEventListener("wheel", handleWheel);
+      el.removeEventListener("touchstart", handleTouchStart);
+      el.removeEventListener("touchmove", handleTouchMove);
       window.removeEventListener("resize", checkScroll);
     };
   }, []);
@@ -160,12 +219,18 @@ export const ActiveRecallStudio: React.FC = () => {
   // When activeTab changes, automatically scroll it fully into view cleanly
   useEffect(() => {
     const activeEl = document.getElementById(`tab-recall-${activeTab}`);
-    if (activeEl && tabsContainerRef.current) {
-      activeEl.scrollIntoView({
-        behavior: "smooth",
-        inline: "nearest",
-        block: "nearest"
-      });
+    const container = tabsContainerRef.current;
+    if (activeEl && container) {
+      const containerRect = container.getBoundingClientRect();
+      const activeRect = activeEl.getBoundingClientRect();
+      const offsetLeft = activeRect.left - containerRect.left;
+      const offsetRight = activeRect.right - containerRect.right;
+
+      if (offsetLeft < 12) {
+        container.scrollBy({ left: offsetLeft - 24, behavior: "smooth" });
+      } else if (offsetRight > -12) {
+        container.scrollBy({ left: offsetRight + 24, behavior: "smooth" });
+      }
     }
     const timer = setTimeout(checkScroll, 350);
     return () => clearTimeout(timer);
@@ -186,7 +251,7 @@ export const ActiveRecallStudio: React.FC = () => {
     <div
       className="w-full h-full flex flex-col min-h-0 text-[#1A1A1A]"
       id="recall-studio-root"
-      style={{ flex: "1 1 0%" }}
+      style={{ flex: "1 1 0%", overscrollBehaviorX: "none" }}
     >
       <div
         className="w-full overflow-y-auto scroll-smooth pt-4 pb-32 sm:pb-8 px-4 md:px-8 space-y-6"
@@ -194,6 +259,7 @@ export const ActiveRecallStudio: React.FC = () => {
         style={{
           overflowY: "auto",
           WebkitOverflowScrolling: "touch",
+          overscrollBehaviorX: "none",
           height: "100%",
           flex: "1 1 auto"
         }}
@@ -230,7 +296,11 @@ export const ActiveRecallStudio: React.FC = () => {
         </header>
 
         {/* CORE WORKSPACE TAB NAVIGATION STRIP (GOLD-TRIMMED SINGLE HORIZONTAL LINE WITH SCROLL CONTROLS) */}
-        <div className="max-w-6xl mx-auto space-y-2 select-none" id="recall-tabs-bar">
+        <div
+          className="max-w-6xl mx-auto space-y-2 select-none"
+          id="recall-tabs-bar"
+          style={{ overscrollBehaviorX: "none", touchAction: "pan-x" }}
+        >
           {/* Centered Golden Header */}
           <div className="flex items-center justify-center w-full text-center text-[11px]">
             <span className="font-mono text-[#DFC57B] font-bold uppercase tracking-widest">
@@ -255,14 +325,16 @@ export const ActiveRecallStudio: React.FC = () => {
               </div>
             )}
 
-            {/* Scrollable button container - justify-start, no negative scroll clipping */}
+            {/* Scrollable button container - touch-action: pan-x & overscroll-behavior-x: none isolates horizontal scrolling */}
             <div
               ref={tabsContainerRef}
               onScroll={checkScroll}
-              className="flex flex-row flex-nowrap items-center justify-start gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar py-2 px-3 scroll-smooth w-full"
+              className="workspace-tools-carousel flex flex-row flex-nowrap items-center justify-start gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar py-2 px-3 w-full touch-pan-x"
               style={{
                 WebkitOverflowScrolling: "touch",
-                scrollSnapType: "x proximity"
+                touchAction: "pan-x",
+                overscrollBehaviorX: "none",
+                scrollBehavior: "auto"
               }}
             >
               {tabsList.map((tab) => {
@@ -273,6 +345,7 @@ export const ActiveRecallStudio: React.FC = () => {
                   <button
                     key={tab.id}
                     id={`tab-recall-${tab.id}`}
+                    type="button"
                     onClick={() => {
                       setActiveTab(tab.id);
                       // Erase router state scripture if switching tabs to avoid sticky loading
@@ -280,16 +353,15 @@ export const ActiveRecallStudio: React.FC = () => {
                         navigate(location.pathname, { replace: true, state: null });
                       }
                     }}
-                    style={{ scrollSnapAlign: "center" }}
-                    className={`shrink-0 flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-sans font-semibold transition-all duration-200 ease-out cursor-pointer border select-none hover:-translate-y-[2.5px] hover:shadow-[0_4px_16px_rgba(223,197,123,0.3)] active:translate-y-0 active:scale-[0.98] ${
+                    className={`workspace-tool-btn shrink-0 inline-flex items-center justify-center gap-2 min-h-[40px] px-4 py-2.5 rounded-xl sm:rounded-2xl text-xs font-sans font-semibold transition-all duration-200 ease-out cursor-pointer border select-none hover:-translate-y-[2px] hover:shadow-[0_4px_16px_rgba(223,197,123,0.3)] active:translate-y-0 active:scale-[0.98] ${
                       isSelected
-                        ? "bg-[#0d3060] text-white border-[#DFC57B] shadow-[0_0_12px_rgba(223,197,123,0.35)] ring-1 ring-[#DFC57B]"
+                        ? "workspace-tool-btn-active bg-[#0d3060] text-white border-[#DFC57B] shadow-[0_0_12px_rgba(223,197,123,0.35)] ring-1 ring-[#DFC57B]"
                         : "bg-[#06162c] text-stone-200 border-[#DFC57B]/70 hover:border-[#F3CF65] hover:bg-[#0d3060]/70 hover:text-white"
                     }`}
                     title={tab.desc}
                   >
                     <Icon className="w-4 h-4 text-[#DFC57B] shrink-0 drop-shadow-[0_0_4px_rgba(223,197,123,0.4)]" />
-                    <span className="whitespace-nowrap tracking-wide">{tab.label}</span>
+                    <span className="whitespace-nowrap tracking-wide leading-none">{tab.label}</span>
                   </button>
                 );
               })}
@@ -324,6 +396,7 @@ export const ActiveRecallStudio: React.FC = () => {
                 isEmbedded={true}
                 onBack={() => setActiveTab("spaced")}
                 onComplete={handleRecallComplete}
+                onInspectGrid={() => setActiveTab("grid")}
               />
             </motion.div>
           )}

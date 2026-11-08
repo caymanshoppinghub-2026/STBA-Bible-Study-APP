@@ -238,7 +238,7 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
 
   const addToRecall = (scrip: string) => {
     try {
-      const saved = localStorage.getItem("stba_memory_vault_list")
+      const saved = localStorage.getItem("stba_memory_vault_list_v2")
       let list: any[] = []
       if (saved) {
         try {
@@ -265,7 +265,7 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
           relatedWhiteQuote: "Study with prayer and absolute focus, for the truth of God satisfies the soul."
         }
         list.unshift(newObj)
-        localStorage.setItem("stba_memory_vault_list", JSON.stringify(list))
+        localStorage.setItem("stba_memory_vault_list_v2", JSON.stringify(list))
       }
       triggerToast("Added to Recall Schedule")
     } catch (err) {

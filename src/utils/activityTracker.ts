@@ -53,9 +53,9 @@ export interface HeatmapWeekColumn {
   days: (HeatmapDayCell | null)[]; // exactly 7 slots (0..6)
 }
 
-const STORAGE_KEY = "stba_daily_activity_map";
-const STREAK_KEY = "stba_study_streak_count";
-const WEEKLY_DAYS_KEY = "stba_weekly_streak_days";
+const STORAGE_KEY = "stba_daily_activity_map_v2";
+const STREAK_KEY = "stba_study_streak_count_v2";
+const WEEKLY_DAYS_KEY = "stba_weekly_streak_days_v2";
 
 /**
  * Format Date to YYYY-MM-DD in local time
@@ -84,85 +84,8 @@ export function calculateActivityLevel(
 /**
  * Generate seed data if no records exist yet
  */
-function generateSeedActivityMap(hasCompletedSession: boolean): Record<string, DayActivityRecord> {
-  const map: Record<string, DayActivityRecord> = {};
-  const today = new Date();
-
-  // If user has completed a session, seed a rich, realistic devotional history for the past 6 months
-  // If not, seed a minimal starting activity so they can see the rhythm
-  const daysToSeed = hasCompletedSession ? 180 : 14;
-
-  for (let i = daysToSeed; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    const dateStr = formatIsoDate(d);
-    const dayOfWeek = d.getDay(); // 0 = Sun, 6 = Sat
-
-    // Create realistic pattern: higher on Sabbath (6) and Friday prep (5), consistent weekdays
-    const isSabbath = dayOfWeek === 6;
-    const isPrep = dayOfWeek === 5;
-    const isRestDay = !hasCompletedSession && (dayOfWeek === 2 || dayOfWeek === 4);
-
-    if (isRestDay && i > 3) {
-      map[dateStr] = {
-        date: dateStr,
-        studyMinutes: 0,
-        totalActivities: 0,
-        modules: {
-          bibleStudy: 0,
-          activeRecall: 0,
-          memoryVault: 0,
-          notebook: 0,
-          studyTracks: 0,
-          sabbathSchool: 0,
-          teachIt: 0,
-          doctrine: 0
-        },
-        level: 0
-      };
-      continue;
-    }
-
-    const bibleCount = isSabbath ? 4 : isPrep ? 3 : 2;
-    const recallCount = isSabbath ? 5 : 2;
-    const vaultCount = isSabbath ? 3 : 1;
-    const noteCount = isSabbath ? 2 : 1;
-    const trackCount = isSabbath ? 1 : 1;
-    const sabbathSchoolCount = isSabbath ? 4 : 1;
-    const teachCount = isSabbath ? 2 : 0;
-    const doctrineCount = isSabbath ? 2 : 1;
-
-    const totalAct =
-      bibleCount +
-      recallCount +
-      vaultCount +
-      noteCount +
-      trackCount +
-      sabbathSchoolCount +
-      teachCount +
-      doctrineCount;
-
-    const minutes = isSabbath ? 75 : isPrep ? 55 : 30 + (i % 4) * 5;
-
-    map[dateStr] = {
-      date: dateStr,
-      studyMinutes: minutes,
-      totalActivities: totalAct,
-      modules: {
-        bibleStudy: bibleCount,
-        activeRecall: recallCount,
-        memoryVault: vaultCount,
-        notebook: noteCount,
-        studyTracks: trackCount,
-        sabbathSchool: sabbathSchoolCount,
-        teachIt: teachCount,
-        doctrine: doctrineCount
-      },
-      level: calculateActivityLevel(totalAct, minutes)
-    };
-  }
-
-  return map;
+function generateSeedActivityMap(_hasCompletedSession: boolean): Record<string, DayActivityRecord> {
+  return {};
 }
 
 /**
@@ -170,6 +93,13 @@ function generateSeedActivityMap(hasCompletedSession: boolean): Record<string, D
  */
 export function getDailyActivityMap(): Record<string, DayActivityRecord> {
   if (typeof window === "undefined" || !window.localStorage) return {};
+
+  // Clean up legacy seeded activity map if present
+  try {
+    if (localStorage.getItem("stba_daily_activity_map")) {
+      localStorage.removeItem("stba_daily_activity_map");
+    }
+  } catch (e) {}
 
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
@@ -181,14 +111,7 @@ export function getDailyActivityMap(): Record<string, DayActivityRecord> {
     } catch (e) {}
   }
 
-  const hasCompletedSession =
-    localStorage.getItem("stba_has_completed_session") === "true" ||
-    localStorage.getItem("stba_completed_verses") !== null ||
-    localStorage.getItem("stba_vaulted_verses") !== null;
-
-  const initialMap = generateSeedActivityMap(hasCompletedSession);
-  saveDailyActivityMap(initialMap);
-  return initialMap;
+  return {};
 }
 
 /**
@@ -303,7 +226,7 @@ export function updateStreakIndicators(): { currentStreak: number; weeklyActiveD
     }
   }
 
-  localStorage.setItem(STREAK_KEY, String(Math.max(currentStreak, 1)));
+  localStorage.setItem(STREAK_KEY, String(currentStreak));
 
   // Update weekly streak object
   const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -632,11 +555,11 @@ export function getContributionGridData(
     summary: {
       totalContributions,
       totalMinutes,
-      currentStreak: Math.max(currentStreak, 14),
-      longestStreak: Math.max(longestStreak, 21),
+      currentStreak,
+      longestStreak,
       activeDaysCount,
       totalDaysInRange: totalDays,
-      consistencyPercent: Math.max(consistencyPercent, 82)
+      consistencyPercent
     }
   };
 }

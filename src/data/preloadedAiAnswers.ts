@@ -272,22 +272,15 @@ export const STORAGE_KEY_PRELOADED = "stba_preloaded_answers";
 export function getStoredPreloadedAnswers(): PreloadedAnswer[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PRELOADED);
-    if (!raw) return DEFAULT_PRELOADED_ANSWERS;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      // Merge in any default answers missing from local storage so user gets all question buttons
-      const merged: PreloadedAnswer[] = [...parsed];
-      for (const def of DEFAULT_PRELOADED_ANSWERS) {
-        if (!merged.some((item) => item.id === def.id || item.question.toLowerCase().trim() === def.question.toLowerCase().trim())) {
-          merged.push(def);
-        }
-      }
-      return merged.slice(0, 8);
+    if (Array.isArray(parsed)) {
+      return parsed.slice(0, 8);
     }
   } catch (e) {
     console.warn("Failed to parse preloaded answers from storage:", e);
   }
-  return DEFAULT_PRELOADED_ANSWERS;
+  return [];
 }
 
 export function savePreloadedAnswer(
@@ -341,6 +334,6 @@ export function savePreloadedAnswer(
     return updated;
   } catch (err) {
     console.error("Error saving preloaded answer:", err);
-    return DEFAULT_PRELOADED_ANSWERS;
+    return [];
   }
 }

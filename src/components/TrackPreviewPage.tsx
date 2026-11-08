@@ -39,7 +39,12 @@ import { SCRIPTURE_DATABASE, TRACK_LIBRARY } from "../data/scriptureDb";
 import { Track, Scripture } from "../types";
 import { StudyNote } from "../types/notebook";
 import { ensureSupabaseAuth, saveNoteToSupabase, getDeterministicUUID } from "../lib/notebookSync";
-import { loadTrackProgress, saveTrackProgress } from "../lib/trackSync";
+import {
+  loadTrackProgress,
+  saveTrackProgress,
+  upsertActiveRecallMastery,
+  DEFAULT_TRACK_PROGRESS_DATA,
+} from "../lib/trackSync";
 import { supabase } from "../lib/supabase";
 import { DEFAULT_DOCTRINE_TRACKS, DoctrineTrackDb } from "../data/doctrineTracksDb";
 
@@ -592,14 +597,24 @@ export const TrackPreviewPage: React.FC = () => {
           setHasRemoteProgress(true);
           const data = progress.data;
           if (data) {
-            if (data.pre_test_score) {
-              setQuizScore(data.pre_test_score.score || 0);
-              setQuizSubmitted(data.pre_test_score.submitted || false);
-              if (data.pre_test_score.answers) {
-                setQuizAnswers(data.pre_test_score.answers);
-              }
+            const rawPreTest = data.pre_test_score;
+            const numericScore =
+              typeof rawPreTest === "number"
+                ? rawPreTest
+                : typeof rawPreTest?.score === "number"
+                ? rawPreTest.score
+                : 0;
+            const isSubmitted =
+              typeof rawPreTest === "object" && rawPreTest !== null
+                ? Boolean(rawPreTest.submitted)
+                : numericScore > 0 || Boolean(data.recommended_starting_point);
+
+            setQuizScore(numericScore);
+            setQuizSubmitted(isSubmitted);
+            if (typeof rawPreTest === "object" && rawPreTest?.answers) {
+              setQuizAnswers(rawPreTest.answers);
             }
-            if (data.studied_texts) {
+            if (Array.isArray(data.studied_texts)) {
               setStudiedVerses(data.studied_texts);
             }
             if (data.active_recall) {
@@ -630,7 +645,7 @@ export const TrackPreviewPage: React.FC = () => {
 
             // Derive maxUnlockedStep and currentStep based on progress
             let maxStep = 0;
-            if (data.pre_test_score?.submitted) {
+            if (isSubmitted) {
               maxStep = Math.max(maxStep, 2); // unlock starting point (index 2)
             }
             if (data.recommended_starting_point) {
@@ -689,20 +704,25 @@ export const TrackPreviewPage: React.FC = () => {
       }
 
       const progressData = {
-        pre_test_score: currentQuizSubmitted ? { score: currentQuizScore, submitted: true, answers: currentQuizAnswers } : null,
+        pre_test_score: currentQuizSubmitted
+          ? { score: currentQuizScore ?? 0, submitted: true, answers: currentQuizAnswers || {} }
+          : 0,
         recommended_starting_point: recLevel,
-        studied_texts: currentStudiedVerses,
+        studied_texts: Array.isArray(currentStudiedVerses) ? currentStudiedVerses : [],
         active_recall: {
-          masteryLevel: currentRecalledVerses,
-          inputs: currentRecallInputs,
-          checks: currentRecallChecks
+          score: Object.values(currentRecalledVerses || {}).filter((v) => v === "Mastered").length,
+          masteryLevel: currentRecalledVerses || {},
+          inputs: currentRecallInputs || {},
+          checks: currentRecallChecks || {},
         },
-        teach_it: currentTeachEvaluation ? {
-          grading: currentTeachEvaluation,
-          generatedSummary: currentTeachNotes
-        } : null,
-        saved_to_notebook: currentSaveSuccess,
-        saved_notebook_page_id: currentSavedPageId
+        teach_it: {
+          score: currentTeachEvaluation ? 100 : 0,
+          feedback: currentTeachEvaluation?.comment || "",
+          grading: currentTeachEvaluation || null,
+          generatedSummary: currentTeachNotes || "",
+        },
+        saved_to_notebook: Boolean(currentSaveSuccess),
+        saved_notebook_page_id: currentSavedPageId || null,
       };
 
       const isCreation = !hasRemoteProgress;
@@ -859,27 +879,19 @@ export const TrackPreviewPage: React.FC = () => {
     setRecallChecks(prev => ({ ...prev, [verseId]: true }));
   };
 
-  const logRecallMastery = async (promptId: string, userAnswer: string, score: number, lvl: "Weak" | "Developing" | "Mastered") => {
+  const logRecallMastery = async (verseReference: string, score: number, lvl: "Weak" | "Developing" | "Mastered") => {
     if (!trackStatsAllowed) return;
     try {
       const sbUser = await ensureSupabaseAuth();
       if (!sbUser) return;
-      
-      const { error } = await supabase
-        .from("active_recall_mastery")
-        .upsert({
-          user_id: sbUser.id,
-          track_id: trackId,
-          prompt_id: promptId,
-          user_answer: userAnswer,
-          accuracy_score: score,
-          mastery_level: lvl,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "user_id,track_id,prompt_id" });
-        
-      if (error) {
-        console.warn("Error logging active recall mastery:", error.message);
-      }
+
+      await upsertActiveRecallMastery({
+        userId: sbUser.id,
+        trackId,
+        verseReference,
+        masteryLevel: lvl,
+        isSuccess: score >= 70 || lvl === "Mastered" || lvl === "Developing",
+      });
     } catch (err) {
       console.warn("Exception in logRecallMastery:", err);
     }
@@ -891,7 +903,7 @@ export const TrackPreviewPage: React.FC = () => {
     displayToast(`Recall marked as ${rating}!`);
     syncProgressToSupabase({ recalledVerses: nextRecalled });
 
-    // Find active prompt and log to active_recall_mastery
+    // Find active prompt and log to active_recall_mastery using verse_reference
     const activeVerse = keyScriptures.find(v => v.id === verseId);
     if (activeVerse) {
       const matchedPrompt = dbTrack.active_recall_prompts.find(p => p.reference === activeVerse.reference);
@@ -903,7 +915,7 @@ export const TrackPreviewPage: React.FC = () => {
       };
       const userAnswer = recallInputs[verseId] || "";
       const score = calculateAccuracy(userAnswer, activePrompt.expected_answer);
-      await logRecallMastery(activePrompt.id, userAnswer, score, rating);
+      await logRecallMastery(activePrompt.reference || activeVerse.reference, score, rating);
     }
   };
 
@@ -1128,22 +1140,9 @@ ${scriptureOutlines}
     setActiveLayerTab("context");
 
     if (trackStatsAllowed) {
-      const resetData = {
-        pre_test_score: null,
-        recommended_starting_point: null,
-        studied_texts: [],
-        active_recall: {
-          masteryLevel: {},
-          inputs: {},
-          checks: {}
-        },
-        teach_it: null,
-        saved_to_notebook: false,
-        saved_notebook_page_id: null
-      };
       ensureSupabaseAuth().then(sbUser => {
         if (sbUser) {
-          saveTrackProgress(sbUser.id, trackId, resetData, false, trackInfo.title);
+          saveTrackProgress(sbUser.id, trackId, DEFAULT_TRACK_PROGRESS_DATA, false, trackInfo.title);
         }
       });
     }
@@ -1814,7 +1813,11 @@ ${scriptureOutlines}
                         </motion.div>
 
                         {/* Dynamic Tabs row based on sequence */}
-                        <div className="flex border-b border-stone-200 overflow-x-auto scrollbar-none" id="exegesis-tabs">
+                        <div
+                          className="flex border-b border-stone-200 overflow-x-auto scrollbar-none touch-pan-x"
+                          id="exegesis-tabs"
+                          style={{ overscrollBehaviorX: "none", touchAction: "pan-x" }}
+                        >
                           {currentSequence.map((seqItem) => {
                             const isActive = activeTabType === seqItem.type;
                             const label = 

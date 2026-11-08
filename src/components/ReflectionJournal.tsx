@@ -763,12 +763,12 @@ Eliminating the fluency illusion through scripture recall and reverent reflectio
       </AnimatePresence>
 
       {/* HEADER SECTION */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E8E4DA] pb-5">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E8E4DA]/20 pb-5">
         <div>
-          <span className="text-[10px] uppercase font-mono tracking-widest text-[#C9973A] font-bold block mb-1">
+          <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#DFC57B] font-extrabold block mb-1">
             Mental Recall Response
           </span>
-          <h1 className="font-serif font-extrabold text-3xl text-[#1C2333]">
+          <h1 className="font-serif text-3xl md:text-4xl text-[#DFC57B] font-black tracking-tight drop-shadow-xs" id="journal-page-title">
             Scribal Spiritual Journal
           </h1>
         </div>

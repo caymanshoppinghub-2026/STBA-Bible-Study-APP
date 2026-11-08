@@ -10,6 +10,7 @@ import { BIBLICAL_NAMES_DICTIONARY, BiblicalName } from "./biblicalNames";
 import { ViewModeToggle, ViewMode } from "./ViewModeToggle";
 import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
 import { stbaStorage } from "../../lib/storage/indexedDbClient";
+import { TieredHighlightDropdown, getHighlightInlineStyle } from "./HighlightDropdownMenu";
 
 interface ParallelBibleReaderProps {
   reference: string;
@@ -315,10 +316,12 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
     return `${fullRef} v. ${verseNum}`;
   };
 
-  // Handle selection detection for floating tooltips
+  // Handle selection detection for floating tooltips — restricted EXCLUSIVELY to biblical verse text
   const handleMouseUp = (e: React.MouseEvent) => {
     const selection = window.getSelection();
-    if (!selection) return;
+    if (!selection || selection.isCollapsed) {
+      return;
+    }
 
     const selectedText = selection.toString().trim();
     if (selectedText.length === 0) {
@@ -326,35 +329,50 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
       return;
     }
 
-    let element: Node | null = selection.anchorNode;
-    let verseNo = "1";
-    let translation = "NKJV"; // Default fallback
-    
-    while (element && element !== containerRef.current) {
-      if (element instanceof HTMLElement) {
-        if (element.dataset.verse) {
-          verseNo = element.dataset.verse;
-        }
-        if (element.dataset.version) {
-          translation = element.dataset.version;
-        }
-        if (element.dataset.verse && element.dataset.version) {
-          break;
-        }
-      }
-      element = element.parentNode;
+    const anchorEl =
+      selection.anchorNode instanceof HTMLElement
+        ? selection.anchorNode
+        : selection.anchorNode?.parentElement;
+    const focusEl =
+      selection.focusNode instanceof HTMLElement
+        ? selection.focusNode
+        : selection.focusNode?.parentElement;
+
+    // Strictly ensure both ends of the selection are inside a biblical text container ([data-biblical-text="true"])
+    const anchorBiblicalSpan = anchorEl?.closest('[data-biblical-text="true"]');
+    const focusBiblicalSpan = focusEl?.closest('[data-biblical-text="true"]');
+    if (!anchorBiblicalSpan || !focusBiblicalSpan) {
+      setSelectedTextData(null);
+      return;
     }
+
+    const verseCell = anchorBiblicalSpan.closest("[data-verse][data-version]") as HTMLElement | null;
+    if (!verseCell || !verseCell.dataset.verse || !verseCell.dataset.version) {
+      setSelectedTextData(null);
+      return;
+    }
+
+    const verseNo = verseCell.dataset.verse;
+    const translation = verseCell.dataset.version;
 
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
+    const containerRect = containerRef.current?.getBoundingClientRect();
+
+    const relX = containerRect
+      ? rect.left - containerRect.left + rect.width / 2
+      : rect.left + window.scrollX + rect.width / 2;
+    const relY = containerRect
+      ? rect.top - containerRect.top - 48
+      : rect.top + window.scrollY - 48;
 
     setSelectedTextData({
       text: selectedText,
       verseRef: `${reference} v. ${verseNo}`,
       verseNo,
       translation,
-      x: rect.left + window.scrollX + rect.width / 2,
-      y: rect.top + window.scrollY - 44
+      x: relX,
+      y: relY
     });
   };
 
@@ -641,22 +659,13 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
     if (wholeVerseHighlight || sortedHighlights.length === 0) {
       const hColor = wholeVerseHighlight ? wholeVerseHighlight.color : cellHighlights[0].color;
       return (
-        <span 
-          style={{ 
-            backgroundColor: hColor, 
-            color: "#12131a", // Deep high-contrast text color
-            borderRadius: "0.125rem",
-            padding: "0.06rem 0.15rem",
-            boxDecorationBreak: "clone",
-            WebkitBoxDecorationBreak: "clone"
-          }}
-        >
+        <span style={getHighlightInlineStyle(hColor)}>
           {renderTextWithDifficultNames(text)}
         </span>
       );
     }
 
-    // Otherwise, do sub-string highlights
+    // Otherwise, do sub-string highlights & underlines
     const escapeRegex = (s: string) => s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
     const pattern = sortedHighlights.map(h => `(${escapeRegex(h.text_snippet!)})`).join('|');
     const regex = new RegExp(pattern, 'gi');
@@ -675,17 +684,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
 
       if (matchingHighlight) {
         return (
-          <span 
-            key={idx} 
-            style={{ 
-              backgroundColor: matchingHighlight.color, 
-              color: "#12131a", // Deep high-contrast text color
-              borderRadius: "0.125rem",
-              padding: "0.06rem 0.15rem",
-              boxDecorationBreak: "clone",
-              WebkitBoxDecorationBreak: "clone"
-            }}
-          >
+          <span key={idx} style={getHighlightInlineStyle(matchingHighlight.color)}>
             {renderTextWithDifficultNames(part)}
           </span>
         );
@@ -1136,7 +1135,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                     // Beautiful fluid cubic font size transitions
                     transition: "font-size 0.35s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease, border-left 0.15s ease",
                     ...(userHighlightColor ? {
-                      borderLeft: `4px solid ${userHighlightColor}`,
+                      borderLeft: `4px solid ${userHighlightColor.replace("underline:", "")}`,
                       backgroundColor: theme === "dark" ? "rgba(201, 151, 58, 0.08)" : "rgba(253, 230, 138, 0.2)"
                     } : {})
                   }}
@@ -1199,13 +1198,15 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                               {verse.verseNumber}
                             </sup>
                           )}
-                          {/* Render text with persistent cloud sync & active narrator speaking highlight */}
-                          {renderTextWithUserHighlights(
-                            columnText, 
-                            cellHighlights, 
-                            isSpeakingThis && version === selectedVersions[0], 
-                            speakingCharIndex
-                          )}
+                          {/* Render biblical verse text inside explicit data-biblical-text container */}
+                          <span data-biblical-text="true" className="select-text">
+                            {renderTextWithUserHighlights(
+                              columnText, 
+                              cellHighlights, 
+                              isSpeakingThis && version === selectedVersions[0], 
+                              speakingCharIndex
+                            )}
+                          </span>
                         </span>
                       </div>
                     );
@@ -1248,51 +1249,26 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
         </div>
       </div>
 
-      {/* Floating Interactive Context Tooltip Panel */}
+      {/* Floating Interactive Context Tooltip Panel (Exclusively for Biblical Text) */}
       {selectedTextData && (
         <div 
-          className="absolute z-50 flex items-center gap-1 p-1 shadow-xl rounded-lg border text-xs select-none backdrop-blur-md"
+          className="absolute z-50 flex items-center gap-1 p-1.5 shadow-2xl rounded-xl border text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
           style={{
-            left: `${Math.min(window.innerWidth - 320, Math.max(16, selectedTextData.x - 140))}px`,
-            top: `${Math.min(window.innerHeight - 80, Math.max(12, selectedTextData.y))}px`
+            left: `${Math.min((containerRef.current?.clientWidth || window.innerWidth) - 290, Math.max(12, selectedTextData.x - 130))}px`,
+            top: `${Math.min((containerRef.current?.clientHeight || window.innerHeight) - 80, Math.max(8, selectedTextData.y))}px`
           }}
           onMouseDown={(e) => e.preventDefault()}
         >
-          <div className={`flex items-center gap-1 rounded ${
-            theme === "dark" ? "bg-[#1E2530] text-gray-200 border-[#2C3545]" : "bg-white text-gray-800 border-[#E5DFD5]"
+          <div className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border ${
+            theme === "dark" ? "bg-[#18202C] text-gray-100 border-[#2E3B4E]" : "bg-white text-gray-800 border-[#E5DFD5]"
           }`}>
-            {/* Context Palette Color Markers */}
-            <button 
-              onClick={() => applyHighlight("#FFF3A3")}
-              className="w-4 h-4 rounded-full border border-gray-400/50 hover:scale-115 transition-transform cursor-pointer ml-1.5 shadow-xs"
-              style={{ backgroundColor: "#FFF3A3" }}
-              title="Yellow Highlight"
+            {/* Tiered Dropdown Menu offering color options for Full Highlights and Underlines */}
+            <TieredHighlightDropdown
+              onSelectColor={applyHighlight}
+              onClear={clearHighlight}
+              theme={theme}
+              buttonLabel="Mark"
             />
-            <button 
-              onClick={() => applyHighlight("#A3D4FF")}
-              className="w-4 h-4 rounded-full border border-gray-400/50 hover:scale-115 transition-transform cursor-pointer shadow-xs"
-              style={{ backgroundColor: "#A3D4FF" }}
-              title="Blue Highlight"
-            />
-            <button 
-              onClick={() => applyHighlight("#C9F7C5")}
-              className="w-4 h-4 rounded-full border border-gray-400/50 hover:scale-115 transition-transform cursor-pointer shadow-xs"
-              style={{ backgroundColor: "#C9F7C5" }}
-              title="Green Highlight"
-            />
-            <button 
-              onClick={() => applyHighlight("#FBC4D8")}
-              className="w-4 h-4 rounded-full border border-gray-400/50 hover:scale-115 transition-transform cursor-pointer shadow-xs"
-              style={{ backgroundColor: "#FBC4D8" }}
-              title="Pink Highlight"
-            />
-            <button 
-              onClick={clearHighlight}
-              className="p-1 hover:bg-red-500/10 hover:text-red-500 rounded cursor-pointer transition-all shrink-0 ml-0.5"
-              title="Eraser / Clear Highlights"
-            >
-              <Eraser className="w-3.5 h-3.5" />
-            </button>
 
             <div className={`h-4 w-[1px] ${theme === "dark" ? "bg-gray-700" : "bg-gray-300"} mx-0.5`} />
 

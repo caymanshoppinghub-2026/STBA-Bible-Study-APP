@@ -125,6 +125,15 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
   // Generate WhatsApp / Study Group text report
   const generateStudyGroupReportText = () => {
     const name = user?.name || "Noble Berean";
+    const doctrinalHighlights = stats.totalVersesStudied > 0
+      ? `• Total Verses Studied: ${stats.totalVersesStudied}\n` +
+        `• Permanent Vault Verses: ${stats.totalVersesMastered}\n` +
+        `• Translations Analyzed: ${stats.totalTranslationsCompared} Versions\n` +
+        `• Original Lexicon Roots: ${stats.totalStrongLexiconLookups} Lookups\n`
+      : `• Profile Status: Initialized (Ready for Day 1 Study)\n` +
+        `• Next Step: Begin with 2 Timothy 2:15 or the Sabbath Doctrine\n` +
+        `• Permanent Vault: 0 Verses (Ready to store memory verses)\n`;
+
     return `📖 *Study To Be Approved — Disciple Progress Report*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `👤 *Scholar:* ${name}\n` +
@@ -135,11 +144,8 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
       `📚 *Total Verses Studied:* ${stats.totalVersesStudied} (${stats.totalVersesMastered} Mastered)\n` +
       `🏅 *Achievement Badges:* ${stats.earnedBadgesCount} / ${stats.totalBadgesCount} Unlocked\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🏛️ *Core Doctrinal Highlights:*\n` +
-      `• Sanctuary & 2300 Days: Mastered (Daniel 8:14)\n` +
-      `• Seventh-day Sabbath: Mastered (Exodus 20:8–11)\n` +
-      `• Three Angels' Messages: Mastered (Revelation 14:6–12)\n` +
-      `• Translations Compared: 4 Versions (KJV, NKJV, NASB, ESV)\n` +
+      `🏛️ *Core Discipleship Status:*\n` +
+      doctrinalHighlights +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `💬 *Weekly Reflection Quote:*\n` +
       `"Study to shew thyself approved unto God, a workman that needeth not to be ashamed, rightly dividing the word of truth." — 2 Timothy 2:15\n` +
@@ -416,26 +422,26 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
         {/* ========================================================================= */}
         {/* 1. TOP HEADER & BREADCRUMBS WITH EXPORT & SHARE ACTIONS */}
         {/* ========================================================================= */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E8E4DA] pb-6" id="stats-header">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E8E4DA]/20 pb-6" id="stats-header">
           <div className="space-y-1">
             {!isEmbedded && (
-              <div className="flex items-center space-x-2 text-xs font-mono text-stone-500 uppercase tracking-wider font-bold">
-                <Link to="/dashboard" className="hover:text-[#C9973A] transition-colors">
+              <div className="flex items-center space-x-2 text-xs font-mono text-[#DFC57B] uppercase tracking-[0.2em] font-extrabold mb-1">
+                <Link to="/dashboard" className="hover:text-white transition-colors">
                   Dashboard
                 </Link>
                 <span>/</span>
-                <span className="text-[#C9973A]">Analytics & Mastery Stats</span>
+                <span className="text-[#DFC57B]">Analytics & Mastery Stats</span>
               </div>
             )}
             <div className="flex items-center space-x-3">
-              <div className="p-2.5 bg-[#C9973A]/10 text-[#C9973A] rounded-2xl border border-[#C9973A]/20">
+              <div className="p-2.5 bg-[#C9973A]/10 text-[#DFC57B] rounded-2xl border border-[#DFC57B]/30">
                 <BarChart2 className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="font-serif font-extrabold text-2xl sm:text-3xl text-[#1C2333] tracking-tight">
+                <h1 className="font-serif text-3xl md:text-4xl text-[#DFC57B] font-black tracking-tight drop-shadow-xs" id="stats-page-title">
                   User Progress & Mastery Analytics
                 </h1>
-                <p className="text-xs text-stone-500 mt-0.5">
+                <p className="text-[#FFFFFF] font-sans text-sm md:text-base mt-2 max-w-2xl leading-relaxed">
                   Holistic telemetry across Bible Study, Tracks, Doctrine, Active Recall, Teach-It, Vault, and Sabbath School.
                 </p>
               </div>
@@ -553,7 +559,11 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                     </span>
                   </div>
                   <span className="text-[9px] font-mono text-emerald-400 mt-1 block">
-                    Top Tier Scholar
+                    {stats.overallMasteryScore >= 80
+                      ? "Top Tier Scholar"
+                      : stats.overallMasteryScore > 0
+                      ? "Growing Disciple"
+                      : "0% Initialized"}
                   </span>
                 </div>
 
@@ -568,7 +578,7 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                     </span>
                   </div>
                   <span className="text-[9px] font-mono text-stone-400 mt-1 block">
-                    {Math.round((stats.earnedBadgesCount / stats.totalBadgesCount) * 100)}% Collected
+                    {stats.totalBadgesCount > 0 ? Math.round((stats.earnedBadgesCount / stats.totalBadgesCount) * 100) : 0}% Collected
                   </span>
                 </div>
               </div>
@@ -595,7 +605,7 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                     {stats.overallMasteryScore}%
                   </span>
                   <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                    +4.2% this week
+                    {stats.overallMasteryScore > 0 ? `+${stats.overallMasteryScore}% active` : "0% baseline"}
                   </span>
                 </div>
                 <p className="text-xs text-stone-500 mt-1">
@@ -626,11 +636,17 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                     {stats.retentionStabilityIndex}%
                   </span>
                   <span className="text-xs font-mono font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
-                    Optimal Decay
+                    {stats.retentionStabilityIndex >= 80
+                      ? "Optimal Stability"
+                      : stats.retentionStabilityIndex > 0
+                      ? "Active Retention"
+                      : "No Trials Yet"}
                   </span>
                 </div>
                 <p className="text-xs text-stone-500 mt-1">
-                  94% accuracy over {stats.totalStudySessions * 3} active recall trials
+                  {stats.totalStudySessions > 0
+                    ? `${stats.retentionStabilityIndex}% stability across ${stats.totalStudySessions * 3} active recall trials`
+                    : "0% accuracy over 0 active recall trials"}
                 </p>
               </div>
               <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden mt-1">
@@ -661,14 +677,20 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                   </span>
                 </div>
                 <p className="text-xs text-stone-500 mt-1">
-                  {Math.round((stats.totalVersesMastered / stats.totalVersesStudied) * 100)}% committed to long-term memory
+                  {stats.totalVersesStudied > 0
+                    ? Math.min(100, Math.round((stats.totalVersesMastered / stats.totalVersesStudied) * 100))
+                    : 0}% committed to long-term memory
                 </p>
               </div>
               <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden mt-1">
                 <div
                   className="h-full bg-blue-500 rounded-full"
                   style={{
-                    width: `${Math.round((stats.totalVersesMastered / stats.totalVersesStudied) * 100)}%`
+                    width: `${
+                      stats.totalVersesStudied > 0
+                        ? Math.min(100, Math.round((stats.totalVersesMastered / stats.totalVersesStudied) * 100))
+                        : 0
+                    }%`
                   }}
                 />
               </div>
@@ -694,11 +716,14 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                   </span>
                 </div>
                 <p className="text-xs text-stone-500 mt-1">
-                  Average session length: 28 minutes
+                  Average session length: {stats.totalStudySessions > 0 ? Math.round(stats.totalStudyMinutes / stats.totalStudySessions) : 0} minutes
                 </p>
               </div>
               <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden mt-1">
-                <div className="h-full bg-indigo-500 rounded-full" style={{ width: "85%" }} />
+                <div
+                  className="h-full bg-indigo-500 rounded-full"
+                  style={{ width: `${Math.min(100, Math.round((stats.totalStudyMinutes / 120) * 100))}%` }}
+                />
               </div>
             </div>
 
@@ -849,7 +874,7 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                       Peak Study Day
                     </span>
                     <span className="font-serif font-extrabold text-[#1C2333] text-sm">
-                      Sabbath (75 mins)
+                      {stats.totalStudyMinutes > 0 ? `Active (${stats.totalStudyMinutes} mins)` : "None (0 mins)"}
                     </span>
                   </div>
                   <div className="bg-[#FAF9F5] p-3 rounded-xl border border-stone-200/60">
@@ -857,7 +882,7 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                       Weekly Focus Total
                     </span>
                     <span className="font-serif font-extrabold text-[#C9973A] text-sm">
-                      340 mins (5.6 hrs)
+                      {stats.totalStudyMinutes} mins ({(stats.totalStudyMinutes / 60).toFixed(1)} hrs)
                     </span>
                   </div>
                   <div className="bg-[#FAF9F5] p-3 rounded-xl border border-stone-200/60">
@@ -865,7 +890,7 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                       Total Active Recalls
                     </span>
                     <span className="font-serif font-extrabold text-emerald-700 text-sm">
-                      61 retrieval runs
+                      {stats.totalStudySessions * 3} retrieval runs
                     </span>
                   </div>
                   <div className="bg-[#FAF9F5] p-3 rounded-xl border border-stone-200/60">
@@ -873,7 +898,7 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                       Notes Documented
                     </span>
                     <span className="font-serif font-extrabold text-indigo-700 text-sm">
-                      23 study entries
+                      {stats.totalNotesWritten} study entries
                     </span>
                   </div>
                 </div>
@@ -921,9 +946,11 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
                   <TrendingUp className="w-5 h-5 text-[#C9973A] shrink-0 mt-0.5" />
                   <div>
                     <strong className="block font-serif text-sm text-[#1C2333] mb-0.5">
-                      Consistent Spaced Repetition Growth
+                      Spaced Repetition Trajectory
                     </strong>
-                    Your study hours have increased by <strong>60%</strong> over the past 4 weeks, lifting your overall retention stability index from <strong>76%</strong> to <strong>{stats.retentionStabilityIndex}%</strong>.
+                    {stats.totalStudyMinutes > 0
+                      ? `You have logged ${(stats.totalStudyMinutes / 60).toFixed(1)} study hours, maintaining a retention stability index of ${stats.retentionStabilityIndex}%.`
+                      : "0 study hours logged so far. Complete active recall sessions to build your 4-week retention trajectory."}
                   </div>
                 </div>
               </div>
@@ -980,15 +1007,15 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
           
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#C9973A] font-extrabold">
+              <div className="flex items-center space-x-2 mb-1">
+                <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#DFC57B] font-extrabold">
                   Milestones & Honors
                 </span>
                 <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-mono font-bold">
                   {stats.earnedBadgesCount} / {stats.totalBadgesCount} Earned
                 </span>
               </div>
-              <h3 className="font-serif font-extrabold text-xl sm:text-2xl text-[#1C2333]">
+              <h3 className="font-serif text-2xl md:text-3xl text-[#DFC57B] font-black tracking-tight drop-shadow-xs">
                 Theological & Cognitive Achievement Badges
               </h3>
             </div>
@@ -1147,18 +1174,18 @@ export const UserStatsPage: React.FC<UserStatsPageProps> = ({ isEmbedded = false
         {/* ========================================================================= */}
         <section className="space-y-6" id="cross-module-hub">
           <div>
-            <div className="flex items-center space-x-2">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#C9973A] font-extrabold">
+            <div className="flex items-center space-x-2 mb-1">
+              <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#DFC57B] font-extrabold">
                 Ecosystem Integration
               </span>
               <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-[10px] font-mono font-bold">
                 8 Core Modules Active
               </span>
             </div>
-            <h3 className="font-serif font-extrabold text-xl sm:text-2xl text-[#1C2333]">
+            <h3 className="font-serif text-2xl md:text-3xl text-[#DFC57B] font-black tracking-tight drop-shadow-xs">
               Holistic Scriptorium Insights & Deep Analytics
             </h3>
-            <p className="text-xs text-stone-500 mt-1">
+            <p className="text-[#FFFFFF] font-sans text-sm mt-1">
               Data aggregated directly from every specialized engine across the Study To Be Approved platform.
             </p>
           </div>

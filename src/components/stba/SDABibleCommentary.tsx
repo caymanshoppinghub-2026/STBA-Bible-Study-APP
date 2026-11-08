@@ -12,6 +12,7 @@ import { stbaStorage } from "../../lib/storage/indexedDbClient";
 import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
 import { ScriptureLinkedText } from "./ScriptureLinkedText";
 import { bibleService } from "../../services/bibleService";
+import { ToolHighlightableWrapper } from "./HighlightDropdownMenu";
 
 // ==========================================
 // 7-VOLUME CANONICAL SDABC METADATA
@@ -38,11 +39,18 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
   onNavigateTab
 }) => {
   // Navigation & selection states
-  const [selectedBook, setSelectedBook] = useState("Revelation");
-  const [selectedChapter, setSelectedChapter] = useState(14);
-  const [selectedVerse, setSelectedVerse] = useState<number | "all">(6);
+  const [selectedBook, setSelectedBook] = useState(() => report?.reference ? parseScriptureLookup(report.reference)?.book || "Revelation" : "");
+  const [selectedChapter, setSelectedChapter] = useState(() => report?.reference ? parseScriptureLookup(report.reference)?.chapter || 14 : 1);
+  const [selectedVerse, setSelectedVerse] = useState<number | "all">(() => report?.reference ? parseScriptureLookup(report.reference)?.startVerse || 6 : 1);
   const [searchQuery, setSearchQuery] = useState("");
-  const [commentaryData, setCommentaryData] = useState<SDABCEntry>(PRELOADED_SDABC_DATA["revelation 14:6-12"]);
+  const [commentaryData, setCommentaryData] = useState<SDABCEntry | null>(() => {
+    if (report?.reference) {
+      const parsed = parseScriptureLookup(report.reference);
+      const key = parsed?.canonicalRef.toLowerCase() || report.reference.toLowerCase();
+      if (PRELOADED_SDABC_DATA[key]) return PRELOADED_SDABC_DATA[key];
+    }
+    return null;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [activeVolumeTab, setActiveVolumeTab] = useState<number>(7);
   const [activeSubTab, setActiveSubTab] = useState<"commentary" | "historical" | "egw" | "theology" | "teaching">("commentary");
@@ -630,6 +638,8 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
       return;
     }
 
+    if (!commentaryData) return;
+
     const textToRead = `${commentaryData.reference}. Seventh-day Adventist Bible Commentary, Volume ${commentaryData.volumeNumber}. ` +
       commentaryData.verses.map(v => `Verse ${v.verseNumber}. ${v.commentaryText}`).join(" ") +
       (commentaryData.egwComments?.[0] ? ` Ellen G. White comments: ${commentaryData.egwComments[0].quote}` : "");
@@ -653,7 +663,7 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
   };
 
   // Filtered verses based on search filter
-  const displayedVerses = commentaryData.verses.filter(v => {
+  const displayedVerses = commentaryData ? commentaryData.verses.filter(v => {
     if (!searchTermFilter.trim()) return true;
     const q = searchTermFilter.toLowerCase();
     return (
@@ -662,7 +672,7 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
       v.commentaryText.toLowerCase().includes(q) ||
       (v.originalLanguageInsight && v.originalLanguageInsight.toLowerCase().includes(q))
     );
-  });
+  }) : [];
 
   return (
     <div className={`w-full h-full flex flex-col font-sans select-text overflow-hidden ${
@@ -690,7 +700,7 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
                     ? "bg-[#C9973A]/10 text-amber-300 border-[#C9973A]/30" 
                     : "bg-amber-100/80 text-amber-900 border-amber-300"
                 }`}>
-                  Vol. {commentaryData.volumeNumber} • {commentaryData.pageRange}
+                  {commentaryData ? `Vol. ${commentaryData.volumeNumber} • ${commentaryData.pageRange}` : "7 Volumes Available"}
                 </span>
               </div>
               <p className="text-[11px] opacity-75 font-sans truncate">
@@ -776,107 +786,6 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
                 A+
               </button>
             </div>
-          </div>
-        </div>
-
-        {/* 2. CANONICAL BIBLE BOOK / CHAPTER / VERSE NAVIGATOR */}
-        <div className={`p-2 rounded-lg border flex items-center gap-2 flex-wrap ${
-          theme === "dark" ? "bg-[#0B101D] border-[#1C2942]" : "bg-[#FAF7F0] border-[#E8DFC8]"
-        }`}>
-          {/* Book Selector */}
-          <div className="flex items-center gap-1 min-w-[150px] flex-1 sm:flex-none">
-            <span className="text-[10px] font-mono font-bold uppercase opacity-70">Book:</span>
-            <select
-              value={selectedBook}
-              onChange={(e) => {
-                const newBook = e.target.value;
-                setSelectedBook(newBook);
-                setSelectedChapter(1);
-                setSelectedVerse(1);
-                const vol = getVolumeForBook(newBook);
-                setActiveVolumeTab(vol.volNumber);
-                notifyCrossPanelSync(newBook, 1, 1);
-                loadReferenceCommentary(`${newBook} 1:1`, 1);
-              }}
-              className={`w-full py-1 px-2 rounded text-xs font-semibold outline-none border cursor-pointer ${
-                theme === "dark"
-                  ? "bg-[#151E30] border-[#273854] text-amber-200"
-                  : "bg-white border-stone-300 text-stone-900"
-              }`}
-            >
-              <optgroup label="Old Testament (Volumes 1–4)">
-                {BIBLE_METADATA.slice(0, 39).map(b => {
-                  const vol = getVolumeForBook(b.name);
-                  return (
-                    <option key={b.name} value={b.name}>
-                      [Vol. {vol.volNumber}] {b.name}
-                    </option>
-                  );
-                })}
-              </optgroup>
-              <optgroup label="New Testament (Volumes 5–7)">
-                {BIBLE_METADATA.slice(39).map(b => {
-                  const vol = getVolumeForBook(b.name);
-                  return (
-                    <option key={b.name} value={b.name}>
-                      [Vol. {vol.volNumber}] {b.name}
-                    </option>
-                  );
-                })}
-              </optgroup>
-            </select>
-          </div>
-
-          {/* Chapter Selector */}
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] font-mono font-bold uppercase opacity-70">Ch:</span>
-            <select
-              value={selectedChapter}
-              onChange={(e) => {
-                const newChap = Number(e.target.value);
-                setSelectedChapter(newChap);
-                setSelectedVerse(1);
-                notifyCrossPanelSync(selectedBook, newChap, 1);
-                loadReferenceCommentary(`${selectedBook} ${newChap}:1`, 1);
-              }}
-              className={`py-1 px-2 rounded text-xs font-semibold outline-none border cursor-pointer ${
-                theme === "dark"
-                  ? "bg-[#151E30] border-[#273854] text-amber-200"
-                  : "bg-white border-stone-300 text-stone-900"
-              }`}
-            >
-              {Array.from({ length: maxChapters }, (_, i) => i + 1).map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Verse Selector */}
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] font-mono font-bold uppercase opacity-70">Vs:</span>
-            <select
-              value={selectedVerse}
-              onChange={(e) => {
-                const val = e.target.value === "all" ? "all" : Number(e.target.value);
-                setSelectedVerse(val);
-                notifyCrossPanelSync(selectedBook, selectedChapter, val);
-                if (val === "all") {
-                  loadReferenceCommentary(`${selectedBook} ${selectedChapter}`);
-                } else {
-                  loadReferenceCommentary(`${selectedBook} ${selectedChapter}:${val}`, val);
-                }
-              }}
-              className={`py-1 px-2 rounded text-xs font-semibold outline-none border cursor-pointer ${
-                theme === "dark"
-                  ? "bg-[#151E30] border-[#273854] text-amber-200"
-                  : "bg-white border-stone-300 text-stone-900"
-              }`}
-            >
-              <option value="all">All Verses</option>
-              {Array.from({ length: maxVersesInChapter }, (_, i) => i + 1).map(v => (
-                <option key={v} value={v}>Verse {v}</option>
-              ))}
-            </select>
           </div>
         </div>
 
@@ -975,7 +884,7 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
             <Book className="w-3 h-3" /> VOLUMES:
           </span>
           {SDABC_VOLUMES.map(vol => {
-            const isCurrent = commentaryData.volumeNumber === vol.volNumber;
+            const isCurrent = commentaryData ? commentaryData.volumeNumber === vol.volNumber : activeVolumeTab === vol.volNumber;
             return (
               <button
                 key={vol.volNumber}
@@ -1035,9 +944,9 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
           }`}
         >
           {[
-            { id: "commentary", label: "Verse-by-Verse Exegesis", icon: Layers, count: commentaryData.verses.length },
+            { id: "commentary", label: "Verse-by-Verse Exegesis", icon: Layers, count: commentaryData?.verses.length || 0 },
             { id: "historical", label: "Historical & Context", icon: Sparkles },
-            { id: "egw", label: "Ellen White Quotes", icon: BookMarked, count: commentaryData.egwComments?.length || 0 },
+            { id: "egw", label: "Ellen White Quotes", icon: BookMarked, count: commentaryData?.egwComments?.length || 0 },
             { id: "theology", label: "Doctrinal Pillars & Cross-Refs", icon: ShieldCheck },
             { id: "teaching", label: "Discipleship Outline", icon: CornerDownRight }
           ].map(tab => {
@@ -1085,8 +994,13 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
         </button>
       </div>
 
-      {/* 5. MAIN COMMENTARY CONTENT DISPLAY */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4">
+      {/* 5. MAIN COMMENTARY CONTENT DISPLAY (With Tiered Highlight & Underline Support) */}
+      <ToolHighlightableWrapper
+        toolId="SDABC"
+        referenceKey={commentaryData?.reference || "SDABC"}
+        theme={theme}
+        className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 select-text"
+      >
         {/* Dynamic retrieval state notification */}
         {isLoading && (
           <div className="flex items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-[#C9973A]/40 text-[#C9973A] text-xs font-mono animate-pulse">
@@ -1095,12 +1009,52 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
           </div>
         )}
 
-        {/* Active Reference Banner Card */}
-        <div className={`p-3.5 rounded-xl border relative overflow-hidden ${
-          theme === "dark" 
-            ? "bg-gradient-to-br from-[#101726] to-[#0A0F1A] border-[#243552]" 
-            : "bg-gradient-to-br from-[#FFF] to-[#F8F4EC] border-[#E3D7C1] shadow-xs"
-        }`}>
+        {!commentaryData ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 text-center space-y-5 max-w-lg mx-auto">
+            <div className="p-4 rounded-2xl bg-[#C9973A]/10 border border-[#C9973A]/30 text-[#C9973A]">
+              <BookOpen className="w-10 h-10 mx-auto" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="font-serif font-extrabold text-lg sm:text-xl text-[#C9973A]">
+                SDA Bible Commentary Expository Engine
+              </h3>
+              <p className="text-xs sm:text-sm text-stone-300 font-sans leading-relaxed">
+                Scripture interprets Scripture. Use the search bar above or choose a canonical book and chapter to dynamically load complete verse-by-verse commentary from the 7-volume SDABC library.
+              </p>
+            </div>
+            <div className="w-full pt-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-stone-400 block mb-2.5">
+                Suggested Theological Passages
+              </span>
+              <div className="flex flex-wrap justify-center gap-2">
+                {[
+                  "Daniel 8:14",
+                  "Revelation 14:6-12",
+                  "Hebrews 8:1-6",
+                  "Exodus 20:8-11",
+                  "Romans 8:1-4",
+                  "Leviticus 16:15-22"
+                ].map((ref) => (
+                  <button
+                    key={ref}
+                    type="button"
+                    onClick={() => loadReferenceCommentary(ref)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-mono font-semibold bg-[#101726] border border-[#243552] text-stone-200 hover:text-white hover:border-[#C9973A] transition-all cursor-pointer shadow-xs active:scale-95"
+                  >
+                    {ref}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Active Reference Banner Card */}
+            <div className={`p-3.5 rounded-xl border relative overflow-hidden ${
+              theme === "dark" 
+                ? "bg-gradient-to-br from-[#101726] to-[#0A0F1A] border-[#243552]" 
+                : "bg-gradient-to-br from-[#FFF] to-[#F8F4EC] border-[#E3D7C1] shadow-xs"
+            }`}>
           <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
             <span className="font-serif font-bold text-base sm:text-lg text-[#C9973A]">
               {commentaryData.reference}
@@ -1433,7 +1387,9 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
             </div>
           </div>
         )}
-      </div>
+      </>
+    )}
+  </ToolHighlightableWrapper>
 
       {/* 6. BOTTOM STATUS BAR */}
       <div className={`p-2.5 px-3 border-t flex items-center justify-between text-xs shrink-0 select-none ${
@@ -1442,7 +1398,7 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
           <span className="text-[11px] font-mono truncate">
-            SDABC Canonical Library Active • {commentaryData.reference}
+            SDABC Canonical Library Active • {commentaryData ? commentaryData.reference : "Ready to Search"}
           </span>
         </div>
         <div className="text-[11px] opacity-75 font-mono">

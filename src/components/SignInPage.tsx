@@ -8,6 +8,9 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { STBA_LOGO_URL } from "../assets/branding";
+import { supabase } from "../lib/supabase";
+import { fetchProfileFromSupabase } from "../lib/notebookSync";
+import { ensureInitialUserTrackProgress } from "../lib/trackSync";
 
 // Cloudinary background video source
 const CLOUDINARY_VIDEO_URL = "https://res.cloudinary.com/dx3jgal9b/video/upload/Working_from_bed_hkmrad.mp4";
@@ -61,21 +64,71 @@ export const SignInPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Simulate authenticating delay
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      const mockUser = {
-        name: (email.split("@")[0] || "Scholar"),
+      // 1. Authenticate live against Supabase Auth
+      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
         email: email.trim(),
-        isSda: true,
-        firstTrack: "fundamental-beliefs",
-        role: "STBAScholar" as any,
-        isGuest: false,
-        emailVerified: true
-      };
+        password: password
+      });
 
-      // Set user structure to local state
-      setUser(mockUser);
+      let authUser = signInData?.user;
+
+      if (signInErr || !authUser) {
+        if (signInErr?.message?.toLowerCase().includes("invalid login credentials")) {
+          // Attempt sign up if the user exists locally but hasn't initialized in Supabase Auth
+          const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+            email: email.trim(),
+            password: password,
+            options: {
+              data: {
+                name: email.split("@")[0] || "Scholar",
+                role: "STBAScholar",
+                firstTrack: "fundamental-beliefs",
+                tier: "Beginner",
+                createdAt: new Date().toISOString()
+              }
+            }
+          });
+          if (signUpData?.user) {
+            authUser = signUpData.user;
+          } else {
+            throw new Error(signInErr.message);
+          }
+        } else {
+          throw new Error(signInErr?.message || "Failed to authenticate with Supabase.");
+        }
+      }
+
+      // 2. Strictly fetch live user profile & preferences directly from Supabase
+      const liveProfile = await fetchProfileFromSupabase();
+      const meta = authUser?.user_metadata || {};
+      const registrationTimestamp =
+        meta.createdAt ||
+        meta.created_at ||
+        meta.signupDate ||
+        authUser?.created_at ||
+        liveProfile?.createdAt ||
+        undefined;
+
+      const activeUser = liveProfile
+        ? { ...liveProfile, createdAt: registrationTimestamp }
+        : {
+            name: meta.name || email.split("@")[0] || "Scholar",
+            email: authUser?.email || email.trim(),
+            isSda: meta.isSda !== false,
+            firstTrack: meta.firstTrack || "fundamental-beliefs",
+            role: meta.role || "STBAScholar",
+            tier: meta.tier || meta.stba_user_tier || "Beginner",
+            isGuest: false,
+            emailVerified: !!authUser?.email_confirmed_at || meta.emailVerified !== false,
+            createdAt: registrationTimestamp
+          };
+
+      setUser(activeUser);
+
+      // 3. Ensure baseline database records in Supabase (track_progress & active_recall_mastery)
+      if (authUser?.id) {
+        await ensureInitialUserTrackProgress(authUser.id, activeUser.firstTrack || "fundamental-beliefs");
+      }
 
       // Bypass Onboarding by removing the walkthrough state triggers
       localStorage.removeItem("stba_onboarding_explain_first");
@@ -92,44 +145,31 @@ export const SignInPage: React.FC = () => {
 
       // Redirect directly to the dashboard
       navigate("/dashboard");
-    } catch (err) {
-      setErrorMsg("Failed to authenticate. Please try again.");
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to authenticate with Supabase. Please verify your credentials.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
     setIsSubmitting(true);
-    setTimeout(() => {
-      const googleUser = {
-        name: "Jago Scholar",
-        email: "jago.7878@gmail.com",
-        isSda: true,
-        firstTrack: "fundamental-beliefs",
-        role: "Pastor" as any,
-        isGuest: false,
-        emailVerified: true,
-        profilePic: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop"
-      };
-
-      setUser(googleUser);
-
-      // Bypass Onboarding
-      localStorage.removeItem("stba_onboarding_explain_first");
-
-      // Set greeting continuity triggers
-      localStorage.setItem("stba_welcome_back_stephen", "true");
-      localStorage.setItem("stba_is_new_user", "false");
-
-      // Reset tour and welcome for the new session
-      localStorage.removeItem("stba_tour_completed");
-      sessionStorage.removeItem("stba_session_tour_completed");
-      sessionStorage.removeItem("stba_session_welcomed");
-      sessionStorage.removeItem("stba_session_welcomed_spoken");
-
-      navigate("/dashboard");
-    }, 600);
+    setErrorMsg(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`
+        }
+      });
+      if (error) {
+        throw error;
+      }
+    } catch (err: any) {
+      console.warn("Google OAuth error from Supabase:", err);
+      setErrorMsg(err.message || "Google Sign-in could not connect to Supabase.");
+      setIsSubmitting(false);
+    }
   };
 
   return (

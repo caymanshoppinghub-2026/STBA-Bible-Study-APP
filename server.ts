@@ -5079,14 +5079,24 @@ app.post("/api/elder-stephen", async (req, res) => {
   const aiClient = getGeminiClient();
   const isSabbathSchool = mode === "Sabbath School Studies" || mode === "Syllabus";
 
-  // Resolve user mastery level for personalized instruction
-  let userLevel: "Beginner" | "Intermediate" | "Advanced" = "Intermediate";
+  // Resolve user mastery level & dynamic discipleship telemetry dossier for Elder Stephen central brain
+  const dossier = masteryState?.dossier;
   const completionRate = masteryState?.completionRate || 0;
-  if (completionRate > 70) {
-    userLevel = "Advanced";
-  } else if (completionRate < 25 && (!progress || progress.length === 0)) {
-    userLevel = "Beginner";
-  }
+  const isNewProfile = dossier?.isNewUser ?? (completionRate === 0 && (!progress || progress.length === 0));
+  const userRank = dossier?.academicRank || (completionRate > 70 ? "Noble Berean Scholar" : completionRate > 25 ? "Scriptorium Student" : "Devout Inquirer");
+  const overallMastery = dossier?.overallMasteryScore ?? completionRate;
+  const streakDays = dossier?.currentStreakDays ?? 0;
+  const versesStudied = dossier?.totalVersesStudied ?? masteryState?.completedVersesCount ?? 0;
+  const versesVaulted = dossier?.totalVersesMastered ?? 0;
+  const userLevel: "Beginner" | "Intermediate" | "Advanced" = (completionRate > 70 || overallMastery > 70) ? "Advanced" : (isNewProfile ? "Beginner" : "Intermediate");
+
+  const discipleshipTelemetrySummary = `[CENTRAL AI BRAIN - LIVE DISCIPLESHIP TELEMETRY]
+* Scholar: ${actualName}
+* Academic Rank: ${userRank} (Level ${dossier?.levelNumber || 1})
+* Overall Mastery Score: ${overallMastery}% | Retention Stability: ${dossier?.retentionStabilityIndex ?? 0}%
+* Active Study Streak: ${streakDays} Days | Total Study Time: ${dossier?.totalStudyMinutes ?? 0} Mins
+* Verses Studied: ${versesStudied}/28 | Permanent Vault: ${versesVaulted} Verses | Notes Written: ${dossier?.totalNotesWritten ?? 0}
+* Profile Status: ${isNewProfile ? "NEW PROFILE (Zeroed initial state. Warmly guide user through foundational 2 Timothy 2:15 or Sabbath study, provide gentle scaffolding, encourage first active recall attempt)" : "ACTIVE DISCIPLE (Track real progression, challenge them to recall and teach, reinforce weak areas)"}`;
 
   const runFallback = (resolvedMode: "prestige" | "velocity") => {
     const latencyMs = Date.now() - startTime;
@@ -5243,7 +5253,7 @@ The Seventh-day Adventist movement was raised to proclaim the everlasting gospel
       const ssSystemInstruction = `IMPORTANT DIRECTIVE: The user signed up with the name: "${actualName}". You MUST address the user as "${actualName}" (e.g. 'Brother ${actualName}', 'Sister ${actualName}', or simply '${actualName}').\n\n` +
         ELDER_STEPHEN_SABBATH_SCHOOL_SYSTEM_PROMPT;
 
-      const ssUserBlock = `Active Sabbath School Lesson: "${documentTitle}"
+      const ssUserBlock = `${discipleshipTelemetrySummary}\n\nActive Sabbath School Lesson: "${documentTitle}"
 ${activePassage && activePassage !== documentTitle ? `Focal Scripture: ${activePassage}\n` : ""}${noteContent ? `Daily Lesson Excerpt / Content:\n"""\n${noteContent.slice(0, 1600)}\n"""\n` : ""}${contextSummary ? `Sabbath School Context & Cross-Mode Notes:\n"""\n${contextSummary}\n"""\n` : ""}User: "${actualName}".
 ${recentHistorySummary ? `Recent Discussion: ${recentHistorySummary}\n` : ""}User Question / Inquiry: "${userRequestText}"
 
@@ -5329,7 +5339,8 @@ ${noteContent ? `Document Content & Draft Notes:\n"""\n${noteContent.slice(0, 10
 
 CRITICAL MANDATE: The user has made a specific, bounded request: "${userRequestText}".
 Dynamically adapt and provide ONLY the exact information requested (e.g. analyzing just the first line or detailing the single concept requested). DO NOT include boilerplate greetings, unrequested outline headers, or extra content.`
-        : `Study Mode: ${mode} (Velocity Mode / Quick Answer active).
+        : `${discipleshipTelemetrySummary}
+Study Mode: ${mode} (Velocity Mode / Quick Answer active).
 Focal Scripture: ${activePassage} (KJV).
 Study Document Title: "${documentTitle}".
 ${noteContent ? `Document Content & Draft Notes:\n"""\n${noteContent.slice(0, 1600)}\n"""\n` : ""}${contextSummary ? `Context Summary: ${contextSummary}\n` : ""}${userStudyJourney ? `User Study Flow Journey: ${userStudyJourney}\n` : ""}User level: ${userLevel}.
@@ -5428,7 +5439,8 @@ Core 6-Part Structure:
     }
 
     const prestigeUserBlock = 
-`Study Mode: ${mode} (Prestige Mode / Full Comprehensive Commentary).
+`${discipleshipTelemetrySummary}
+Study Mode: ${mode} (Prestige Mode / Full Comprehensive Commentary).
 Focal Scripture: ${activePassage} (KJV).
 Study Document Title: "${documentTitle}".
 ${noteContent ? `Document Content & Draft Notes:\n"""\n${noteContent.slice(0, 1600)}\n"""\n` : ""}${contextSummary ? `Context Summary: ${contextSummary}\n` : ""}${userStudyJourney ? `User Study Flow Journey: ${userStudyJourney}\n` : ""}User level: ${userLevel} (completed ${masteryState?.completedVersesCount || 0}/28 verses, ${completionRate}%).

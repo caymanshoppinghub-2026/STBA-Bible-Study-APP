@@ -53,6 +53,7 @@
 
 html {
   font-size: 16px;
+  overscroll-behavior-x: none;
 }
 
 body {
@@ -62,6 +63,72 @@ body {
   font-size: 1rem;
   line-height: 1.6;
   overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
+/* ==========================================================================
+   Horizontal Scroll & Pan Isolation (overscroll-behavior-x: none)
+   Disables default browser swipe-to-navigate gestures across all pannable
+   containers, scrollable views, carousels, and layout wrappers.
+   ========================================================================== */
+
+/* Root document wrappers & main application panes */
+html,
+body,
+#root,
+#stba-overall-app-layout,
+#stba-content-workspace,
+#stba-app-main-pane,
+#public-routing-layout,
+main {
+  overscroll-behavior-x: none !important;
+}
+
+/* Universal rules for all pannable containers, carousels, and scrollable views */
+.overflow-x-auto,
+.overflow-x-scroll,
+.overflow-auto,
+.overflow-scroll,
+.overflow-y-auto,
+.overflow-y-scroll,
+[class*="overflow-x-auto"],
+[class*="overflow-x-scroll"],
+[class*="overflow-auto"],
+[class*="overflow-scroll"],
+[class*="overflow-y-auto"],
+[class*="overflow-y-scroll"],
+.touch-pan-x,
+[class*="touch-pan-x"],
+[style*="touch-action: pan-x"],
+[style*="touchAction: pan-x"],
+.workspace-tools-carousel,
+.pannable-container,
+[data-pannable="true"],
+[data-scrollable="true"],
+.custom-scrollbar,
+.custom-scroll-pane,
+.custom-scroll,
+.no-scrollbar,
+.scrollbar-none,
+.scrollbar-hide,
+.scrollbar-thin,
+.notebook-card-scroll,
+.blackboard-scroll,
+#recall-studio-root,
+#recall-studio-scroll-container,
+#recall-tabs-bar,
+#heatmap-contribution-grid,
+#exegesis-tabs,
+#mobile-category-slider,
+#doctrine-navigator-root,
+#notebook-drawer-sheet,
+#navigation-drawer-body,
+#dashboard-full-container {
+  overscroll-behavior-x: none !important;
+}
+
+.overscroll-x-none {
+  overscroll-behavior-x: none !important;
 }
 
 /* Lato Typography Utility for Sabbath School & Elder Stephen panels */
@@ -476,4 +543,201 @@ body {
   padding-bottom: clamp(3.25rem, 8vw, 5rem) !important;
 }
 
+/* Doctrine Navigator & Discipleship Vault Sacred Outline Mapper:
+   Lato font family, regular (400) font weights throughout, zero italics, and high-contrast drawer inputs */
+#doctrine-navigator-root,
+#doctrine-navigator-root *,
+#doctrine-navigator-root h1,
+#doctrine-navigator-root h2,
+#doctrine-navigator-root h3,
+#doctrine-navigator-root h4,
+#doctrine-navigator-root h5,
+#doctrine-navigator-root h6,
+#doctrine-navigator-root p,
+#doctrine-navigator-root span,
+#doctrine-navigator-root div,
+#doctrine-navigator-root button,
+#doctrine-navigator-root label,
+#doctrine-navigator-root input,
+#doctrine-navigator-root select,
+#doctrine-navigator-root textarea,
+#doctrine-navigator-root strong,
+#doctrine-navigator-root b,
+#doctrine-navigator-root em,
+#doctrine-navigator-root i,
+#doctrine-navigator-root blockquote,
+#notebook-drawer-sheet,
+#notebook-drawer-sheet *,
+#notebook-drawer-sheet h1,
+#notebook-drawer-sheet h2,
+#notebook-drawer-sheet h3,
+#notebook-drawer-sheet h4,
+#notebook-drawer-sheet h5,
+#notebook-drawer-sheet h6,
+#notebook-drawer-sheet p,
+#notebook-drawer-sheet span,
+#notebook-drawer-sheet div,
+#notebook-drawer-sheet button,
+#notebook-drawer-sheet label,
+#notebook-drawer-sheet input,
+#notebook-drawer-sheet select,
+#notebook-drawer-sheet textarea,
+#notebook-drawer-sheet strong,
+#notebook-drawer-sheet b,
+#notebook-drawer-sheet em,
+#notebook-drawer-sheet i {
+  font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+}
+
+/* Match "The Doctrine Navigator" page title font to "Theological Study Tracks" (#tracks-page-title) */
+#doctrine-navigator-root #doctrine-navigator-title {
+  font-family: var(--font-serif) !important;
+  font-weight: 900 !important;
+  font-style: normal !important;
+}
+
+/* High-contrast input fields inside the Discipleship Vault Sacred Outline Mapper drawer */
+#notebook-drawer-sheet input,
+#notebook-drawer-sheet select,
+#notebook-drawer-sheet textarea,
+#notebook-drawer-sheet .sacred-outline-tag-box {
+  background-color: #141C2E !important;
+  color: #FFFFFF !important;
+  border-color: #2E3E5C !important;
+  font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+}
+
+#notebook-drawer-sheet select option {
+  background-color: #141C2E !important;
+  color: #FFFFFF !important;
+  font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+}
+
+/* Doctrine Navigator Portal & Pillar Cards:
+   Two-row, three-column portal grid, subtle gradients, hover border glow & elevation, and solid selected fill */
+.doctrine-portal-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .doctrine-portal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .doctrine-portal-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.doctrine-portal-card,
+.doctrine-pillar-card {
+  background: linear-gradient(145deg, #FFFFFF 0%, #FDFBF7 58%, #F5EFE2 100%);
+  border: 1px solid #E5DEC9;
+  box-shadow: 0 4px 14px -3px rgba(6, 22, 44, 0.18);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.25s ease,
+              box-shadow 0.25s ease,
+              background 0.25s ease;
+}
+
+.doctrine-portal-card:hover,
+.doctrine-pillar-card:hover {
+  transform: translateY(-3px);
+  border-color: #E5B842;
+  box-shadow: 0 10px 26px -5px rgba(6, 22, 44, 0.32),
+              0 0 16px rgba(229, 184, 66, 0.28);
+}
+
+.doctrine-portal-card-selected,
+.doctrine-pillar-card-selected {
+  background: linear-gradient(145deg, #10213E 0%, #162B50 55%, #0C1930 100%) !important;
+  border: 2px solid #E5B842 !important;
+  box-shadow: 0 10px 28px -4px rgba(6, 22, 44, 0.65),
+              0 0 20px rgba(229, 184, 66, 0.34) !important;
+}
+
+.doctrine-portal-card-selected:hover,
+.doctrine-pillar-card-selected:hover {
+  transform: translateY(-2px);
+  border-color: #F3CF65 !important;
+  box-shadow: 0 12px 30px -4px rgba(6, 22, 44, 0.72),
+              0 0 24px rgba(243, 207, 101, 0.42) !important;
+}
+
+/* Active Recall Studio — Workspace Tools Carousel & Uniform Button Design */
+#recall-studio-root,
+#recall-studio-scroll-container,
+#recall-tabs-bar {
+  overscroll-behavior-x: none !important;
+}
+
+.workspace-tools-carousel,
+#recall-tabs-bar .workspace-tools-carousel {
+  touch-action: pan-x !important;
+  overscroll-behavior-x: none !important;
+  scroll-behavior: auto !important;
+  scroll-snap-type: none !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+#recall-tabs-bar .workspace-tool-btn,
+#recall-tabs-bar #tab-recall-gamepack {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: 0.875rem;
+  background-color: #06162c;
+  color: #e7e5e4;
+  border: 1px solid rgba(223, 197, 123, 0.7);
+  font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  touch-action: pan-x;
+  transition: transform 0.2s ease-out,
+              background-color 0.2s ease-out,
+              border-color 0.2s ease-out,
+              color 0.2s ease-out,
+              box-shadow 0.2s ease-out;
+}
+
+#recall-tabs-bar .workspace-tool-btn:hover,
+#recall-tabs-bar #tab-recall-gamepack:hover {
+  background-color: rgba(13, 48, 96, 0.75);
+  color: #ffffff;
+  border-color: #F3CF65;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(223, 197, 123, 0.3);
+}
+
+#recall-tabs-bar .workspace-tool-btn.workspace-tool-btn-active,
+#recall-tabs-bar #tab-recall-gamepack.workspace-tool-btn-active {
+  background-color: #0d3060 !important;
+  color: #ffffff !important;
+  border-color: #DFC57B !important;
+  box-shadow: 0 0 12px rgba(223, 197, 123, 0.35), 0 0 0 1px #DFC57B !important;
+}
+
+/* Homepage (#stba-landing-page) — Uniform Lato font family and Active Recall card body text size (0.875rem / 14px) */
+#stba-landing-page p,
+#stba-landing-page li {
+  font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+  font-size: 0.875rem !important;
+  line-height: 1.625 !important;
+}
 

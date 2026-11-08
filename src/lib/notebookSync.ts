@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { StudyNote, HighlightItem } from '../types/notebook'
+import { ensureInitialUserTrackProgress } from './trackSync'
 
 /**
  * Ensures any string ID is mapped deterministically to a valid standard UUID format,
@@ -94,7 +95,7 @@ export async function ensureSupabaseAuth(): Promise<any> {
     name = "Berean Scholar";
   }
 
-  // 3. Attempt silent Supabase auth in background
+  // 3. Attempt silent Supabase auth or signup in background
   try {
     const password = `StbaSecPass_1779_${emailLower.replace(/[^a-zA-Z0-9]/g, '')}`;
     const { data: signInData } = await supabase.auth.signInWithPassword({
@@ -103,6 +104,17 @@ export async function ensureSupabaseAuth(): Promise<any> {
     });
     if (signInData?.user) {
       return signInData.user;
+    }
+
+    const { data: signUpData } = await supabase.auth.signUp({
+      email: emailLower,
+      password: password,
+      options: {
+        data: { name }
+      }
+    });
+    if (signUpData?.user) {
+      return signUpData.user;
     }
   } catch (e) {}
 
@@ -159,43 +171,46 @@ export async function checkSupabaseConnection(): Promise<{ ok: boolean; error?: 
  */
 export async function fetchNotesFromSupabase(): Promise<StudyNote[]> {
   try {
-    const user = await ensureSupabaseAuth();
-    const userId = user?.id || "stba_default_user";
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user || (await ensureSupabaseAuth());
+    const userId = user?.id;
 
-    // 1. Try server cloud storage
-    try {
-      const res = await fetch(`/api/notebook/notes?userId=${encodeURIComponent(userId)}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.ok && Array.isArray(json.notes) && json.notes.length > 0) {
-          return json.notes.map((n: any) => ({
-            id: getDeterministicUUID(n.id),
-            title: n.title || 'Untitled Note',
-            summary: n.summary || '',
-            content: n.content || '',
-            category: n.category || 'theology',
-            scriptureTags: n.scriptureTags || n.scripture_tags || [],
-            createdAt: n.createdAt || n.created_at || new Date().toISOString(),
-            updatedAt: n.updatedAt || n.updated_at || new Date().toISOString(),
-            isFavorite: !!(n.isFavorite ?? n.is_favorite),
-            children: (n.children || []).map(getDeterministicUUID),
-            order: typeof n.order === 'number' ? n.order : 0
-          }));
-        }
-      }
-    } catch (e) {}
-
-    // 2. Try Supabase
-    if (user) {
+    // 1. Strictly query Supabase stba_study_notes table first
+    if (userId) {
       const { data, error } = await supabase
         .from('stba_study_notes')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('order', { ascending: true });
 
-      if (!error && data && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         return data.map(fromSupabase);
       }
+    }
+
+    // 2. Server API fallback only if Supabase returns error/unreachable
+    if (userId) {
+      try {
+        const res = await fetch(`/api/notebook/notes?userId=${encodeURIComponent(userId)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.ok && Array.isArray(json.notes)) {
+            return json.notes.map((n: any) => ({
+              id: getDeterministicUUID(n.id),
+              title: n.title || 'Untitled Note',
+              summary: n.summary || '',
+              content: n.content || '',
+              category: n.category || 'theology',
+              scriptureTags: n.scriptureTags || n.scripture_tags || [],
+              createdAt: n.createdAt || n.created_at || new Date().toISOString(),
+              updatedAt: n.updatedAt || n.updated_at || new Date().toISOString(),
+              isFavorite: !!(n.isFavorite ?? n.is_favorite),
+              children: (n.children || []).map(getDeterministicUUID),
+              order: typeof n.order === 'number' ? n.order : 0
+            }));
+          }
+        }
+      } catch (e) {}
     }
 
     return [];
@@ -608,7 +623,7 @@ export async function saveProfileToSupabase(profile: any): Promise<void> {
     const userTier = localStorage.getItem("stba_user_tier") || "Beginner";
     const egwIntegration = localStorage.getItem("stba_egw_integration") || "true";
 
-    await supabase.auth.updateUser({
+    const { data: updatedAuth } = await supabase.auth.updateUser({
       data: {
         name: profile.name,
         profilePic: profile.profilePic || "",
@@ -617,6 +632,7 @@ export async function saveProfileToSupabase(profile: any): Promise<void> {
         firstTrack: profile.firstTrack || "fundamental-beliefs",
         emailVerified: profile.emailVerified !== false,
         isGuest: false,
+        ...(profile.createdAt ? { createdAt: profile.createdAt } : {}),
         
         // Preferences
         stba_ai_voice: aiVoice,
@@ -629,6 +645,13 @@ export async function saveProfileToSupabase(profile: any): Promise<void> {
         stba_egw_integration: egwIntegration
       }
     });
+
+    if (updatedAuth?.user?.id) {
+      await ensureInitialUserTrackProgress(
+        updatedAuth.user.id,
+        profile.firstTrack || "fundamental-beliefs"
+      );
+    }
   } catch (err) {
     console.warn("Error saving profile to Supabase:", err);
   }
@@ -645,7 +668,14 @@ export async function fetchProfileFromSupabase(): Promise<any | null> {
     }
 
     const metadata = authUser.user_metadata || {};
-    if (!metadata.name && !metadata.stba_ai_voice) {
+    const registrationTimestamp =
+      metadata.createdAt ||
+      metadata.created_at ||
+      metadata.signupDate ||
+      authUser.created_at ||
+      undefined;
+
+    if (!metadata.name && !metadata.stba_ai_voice && !authUser.created_at) {
       return null;
     }
     
@@ -657,7 +687,8 @@ export async function fetchProfileFromSupabase(): Promise<any | null> {
       role: metadata.role || "STBAScholar",
       isGuest: false,
       emailVerified: metadata.emailVerified !== false,
-      profilePic: metadata.profilePic || ""
+      profilePic: metadata.profilePic || "",
+      createdAt: registrationTimestamp
     };
 
     if (metadata.stba_ai_voice) localStorage.setItem("stba_ai_voice", metadata.stba_ai_voice);

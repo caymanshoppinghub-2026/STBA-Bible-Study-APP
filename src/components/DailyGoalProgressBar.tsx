@@ -85,10 +85,10 @@ export const DailyGoalProgressBar: React.FC<DailyGoalProgressBarProps> = ({
 
     const handleStorage = (e: StorageEvent) => {
       if (
-        e.key === "stba_daily_verse_limit" ||
-        e.key === "stba_today_recalls_count" ||
-        e.key === "stba_today_recalls_date" ||
-        e.key === "stba_today_recalls_verse_ids"
+        !e.key ||
+        e.key.startsWith("stba_daily_verse_limit") ||
+        e.key.startsWith("stba_today_recalls") ||
+        e.key.startsWith("stba_recall_")
       ) {
         refreshProgress();
       }

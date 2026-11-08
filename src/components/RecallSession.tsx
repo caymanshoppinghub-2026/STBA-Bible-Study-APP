@@ -29,23 +29,13 @@ import {
   Brain,
   Layers,
   Sparkle,
-  Gamepad2,
-  CalendarCheck,
-  LayoutGrid,
-  Compass
+  LayoutGrid
 } from "lucide-react";
 import { Scripture } from "../types";
 import { callElderStephen } from "../lib/callElderStephen";
 import { useApp } from "../context/AppContext";
 import { recordActivity } from "../utils/activityTracker";
 import { SCRIPTURE_DATABASE } from "../data/scriptureDb";
-
-// Import memory enhancement components
-import { ScriptureGamePack } from "./recall/ScriptureGamePack";
-import { MemorizationBlueprint } from "./recall/MemorizationBlueprint";
-import { ThirtyDayRecallPlan } from "./recall/ThirtyDayRecallPlan";
-import { VisualMemoryGrid } from "./recall/VisualMemoryGrid";
-import { GeminiRecallModule } from "./recall/GeminiRecallModule";
 
 // Comprehensive catalog of curated SDA memory verses for instant lookup
 const ALL_LIBRARY_SCRIPTURES: Scripture[] = [
@@ -145,6 +135,7 @@ interface RecallSessionProps {
   sabbathMode?: boolean;
   onBack: () => void;
   onComplete?: (score: number, scriptureId: string) => void;
+  onInspectGrid?: () => void;
   currentSessionIndex?: number;
   totalSessionsInTrack?: number;
   isEmbedded?: boolean;
@@ -159,6 +150,7 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
   sabbathMode = false,
   onBack,
   onComplete,
+  onInspectGrid,
   currentSessionIndex = 1,
   totalSessionsInTrack = 3,
   isEmbedded = false
@@ -185,9 +177,6 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
   // Current step in the 4-step Recall Trainer flow
   // 1 = Select & Study, 2 = Verify (Type/Fill), 3 = Evaluate, 4 = Reflect & Finish
   const [trainerStep, setTrainerStep] = useState<1 | 2 | 3 | 4>(1);
-
-  // Active memory exercise tool within Verbatim Recall
-  const [subToolMode, setSubToolMode] = useState<"trainer" | "gamepack" | "blueprint" | "plan30" | "grid" | "gemini">("trainer");
 
   // Custom reference input text state for Quick Lookup
   const [customRefQuery, setCustomRefQuery] = useState<string>("");
@@ -469,103 +458,7 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
         </div>
       </header>
 
-      {/* RECALL ENHANCEMENT SUITE SWITCHER (ROUND WITH GOLD TRIM) */}
-      <div className="bg-[#0B101B] border-b border-stone-800 px-4 py-2.5 flex items-center justify-start gap-2 overflow-x-auto no-scrollbar select-none scroll-smooth" id="recall-subtools-bar">
-        {[
-          { id: "trainer" as const, label: "4-Step Recall Gym", icon: Brain },
-          { id: "gamepack" as const, label: "Scripture Game Pack", icon: Gamepad2 },
-          { id: "plan30" as const, label: "30-Day Discipleship Track", icon: CalendarCheck, title: "The 30-Day Discipleship Scripture Track" },
-          { id: "grid" as const, label: "Visual Memory Grid", icon: LayoutGrid },
-          { id: "blueprint" as const, label: "App Blueprint", icon: Compass },
-          { id: "gemini" as const, label: "Gemini Recall AI", icon: Sparkles }
-        ].map(tool => {
-          const Icon = tool.icon;
-          const isSelected = subToolMode === tool.id;
-          return (
-            <button
-              key={tool.id}
-              onClick={() => setSubToolMode(tool.id)}
-              title={(tool as any).title || tool.label}
-              className={`shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[11px] font-sans font-semibold transition-all border cursor-pointer ${
-                isSelected
-                  ? "bg-[#0d3060] text-white border-[#DFC57B] shadow-[0_0_12px_rgba(223,197,123,0.35)] ring-1 ring-[#DFC57B]"
-                  : "bg-[#06162c] text-stone-200 border-[#DFC57B]/70 hover:border-[#F3CF65] hover:bg-[#0d3060]/70"
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5 text-[#DFC57B]" />
-              <span className="whitespace-nowrap">{tool.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* RENDER ACTIVE SUBTOOL VIEW IF NOT IN 4-STEP GYM */}
-      {subToolMode === "gamepack" && (
-        <div className="flex-1 p-4 sm:p-6 md:p-8">
-          <ScriptureGamePack
-            initialScripture={selectedScripture}
-            onLaunchRecallPractice={(s) => {
-              setSelectedScripture(s);
-              setSubToolMode("trainer");
-              setTrainerStep(1);
-            }}
-          />
-        </div>
-      )}
-
-      {subToolMode === "plan30" && (
-        <div className="flex-1 p-4 sm:p-6 md:p-8">
-          <ThirtyDayRecallPlan
-            onSelectVerseForPractice={(s) => {
-              setSelectedScripture(s);
-              setSubToolMode("trainer");
-              setTrainerStep(1);
-            }}
-            onPlayInGamePack={(s) => {
-              setSelectedScripture(s);
-              setSubToolMode("gamepack");
-            }}
-          />
-        </div>
-      )}
-
-      {subToolMode === "grid" && (
-        <div className="flex-1 p-4 sm:p-6 md:p-8">
-          <VisualMemoryGrid
-            onSelectScripture={(s) => {
-              setSelectedScripture(s);
-              setSubToolMode("trainer");
-              setTrainerStep(1);
-            }}
-          />
-        </div>
-      )}
-
-      {subToolMode === "blueprint" && (
-        <div className="flex-1 p-4 sm:p-6 md:p-8">
-          <MemorizationBlueprint
-            onLaunchRecall={() => {
-              setSubToolMode("trainer");
-            }}
-          />
-        </div>
-      )}
-
-      {subToolMode === "gemini" && (
-        <div className="flex-1 p-4 sm:p-6 md:p-8">
-          <GeminiRecallModule
-            initialScripture={selectedScripture}
-            onPracticeInGym={(s) => {
-              setSelectedScripture(s);
-              setSubToolMode("trainer");
-              setTrainerStep(1);
-            }}
-          />
-        </div>
-      )}
-
       {/* RENDER DYNAMIC ACTIVE TRAINER STEP SHEETS */}
-      {subToolMode === "trainer" && (
       <div className="flex-1 p-4 sm:p-6 md:p-8 flex flex-col justify-between" id="trainer-step-wrapper">
         <AnimatePresence mode="wait">
 
@@ -1176,14 +1069,16 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSubToolMode("grid")}
-                  className="px-4 py-2 bg-[#06162c] hover:bg-[#0d3060] text-[#DFC57B] border border-[#DFC57B] text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 hover:shadow-[0_0_12px_rgba(223,197,123,0.3)]"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5 text-[#DFC57B]" />
-                  <span>Inspect Visual Memory Grid</span>
-                </button>
+                {onInspectGrid && (
+                  <button
+                    type="button"
+                    onClick={onInspectGrid}
+                    className="px-4 py-2 bg-[#06162c] hover:bg-[#0d3060] text-[#DFC57B] border border-[#DFC57B] text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 hover:shadow-[0_0_12px_rgba(223,197,123,0.3)]"
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5 text-[#DFC57B]" />
+                    <span>Inspect Visual Memory Grid</span>
+                  </button>
+                )}
               </div>
 
               {/* FINAL COMPLETED BAR PORTAL */}
@@ -1283,7 +1178,6 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
           )}
         </AnimatePresence>
       </div>
-      )}
     </div>
   );
 };

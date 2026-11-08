@@ -9,12 +9,33 @@ export interface ChatMessagePayload {
   timestamp?: string
 }
 
+export interface DiscipleshipTelemetryDossier {
+  academicRank: string
+  rankBadge: string
+  levelNumber: number
+  currentXp: number
+  overallMasteryScore: number
+  retentionStabilityIndex: number
+  currentStreakDays: number
+  longestStreakDays: number
+  totalStudyMinutes: number
+  totalVersesStudied: number
+  totalVersesMastered: number
+  totalNotesWritten: number
+  earnedBadgesCount: number
+  totalBadgesCount: number
+  isNewUser: boolean
+  weakRecallAreas?: Array<{ verse: string; accuracy: number; attempts: number }>
+  trackProgressList?: Array<{ trackId: string; trackName: string; completedCount: number; preTestScore?: number }>
+}
+
 export interface MasteryStatePayload {
   completedVersesCount: number
   totalVersesCount: number
   completionRate: number
   lastActiveDate: string
   favoriteScriptures: string[]
+  dossier?: DiscipleshipTelemetryDossier
 }
 
 export interface ElderStephenPayload {
@@ -67,7 +88,7 @@ export function buildUnifiedPayload(partial: Partial<ElderStephenPayload>): Elde
   // 2. Resolve default current study mode
   const currentMode = partial.currentMode || 'Explain'
 
-  // 3. Resolve mastery state from local indicators
+  // 3. Resolve mastery state from local indicators and live stats
   let completedVerses: string[] = []
   try {
     const savedCompleted = localStorage.getItem('stba_completed_verses')
@@ -85,12 +106,95 @@ export function buildUnifiedPayload(partial: Partial<ElderStephenPayload>): Elde
     }
   } catch (e) {}
 
+  // Live Discipleship Telemetry Dossier for Elder Stephen central brain
+  let currentStreakDays = 0
+  let totalStudySessions = completedVerses.length
+  let vaultedCount = 0
+  let totalNotesCount = 0
+  try {
+    const storedStreak = localStorage.getItem('stba_study_streak_count_v2')
+    if (storedStreak) currentStreakDays = Math.max(0, parseInt(storedStreak, 10))
+    const rawVault = localStorage.getItem('stba_memory_vault_list_v2')
+    if (rawVault) {
+      const parsedVault = JSON.parse(rawVault)
+      if (Array.isArray(parsedVault)) vaultedCount = parsedVault.length
+    }
+    const rawNotes = localStorage.getItem('stba_notebook_notes_v2')
+    if (rawNotes) {
+      const parsedNotes = JSON.parse(rawNotes)
+      if (Array.isArray(parsedNotes)) totalNotesCount = parsedNotes.length
+    }
+  } catch (e) {}
+
+  const totalVersesStudied = completedVerses.length
+  const vaultScore = vaultedCount > 0 ? Math.min(100, Math.round((vaultedCount / 16) * 100)) : 0
+  const recallAccuracyScore = totalVersesStudied > 0 ? 80 : 0
+  const trackScore = totalVersesStudied > 0 ? Math.min(100, Math.round((totalVersesStudied / 28) * 100)) : 0
+  const doctrineScore = totalVersesStudied > 0 ? Math.min(100, Math.round((totalVersesStudied / 28) * 100)) : 0
+  const notebookScore = totalNotesCount > 0 ? Math.min(100, Math.round((totalNotesCount / 10) * 100)) : 0
+
+  const overallMasteryScore = (totalVersesStudied > 0 || totalNotesCount > 0 || vaultedCount > 0)
+    ? Math.min(
+        99,
+        Math.round(
+          vaultScore * 0.25 +
+          recallAccuracyScore * 0.25 +
+          trackScore * 0.20 +
+          doctrineScore * 0.15 +
+          notebookScore * 0.15
+        )
+      )
+    : 0
+
+  const retentionStabilityIndex = overallMasteryScore > 0 ? Math.min(99, Math.round(overallMasteryScore * 0.98)) : 0
+  const totalXp = overallMasteryScore * 45 + totalStudySessions * 35 + vaultedCount * 50
+  const levelNumber = Math.min(7, Math.max(1, Math.floor(totalXp / 1200) + 1))
+  
+  const levelTitles: Record<number, { title: string; badge: string }> = {
+    1: { title: "Devout Inquirer", badge: "Level 1 • Initiate" },
+    2: { title: "Scriptorium Student", badge: "Level 2 • Disciple" },
+    3: { title: "Sanctuary Scribe", badge: "Level 3 • Researcher" },
+    4: { title: "Noble Berean Scholar", badge: "Level 4 • Exegete" },
+    5: { title: "Covenant Instructor", badge: "Level 5 • Teacher" },
+    6: { title: "Three Angels' Herald", badge: "Level 6 • Evangelist" },
+    7: { title: "Master Exegete & Elder", badge: "Level 7 • Master" }
+  }
+  const currentRank = levelTitles[levelNumber] || levelTitles[1]
+
+  const earnedBadgesCount =
+    (totalStudySessions >= 1 ? 1 : 0) +
+    (currentStreakDays >= 7 ? 1 : 0) +
+    (currentStreakDays >= 14 ? 1 : 0) +
+    (totalVersesStudied >= 9 ? 1 : 0) +
+    (totalVersesStudied >= 8 ? 1 : 0) +
+    (totalVersesStudied >= 3 ? 1 : 0) +
+    (vaultedCount >= 10 ? 1 : 0)
+
+  const dossier: DiscipleshipTelemetryDossier = {
+    academicRank: currentRank.title,
+    rankBadge: currentRank.badge,
+    levelNumber,
+    currentXp: totalXp % 1200,
+    overallMasteryScore,
+    retentionStabilityIndex,
+    currentStreakDays,
+    longestStreakDays: currentStreakDays,
+    totalStudyMinutes: totalStudySessions * 15 + currentStreakDays * 10,
+    totalVersesStudied,
+    totalVersesMastered: vaultedCount,
+    totalNotesWritten: totalNotesCount,
+    earnedBadgesCount,
+    totalBadgesCount: 10,
+    isNewUser: totalVersesStudied === 0 && totalNotesCount === 0 && vaultedCount === 0
+  }
+
   const defaultMastery: MasteryStatePayload = {
     completedVersesCount: completedVerses.length,
     totalVersesCount: 28, // STBA standard doctrinal primary verses
     completionRate: completedVerses.length > 0 ? Math.round((completedVerses.length / 28) * 100) : 0,
     lastActiveDate: new Date().toISOString().split('T')[0],
-    favoriteScriptures
+    favoriteScriptures,
+    dossier
   }
 
   let sessionMemory: any = null;

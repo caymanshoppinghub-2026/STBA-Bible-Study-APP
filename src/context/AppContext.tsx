@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { UserAccount, Track, Scripture, SubscriptionTier } from "../types";
 import { saveProfileToSupabase, fetchProfileFromSupabase } from "../lib/notebookSync";
+import { supabase } from "../lib/supabase";
 
 export interface UpgradeModalState {
   isOpen: boolean;
@@ -58,57 +59,11 @@ function normalizeTier(raw?: string | null): SubscriptionTier {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Zero-out routine: runs immediately on first load to wipe legacy mock data/scores and reset cleanly.
-  useEffect(() => {
-    const isZeroed = localStorage.getItem("stba_db_zeroed_v4");
-    if (!isZeroed) {
-      localStorage.removeItem("stba_user_profile");
-      localStorage.removeItem("stba_completed_verses");
-      localStorage.removeItem("stba_tracks_progress");
-      localStorage.removeItem("stba_reflections");
-      localStorage.removeItem("stba_reflections_detailed");
-      localStorage.removeItem("stba_ss_is_imported");
-      localStorage.removeItem("stba_ss_daily_lessons");
-      localStorage.removeItem("stba_ss_deck_cards");
-      localStorage.removeItem("stba_memory_vault_list");
-      localStorage.setItem("stba_db_zeroed_v4", "true");
-    }
-  }, []);
+  // User state: strictly initialized from Supabase live session, never stale mock data
+  const [user, setUserState] = useState<UserAccount | null>(null);
 
-  const [user, setUserState] = useState<UserAccount | null>(() => {
-    const saved = localStorage.getItem("stba_user_profile");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return parsed;
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
-  });
-
-  // Strict subscription tier resolution: only honor verified paid entitlement or explicit profile tier; default strictly to "Beginner"
-  const [userTier, setUserTierState] = useState<SubscriptionTier>(() => {
-    try {
-      const entitlementRaw = localStorage.getItem("stba_tier_entitlement_v1");
-      if (entitlementRaw) {
-        const entitlement = JSON.parse(entitlementRaw);
-        if (entitlement && entitlement.verified === true && (entitlement.tier === "Scholar" || entitlement.tier === "Leader")) {
-          return entitlement.tier;
-        }
-      }
-      const savedProfile = localStorage.getItem("stba_user_profile");
-      if (savedProfile) {
-        const parsed = JSON.parse(savedProfile);
-        if (parsed?.tier && (parsed.tier === "Scholar" || parsed.tier === "Leader")) {
-          return parsed.tier;
-        }
-      }
-    } catch (e) {}
-    localStorage.setItem("stba_user_tier", "beginner");
-    return "Beginner";
-  });
+  // Strict subscription tier resolution: defaults to "Beginner" unless live Supabase metadata specifies otherwise
+  const [userTier, setUserTierState] = useState<SubscriptionTier>("Beginner");
 
   const [upgradeModalState, setUpgradeModalState] = useState<UpgradeModalState>({
     isOpen: false,
@@ -196,21 +151,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [openUpgradeModal]);
 
-  const [completedVerseIds, setCompletedVerseIds] = useState<string[]>(() => {
-    const savedUser = localStorage.getItem("stba_user_profile");
-    if (savedUser) {
-      try {
-        const u = JSON.parse(savedUser);
-        if (u && u.emailVerified) {
-          const saved = localStorage.getItem("stba_completed_verses");
-          if (saved) {
-            return JSON.parse(saved);
-          }
-        }
-      } catch (e) {}
-    }
-    return [];
-  });
+  // Live completed verses: strictly loaded from Supabase track_progress and active_recall_mastery
+  const [completedVerseIds, setCompletedVerseIds] = useState<string[]>([]);
 
   const [selectedTrackId, setSelectedTrackId] = useState<string>(() => {
     return localStorage.getItem("stba_selected_track") || "fundamental-beliefs";
@@ -293,32 +235,154 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Fetch permanent profile and settings from Supabase on load
+  // Strictly initialize user state, tier, and studied verses directly from Supabase upon login & app initialization
   useEffect(() => {
-    const loadProfile = async () => {
-      const saved = localStorage.getItem("stba_user_profile");
-      if (saved) {
-        try {
-          const profileLocal = JSON.parse(saved);
-          if (profileLocal && !profileLocal.isGuest) {
-            const profileRemote = await fetchProfileFromSupabase();
-            if (profileRemote) {
-              setUserState(profileRemote);
-              localStorage.setItem("stba_user_profile", JSON.stringify(profileRemote));
-              if (profileRemote.tier) {
-                const remoteTier = normalizeTier(profileRemote.tier);
-                setUserTierState(remoteTier);
-                localStorage.setItem("stba_user_tier", remoteTier.toLowerCase());
-              }
-              window.dispatchEvent(new Event("stba_voice_changed"));
-            }
+    let isMounted = true;
+
+    const initializeFromSupabase = async (sessionUser?: any) => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const authUser = sessionUser || session?.user;
+
+        if (!authUser) {
+          if (isMounted) {
+            setUserState(null);
+            setUserTierState("Beginner");
+            setCompletedVerseIds([]);
           }
-        } catch (e) {
-          console.error("Error loading remote profile:", e);
+          return;
+        }
+
+        // Fetch live profile directly from Supabase
+        const remoteProfile = await fetchProfileFromSupabase();
+        const meta = authUser.user_metadata || {};
+        const registrationTimestamp =
+          meta.createdAt ||
+          meta.created_at ||
+          meta.signupDate ||
+          authUser.created_at ||
+          remoteProfile?.createdAt ||
+          undefined;
+
+        const liveUser: UserAccount = remoteProfile
+          ? {
+              ...remoteProfile,
+              createdAt: registrationTimestamp
+            }
+          : {
+              name: meta.name || authUser.email?.split("@")[0] || "Scholar",
+              email: authUser.email || "",
+              isSda: meta.isSda !== false,
+              firstTrack: meta.firstTrack || "fundamental-beliefs",
+              role: meta.role || "STBAScholar",
+              tier: normalizeTier(meta.stba_user_tier || meta.tier || "Beginner"),
+              isGuest: false,
+              emailVerified: !!authUser.email_confirmed_at || meta.emailVerified !== false,
+              profilePic: meta.profilePic || "",
+              createdAt: registrationTimestamp
+            };
+
+        if (isMounted) {
+          setUserState(liveUser);
+          const resolvedTier = normalizeTier(liveUser.tier);
+          setUserTierState(resolvedTier);
+          localStorage.setItem("stba_user_tier", resolvedTier.toLowerCase());
+          localStorage.setItem("stba_user_profile", JSON.stringify(liveUser));
+        }
+
+        // Strictly fetch live studied/completed texts directly from Supabase track_progress & active_recall_mastery
+        const { data: trackData } = await supabase
+          .from("track_progress")
+          .select("studied_texts")
+          .eq("user_id", authUser.id);
+
+        const { data: recallData } = await supabase
+          .from("active_recall_mastery")
+          .select("verse_reference, mastery_level, attempts")
+          .eq("user_id", authUser.id);
+
+        const liveCompletedSet = new Set<string>();
+        if (trackData && Array.isArray(trackData)) {
+          trackData.forEach((row: any) => {
+            if (Array.isArray(row.studied_texts)) {
+              row.studied_texts.forEach((txt: string) => liveCompletedSet.add(txt));
+            }
+          });
+        }
+        if (recallData && Array.isArray(recallData)) {
+          recallData.forEach((row: any) => {
+            if (row.verse_reference && (row.mastery_level >= 2 || (row.attempts && row.attempts > 0))) {
+              liveCompletedSet.add(row.verse_reference);
+            }
+          });
+        }
+
+        // Strictly fetch live study notes directly from Supabase stba_study_notes
+        const { data: notesData } = await supabase
+          .from("stba_study_notes")
+          .select("*")
+          .eq("user_id", authUser.id)
+          .order("sort_order", { ascending: true });
+
+        localStorage.removeItem("stba_notebook_notes");
+        localStorage.removeItem("stba_study_notes");
+        localStorage.removeItem("stba_has_completed_session");
+        localStorage.removeItem("stba_study_streak_count");
+
+        if (notesData && Array.isArray(notesData) && notesData.length > 0) {
+          const syncedNotes = notesData.map((row: any, idx: number) => ({
+            id: row.id,
+            title: row.title || "Untitled Note",
+            summary: row.summary || "",
+            content: row.content || "",
+            category: row.category || "theology",
+            scriptureTags: row.scripture_tags || [],
+            createdAt: row.created_at || new Date().toISOString(),
+            updatedAt: row.updated_at || new Date().toISOString(),
+            isFavorite: !!row.is_favorite,
+            children: [],
+            order: typeof row.sort_order === "number" ? row.sort_order : idx,
+            expanded: false
+          }));
+          localStorage.setItem("stba_notebook_notes_v2", JSON.stringify(syncedNotes));
+        } else {
+          localStorage.setItem("stba_notebook_notes_v2", JSON.stringify([]));
+        }
+
+        if (isMounted) {
+          setCompletedVerseIds(Array.from(liveCompletedSet));
+          window.dispatchEvent(new Event("stba-activity-recorded"));
+        }
+      } catch (err) {
+        console.warn("Error strictly initializing user state from Supabase:", err);
+        if (isMounted) {
+          setUserState(null);
+          setCompletedVerseIds([]);
         }
       }
     };
-    loadProfile();
+
+    initializeFromSupabase();
+
+    // Listen for live Supabase Auth state transitions
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        await initializeFromSupabase(session?.user);
+      } else if (event === "SIGNED_OUT") {
+        if (isMounted) {
+          setUserState(null);
+          setUserTierState("Beginner");
+          setCompletedVerseIds([]);
+          localStorage.removeItem("stba_user_profile");
+          localStorage.removeItem("stba_completed_verses");
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const addCompletedVerseId = (id: string) => {
@@ -426,7 +490,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logOut = () => {
     setUser(null);
+    setUserTierState("Beginner");
+    setCompletedVerseIds([]);
     localStorage.removeItem("stba_user_profile");
+    localStorage.removeItem("stba_completed_verses");
+    localStorage.removeItem("stba_tier_entitlement_v1");
+    try {
+      supabase.auth.signOut().catch(() => {});
+    } catch (e) {}
   };
 
   return (

@@ -158,30 +158,51 @@ async function runVerification() {
   console.log(`\n${colors.bright}4. Data Fetching & Table Schema Verification${colors.reset}`);
   
   const tables = [
-    { name: 'doctrine_tracks', description: 'Curated SDA Doctrine Study Tracks' },
-    { name: 'stba_study_notes', description: 'User Study Notebook Notes & Scribe Records' },
-    { name: 'stba_study_highlights', description: 'User Scripture Highlighting & Annotations' },
-    { name: 'track_progress', description: 'Doctrinal Mastery Pre-Test & Progress Records' }
+    {
+      name: 'doctrine_tracks',
+      description: 'Curated SDA Doctrine Study Tracks',
+      columns: '*'
+    },
+    {
+      name: 'stba_study_notes',
+      description: 'User Study Notebook Notes & Scribe Records',
+      columns: 'id,user_id,title,content,summary,category,scripture_tags,children,order,is_favorite,created_at,updated_at'
+    },
+    {
+      name: 'stba_study_highlights',
+      description: 'User Scripture Highlighting & Annotations',
+      columns: 'id,user_id,translation,verse_reference,text_snippet,color,created_at'
+    },
+    {
+      name: 'track_progress',
+      description: 'Doctrinal Mastery Pre-Test & Progress Records',
+      columns: 'id,user_id,track_id,track_name,pre_test_score,recommended_starting_point,studied_texts,active_recall,teach_it,saved_to_notebook,saved_notebook_page_id,created_at,updated_at'
+    },
+    {
+      name: 'active_recall_mastery',
+      description: 'Active Recall Verse Mastery, Attempts & Successes',
+      columns: 'id,user_id,track_id,verse_reference,mastery_level,attempts,successes,last_review_at,created_at,updated_at'
+    }
   ];
 
   for (const table of tables) {
     try {
       const { data, error, count } = await supabase
         .from(table.name)
-        .select('*', { count: 'exact' })
+        .select(table.columns, { count: 'exact' })
         .limit(5);
 
       if (error) {
-        logFailure(`Table "${table.name}": Fetch error - ${error.message} (code: ${error.code})`);
-        testResults.push({ step: `Fetch: ${table.name}`, status: 'FAILED', message: error.message });
+        logFailure(`Table "${table.name}": Fetch/Schema error - ${error.message} (code: ${error.code})`);
+        testResults.push({ step: `Schema & Fetch: ${table.name}`, status: 'FAILED', message: error.message });
       } else {
         const rowCount = Array.isArray(data) ? data.length : 0;
-        logSuccess(`Table "${table.name}" (${table.description}): Accessible. Records returned: ${rowCount} (Total in view: ${count ?? rowCount})`);
-        testResults.push({ step: `Fetch: ${table.name}`, status: 'PASSED', message: `Fetched ${rowCount} rows, Table exists` });
+        logSuccess(`Table "${table.name}" (${table.description}): Schema columns verified. Records returned: ${rowCount} (Total in view: ${count ?? rowCount})`);
+        testResults.push({ step: `Schema & Fetch: ${table.name}`, status: 'PASSED', message: `All expected columns verified (${rowCount} rows)` });
       }
     } catch (err: any) {
       logFailure(`Table "${table.name}": Fetch exception`, err.message);
-      testResults.push({ step: `Fetch: ${table.name}`, status: 'FAILED', message: err.message });
+      testResults.push({ step: `Schema & Fetch: ${table.name}`, status: 'FAILED', message: err.message });
     }
   }
 
@@ -256,7 +277,8 @@ async function runVerification() {
       .from('track_progress')
       .insert({
         user_id: fakeUserId,
-        track_id: 'salvation'
+        track_id: 'salvation',
+        pre_test_score: 0
       })
       .select();
 
@@ -274,6 +296,34 @@ async function runVerification() {
     }
   } catch (err: any) {
     logWarning('Exception during track_progress RLS probe', err.message);
+  }
+
+  // 5C-2: Test RLS on active_recall_mastery
+  try {
+    const fakeUserId = crypto.randomUUID();
+    const { data: armInsert, error: armError } = await supabase
+      .from('active_recall_mastery')
+      .insert({
+        user_id: fakeUserId,
+        track_id: 'salvation',
+        verse_reference: 'Ephesians 2:8'
+      })
+      .select();
+
+    if (armError) {
+      if (armError.code === '42501' || armError.message.includes('row-level security')) {
+        logSuccess(`RLS Active on "active_recall_mastery": Unauthorized INSERT blocked with 42501 ("${armError.message}")`);
+        testResults.push({ step: 'RLS: active_recall_mastery Write Guard', status: 'PASSED', message: 'Unauthorized write blocked (42501)' });
+      } else {
+        logWarning(`RLS on "active_recall_mastery": ${armError.message} (${armError.code})`);
+        testResults.push({ step: 'RLS: active_recall_mastery Write Guard', status: 'WARNING', message: armError.message });
+      }
+    } else {
+      logFailure(`SECURITY RISK: Unauthenticated INSERT succeeded on "active_recall_mastery"!`, armInsert);
+      testResults.push({ step: 'RLS: active_recall_mastery Write Guard', status: 'FAILED', message: 'RLS not blocking unauthenticated insert!' });
+    }
+  } catch (err: any) {
+    logWarning('Exception during active_recall_mastery RLS probe', err.message);
   }
 
   // 5D: Test RLS on doctrine_tracks

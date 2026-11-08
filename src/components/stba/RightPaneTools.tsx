@@ -8,14 +8,14 @@ import {
   Calendar, Check, Database, AlertCircle, X, Sliders, Radio, Headphones, Zap, Activity, Copy, BookmarkCheck
 } from "lucide-react";
 import { BIBLICAL_NAMES_DICTIONARY, BiblicalName } from "./biblicalNames";
-import { StudyNote, NoteCategory } from "../../types/notebook";
+import { StudyNote, NoteCategory, HighlightItem } from "../../types/notebook";
 import { loadNotes, saveNotes, saveResponseAsNewNote, CATEGORY_META, loadCategories, saveCategories } from "../../data/notebookData";
 import { callElderStephen } from "../../lib/callElderStephen";
 import { formatProperElderSpacing, ensureElderStephenOutlineCompletion } from "../../utils/elderSpacing";
 import { getParallelVerses, getFullChapterVerses, fetchChapterVersesAsync, ParallelVerse } from "./bibleData";
 import { BIBLE_METADATA } from "./bibleMetadata";
 import { supabase } from "../../lib/supabase";
-import { saveNoteToSupabase, deleteNoteFromSupabase, fetchCategoriesFromSupabase, checkCategoriesTable, fetchNotesFromSupabase, checkSupabaseConnection } from "../../lib/notebookSync";
+import { saveNoteToSupabase, deleteNoteFromSupabase, fetchCategoriesFromSupabase, checkCategoriesTable, fetchNotesFromSupabase, checkSupabaseConnection, fetchHighlightsFromSupabase, saveHighlightToSupabase, deleteHighlightFromSupabase } from "../../lib/notebookSync";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { useElderStephen } from "../../context/ElderStephenContext";
@@ -23,6 +23,7 @@ import { SDABibleCommentary } from "./SDABibleCommentary";
 export { SDABibleCommentary } from "./SDABibleCommentary";
 import { stbaStorage } from "../../lib/storage/indexedDbClient";
 import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
+import { TieredHighlightDropdown, ToolHighlightableWrapper, renderTextWithHighlights } from "./HighlightDropdownMenu";
 
 // Prop definitions
 export interface ToolProps {
@@ -2634,6 +2635,102 @@ export const STBANotebook: React.FC<ToolProps> = ({
   const skipNextSaveRef = useRef(false);
   const lastSelectedIdRef = useRef<string | null>(null);
 
+  // Notebook Text Highlighting & Underlining states
+  const [notebookHighlights, setNotebookHighlights] = useState<HighlightItem[]>([]);
+  const notebookTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const notebookBackdropRef = useRef<HTMLDivElement>(null);
+  const notebookEditorWrapperRef = useRef<HTMLDivElement>(null);
+  const [nbSelectionText, setNbSelectionText] = useState<string>("");
+  const [nbSelectionPopup, setNbSelectionPopup] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchHighlightsFromSupabase().then(items => {
+      if (mounted) {
+        setNotebookHighlights(items.filter(h => h.translation === "NOTEBOOK"));
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [selectedNote?.id]);
+
+  const activeNoteRefKey = `NOTEBOOK:${selectedNote?.id || "draft"}`;
+  const currentNoteHighlights = notebookHighlights.filter(
+    h => h.verse_reference === activeNoteRefKey || h.translation === "NOTEBOOK"
+  );
+
+  const handleNotebookSelectCapture = (e?: React.MouseEvent<HTMLTextAreaElement> | React.SyntheticEvent<HTMLTextAreaElement>) => {
+    const ta = notebookTextareaRef.current;
+    if (!ta) return;
+    const selected = ta.value.substring(ta.selectionStart, ta.selectionEnd).trim();
+    if (selected.length >= 2) {
+      setNbSelectionText(selected);
+      if (e && "clientX" in e && notebookEditorWrapperRef.current) {
+        const rect = notebookEditorWrapperRef.current.getBoundingClientRect();
+        setNbSelectionPopup({
+          x: (e as React.MouseEvent).clientX - rect.left,
+          y: Math.max(8, (e as React.MouseEvent).clientY - rect.top - 48)
+        });
+      }
+    } else {
+      setNbSelectionPopup(null);
+    }
+  };
+
+  const handleNotebookHighlight = async (colorValue: string) => {
+    const ta = notebookTextareaRef.current;
+    const rawSelected = ta ? ta.value.substring(ta.selectionStart, ta.selectionEnd).trim() : "";
+    const targetSnippet = rawSelected || nbSelectionText.trim();
+    if (!targetSnippet) return;
+
+    const newItem: HighlightItem = {
+      id: `hl-nb-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+      user_id: (user as any)?.id || user?.email || "guest-local",
+      translation: "NOTEBOOK",
+      verse_reference: activeNoteRefKey,
+      text_snippet: targetSnippet,
+      color: colorValue,
+      created_at: new Date().toISOString()
+    };
+
+    setNotebookHighlights(prev => [...prev, newItem]);
+    setNbSelectionPopup(null);
+
+    try {
+      await saveHighlightToSupabase(newItem);
+    } catch (err) {
+      console.warn("Failed saving notebook highlight:", err);
+    }
+  };
+
+  const handleNotebookClearHighlight = async () => {
+    const ta = notebookTextareaRef.current;
+    const rawSelected = ta ? ta.value.substring(ta.selectionStart, ta.selectionEnd).trim() : "";
+    const targetSnippet = (rawSelected || nbSelectionText).trim().toLowerCase();
+
+    const toDelete = targetSnippet
+      ? notebookHighlights.filter(
+          h =>
+            h.text_snippet &&
+            (h.text_snippet.toLowerCase().includes(targetSnippet) ||
+              targetSnippet.includes(h.text_snippet.toLowerCase()))
+        )
+      : notebookHighlights.filter(h => h.verse_reference === activeNoteRefKey);
+
+    const removeIds = new Set(toDelete.map(h => h.id));
+    setNotebookHighlights(prev => prev.filter(h => !removeIds.has(h.id)));
+    setNbSelectionPopup(null);
+
+    for (const item of toDelete) {
+      try {
+        await deleteHighlightFromSupabase(item.id);
+      } catch (err) {
+        console.warn("Failed deleting notebook highlight:", err);
+      }
+    }
+  };
+
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
       if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
@@ -3079,6 +3176,14 @@ export const STBANotebook: React.FC<ToolProps> = ({
 
           {/* Action Controls for Active Note */}
           <div className="flex items-center gap-1.5">
+            {/* Tiered Highlight & Underline Dropdown for Notebook */}
+            <TieredHighlightDropdown
+              onSelectColor={handleNotebookHighlight}
+              onClear={handleNotebookClearHighlight}
+              theme={theme}
+              buttonLabel="Mark"
+            />
+
             {selectedNote && !selectedNote.id.startsWith("note-draft") && selectedNote.id !== "draft" && (
               <button
                  onClick={() => handleDelete(selectedNote.id)}
@@ -3414,23 +3519,85 @@ export const STBANotebook: React.FC<ToolProps> = ({
           </div>
         </div>
 
-        {/* Large Text Editor Canvas - Takes up remaining screen area completely with comfortable padding and bottom scroll-past room */}
-        <div className="flex-1 flex flex-col min-h-0 bg-transparent">
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Scribe your commentary analysis, insights, or sermon materials here. Supports markdown syntax..."
+        {/* Large Text Editor Canvas with Synchronized Highlight & Underline Backdrop */}
+        <div
+          ref={notebookEditorWrapperRef}
+          className={`flex-1 flex flex-col min-h-0 relative rounded-xl border overflow-hidden transition-all ${
+            theme === "dark"
+              ? "bg-[#1A1F26] border-[#2A3342] focus-within:border-blue-550 focus-within:bg-[#1E2530]"
+              : "bg-[#FDFAF7] border-[#E8E4DA] focus-within:border-[#C9973A] focus-within:bg-[#FDFBFA]"
+          }`}
+        >
+          {/* Synchronized Highlight & Underline Visual Backdrop */}
+          <div
+            ref={notebookBackdropRef}
+            aria-hidden="true"
             style={{
               fontSize: `${fontSize}px`,
               lineHeight: 1.7,
-              paddingBottom: '260px'
+              paddingBottom: "260px",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word"
             }}
-            className={`w-full h-full flex-1 p-6 sm:p-7 rounded-xl border focus:ring-1 focus:ring-[#C9973A]/20 outline-none font-sans resize-none transition-all overflow-y-auto leading-relaxed ${
-              theme === "dark" 
-                ? "bg-[#1A1F26] border-[#2A3342] text-gray-100 focus:border-blue-550 focus:bg-[#1E2530]" 
-                : "bg-[#FDFAF7] border-[#E8E4DA] text-gray-800 focus:border-[#C9973A] focus:bg-[#FDFBFA]"
+            className={`absolute inset-0 w-full h-full p-6 sm:p-7 font-sans pointer-events-none select-none overflow-y-auto leading-relaxed ${
+              theme === "dark" ? "text-gray-100" : "text-gray-800"
+            }`}
+          >
+            {renderTextWithHighlights(content, currentNoteHighlights)}
+          </div>
+
+          <textarea
+            ref={notebookTextareaRef}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onScroll={(e) => {
+              if (notebookBackdropRef.current) {
+                notebookBackdropRef.current.scrollTop = e.currentTarget.scrollTop;
+                notebookBackdropRef.current.scrollLeft = e.currentTarget.scrollLeft;
+              }
+            }}
+            onMouseUp={handleNotebookSelectCapture}
+            onKeyUp={handleNotebookSelectCapture}
+            placeholder="Scribe your commentary analysis, insights, or sermon materials here. Select any text to highlight or underline..."
+            style={{
+              fontSize: `${fontSize}px`,
+              lineHeight: 1.7,
+              paddingBottom: "260px",
+              color: currentNoteHighlights.length > 0 ? "transparent" : undefined,
+              caretColor: theme === "dark" ? "#F59E0B" : "#C9973A"
+            }}
+            className={`relative z-10 w-full h-full flex-1 p-6 sm:p-7 bg-transparent border-none outline-none font-sans resize-none overflow-y-auto leading-relaxed ${
+              theme === "dark" ? "text-gray-100 placeholder-gray-500" : "text-gray-800 placeholder-gray-400"
             }`}
           />
+
+          {/* Floating Selection Popup for Notebook */}
+          {nbSelectionPopup && (
+            <div
+              className="absolute z-50 flex items-center gap-1 p-1.5 shadow-2xl rounded-xl border text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
+              style={{
+                left: `${Math.max(12, Math.min((notebookEditorWrapperRef.current?.clientWidth || 320) - 220, nbSelectionPopup.x - 90))}px`,
+                top: `${Math.max(8, nbSelectionPopup.y)}px`
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <div
+                className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border ${
+                  theme === "dark"
+                    ? "bg-[#18202C] text-gray-100 border-[#2E3B4E]"
+                    : "bg-white text-gray-800 border-[#E5DFD5]"
+                }`}
+              >
+                <TieredHighlightDropdown
+                  onSelectColor={handleNotebookHighlight}
+                  onClear={handleNotebookClearHighlight}
+                  theme={theme}
+                  defaultOpen={true}
+                  buttonLabel="Highlight"
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -4044,7 +4211,7 @@ ${stepsContent}
                 style={{ width: "100%", height: "100%", WebkitOverflowScrolling: "touch" }}
               >
                 {report ? (
-                  <div className="space-y-4 text-left select-text">
+                  <div className="space-y-4 text-left select-text max-w-3xl mx-auto w-full">
                     <div className={`p-4 rounded-lg border relative ${
                       theme === "dark" ? "bg-[#1E2530] border-[#2C3545]" : "bg-[#FDFAF5] border-[#E8E4DA]"
                     }`}>
@@ -4305,9 +4472,11 @@ ${stepsContent}
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-gray-400 text-xs sm:text-sm">
-                    <Feather className="w-8 h-8 opacity-40 mx-auto mb-2 text-[#C084FC]" />
-                    Specify a scriptural text first under study tracks or custom input parameters to compile active exegesis vectors.
+                  <div className="flex-1 flex flex-col items-center justify-center text-center m-auto max-w-md py-12 px-6 text-gray-400 text-xs sm:text-sm">
+                    <Feather className="w-8 h-8 opacity-40 mx-auto mb-3 text-[#C084FC]" />
+                    <p className="leading-relaxed">
+                      Specify a scriptural text first under study tracks or click any verse from your topic search results to compile active exegesis vectors.
+                    </p>
                   </div>
                 )}
               </div>
@@ -4833,8 +5002,13 @@ export const WordStudy: React.FC<ToolProps> = ({
         </div>
       </AutoRetractToolbar>
 
-      {/* Main scrollable body study space */}
-      <div className="flex-1 overflow-y-auto scroll-smooth p-4 pb-32 md:pb-6 space-y-4" style={{ WebkitOverflowScrolling: "touch" }}>
+      {/* Main scrollable body study space (With Tiered Highlight & Underline Support) */}
+      <ToolHighlightableWrapper
+        toolId="WORD_STUDY"
+        referenceKey={studyData?.word || searchQuery || report?.reference || "word-study"}
+        theme={theme}
+        className="flex-1 overflow-y-auto scroll-smooth p-4 pb-32 md:pb-6 space-y-4 select-text"
+      >
         {/* Dynamic Interactive Active Verse Tags Cloud */}
         {activeVerseIndex && report && (
           <div className={`p-3 rounded-lg border flex flex-col gap-2 transition-all shrink-0 ${
@@ -4901,7 +5075,7 @@ export const WordStudy: React.FC<ToolProps> = ({
             {errorMsg}
           </div>
         ) : studyData ? (
-          <div className="space-y-4 select-text animate-fade-in">
+          <div className="space-y-4 select-text animate-fade-in max-w-3xl mx-auto w-full">
             {/* The primary linguistic metric card */}
             <div className={`p-4 rounded-xl border relative shadow-sm ${
               theme === "dark" ? "bg-[#1E2530] border-[#2C3545]" : "bg-[#FDFAF5] border-[#E8E4DA]"
@@ -5050,7 +5224,7 @@ export const WordStudy: React.FC<ToolProps> = ({
             </div>
           </div>
         )}
-      </div>
+      </ToolHighlightableWrapper>
     </div>
   );
 };
@@ -5221,10 +5395,7 @@ export const CrossReferenceEngine: React.FC<ToolProps> = ({
     ? precompiledMatch 
     : report && report.step3 && report.step3.scripture_compares 
       ? report.step3.scripture_compares 
-      : [
-          { ref: "Revelation 12:17", description: "And the dragon was wroth with the woman, and went to make war with the remnant... which keep the commandments of God." },
-          { ref: "Exodus 20:11", description: "For in six days the Lord made heaven and earth... and rested the seventh day, wherefore the Lord hallowed it." }
-        ];
+      : [];
 
   const handleAddManualWitness = (e: React.FormEvent) => {
     e.preventDefault();
@@ -5320,25 +5491,37 @@ export const CrossReferenceEngine: React.FC<ToolProps> = ({
           </span>
 
           <div className="space-y-2.5">
-            {currentWitnessesList.map((comp: { ref: string; description: string }, idx: number) => (
-              <div 
-                key={idx} 
-                onClick={() => onReferenceChange(comp.ref)}
-                className={`p-3.5 rounded-lg border text-left cursor-pointer transition-all hover:bg-emerald-550/10 ${
-                  theme === "dark" 
-                    ? "bg-[#1E2530] border-[#2C3545] hover:border-blue-500/50" 
-                    : "bg-[#FDFAF5] border-[#EAE3D5] hover:border-emerald-600/55"
-                }`}
-              >
-                <div className="flex items-center justify-between pointer-events-none select-none">
-                  <span className="font-serif text-xs font-bold text-[#C9973A]">{comp.ref}</span>
-                  <span className="text-[9px] font-mono text-gray-500">View Reference &rarr;</span>
-                </div>
-                <p className={`text-xs mt-1.5 leading-relaxed font-sans ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                  {comp.description}
+            {currentWitnessesList.length === 0 && manualWitnesses.length === 0 ? (
+              <div className={`p-4 text-center rounded-lg border border-dashed ${
+                theme === "dark" ? "bg-[#1E2530]/40 border-stone-700 text-stone-400" : "bg-stone-50 border-stone-300 text-stone-600"
+              }`}>
+                <Layers className="w-5 h-5 mx-auto mb-1.5 text-[#C9973A]/60" />
+                <p className="text-xs font-semibold">No cross-reference witnesses active yet</p>
+                <p className="text-[11px] opacity-75 mt-0.5 max-w-xs mx-auto">
+                  Type any companion Scripture reference below to attach parallel witnesses, or sync to an active exegesis study.
                 </p>
               </div>
-            ))}
+            ) : (
+              currentWitnessesList.map((comp: { ref: string; description: string }, idx: number) => (
+                <div 
+                  key={idx} 
+                  onClick={() => onReferenceChange(comp.ref)}
+                  className={`p-3.5 rounded-lg border text-left cursor-pointer transition-all hover:bg-emerald-550/10 ${
+                    theme === "dark" 
+                      ? "bg-[#1E2530] border-[#2C3545] hover:border-blue-500/50" 
+                      : "bg-[#FDFAF5] border-[#EAE3D5] hover:border-emerald-600/55"
+                  }`}
+                >
+                  <div className="flex items-center justify-between pointer-events-none select-none">
+                    <span className="font-serif text-xs font-bold text-[#C9973A]">{comp.ref}</span>
+                    <span className="text-[9px] font-mono text-gray-500">View Reference &rarr;</span>
+                  </div>
+                  <p className={`text-xs mt-1.5 leading-relaxed font-sans ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                    {comp.description}
+                  </p>
+                </div>
+              ))
+            )}
 
             {/* Custom Interactive Witnesses added by user */}
             {manualWitnesses.map((ref, idx) => (
@@ -5479,7 +5662,7 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
 
   // Helper to parse reference string into chapter and target verse
   const parseRef = (raw: string | undefined | null) => {
-    if (!raw || !raw.trim()) return { chapter: "Hebrews 8", targetVerse: 1 };
+    if (!raw || !raw.trim()) return { chapter: "", targetVerse: 1 };
     const clean = raw.trim();
     const colonIdx = clean.indexOf(":");
     if (colonIdx !== -1) {
@@ -5518,18 +5701,7 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
   const [customText, setCustomText] = useState<string>("");
 
   // Saved quick-access chapters (holds up to 12 chapters)
-  const DEFAULT_SAVED_CHAPTERS = [
-    "Hebrews 9",
-    "Hebrews 8",
-    "Revelation 14",
-    "Psalms 23",
-    "John 3",
-    "Genesis 1",
-    "Isaiah 53",
-    "Daniel 8",
-    "Romans 12",
-    "2 Timothy 3",
-  ];
+  const DEFAULT_SAVED_CHAPTERS: string[] = [];
 
   const [savedChapters, setSavedChapters] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
@@ -5537,7 +5709,7 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
         const stored = localStorage.getItem("stba_quick_access_chapters");
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
             return parsed.slice(0, 12);
           }
         }
@@ -5545,7 +5717,7 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
         console.warn("Failed to load saved chapters from localStorage", e);
       }
     }
-    return DEFAULT_SAVED_CHAPTERS;
+    return [];
   });
 
   const [isJustSaved, setIsJustSaved] = useState(false);

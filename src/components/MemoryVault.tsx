@@ -168,17 +168,19 @@ export const MemoryVault: React.FC<MemoryVaultProps> = ({
   onNavigate,
   onLaunchRecallPractice
 }) => {
-  // Mastered list state with LocalStorage backup persistence
+  // Mastered list state strictly synced with v2 local storage (defaulting to empty array for new users)
   const [masteredList, setMasteredList] = useState<MasteredScripture[]>(() => {
-    const saved = localStorage.getItem("stba_memory_vault_list");
+    localStorage.removeItem("stba_memory_vault_list");
+    const saved = localStorage.getItem("stba_memory_vault_list_v2");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : [];
       } catch (e) {
-        return MASTER_VERSES_SEED;
+        return [];
       }
     }
-    return MASTER_VERSES_SEED;
+    return [];
   });
 
   const [activeTab, setActiveTab] = useState<"mastered" | "favorites">("mastered");
@@ -238,7 +240,7 @@ export const MemoryVault: React.FC<MemoryVaultProps> = ({
   };
 
   useEffect(() => {
-    localStorage.setItem("stba_memory_vault_list", JSON.stringify(masteredList));
+    localStorage.setItem("stba_memory_vault_list_v2", JSON.stringify(masteredList));
   }, [masteredList]);
 
   // Sync edits of notes text fields

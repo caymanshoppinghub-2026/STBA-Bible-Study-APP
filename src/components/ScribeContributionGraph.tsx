@@ -212,7 +212,11 @@ export const ScribeContributionGraph: React.FC<ScribeContributionGraphProps> = (
       </div>
 
       {/* 3. Heatmap Matrix Grid Container */}
-      <div className="relative overflow-x-auto pb-3 pt-2 select-none" id="heatmap-contribution-grid">
+      <div
+        className="relative overflow-x-auto pb-3 pt-2 select-none touch-pan-x"
+        id="heatmap-contribution-grid"
+        style={{ overscrollBehaviorX: "none", touchAction: "pan-x" }}
+      >
         <div className="inline-block min-w-full">
           {/* Month Labels Header */}
           <div className="flex ml-9 mb-1.5 text-[10px] font-mono text-stone-400 uppercase font-bold relative h-4">

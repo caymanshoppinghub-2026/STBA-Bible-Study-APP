@@ -51,6 +51,7 @@ import { WeeklyScribeHeatmap } from "./WeeklyScribeHeatmap";
 import { triggerManualRecallPopup } from "../utils/recallScheduler";
 import { useApp } from "../context/AppContext";
 import { saveProfileToSupabase } from "../lib/notebookSync";
+import { supabase } from "../lib/supabase";
 import { triggerAutoUpdate } from "../api/sabbathSchoolApi";
 import { useSabbathSchoolStore } from "../store/useSabbathSchoolStore";
 
@@ -85,23 +86,86 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   const [selectedMilestone, setSelectedMilestone] = useState<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [authCreatedAt, setAuthCreatedAt] = useState<string | null>(() => user?.createdAt || null);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const resolveRegistrationTimestamp = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const sessionUser = session?.user;
+        if (sessionUser) {
+          const meta = sessionUser.user_metadata || {};
+          const rawTimestamp =
+            meta.createdAt ||
+            meta.created_at ||
+            meta.signupDate ||
+            sessionUser.created_at ||
+            null;
+          if (isMounted && rawTimestamp) {
+            setAuthCreatedAt(rawTimestamp);
+            return;
+          }
+        }
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser && isMounted) {
+          const meta = authUser.user_metadata || {};
+          const rawTimestamp =
+            meta.createdAt ||
+            meta.created_at ||
+            meta.signupDate ||
+            authUser.created_at ||
+            null;
+          if (rawTimestamp) {
+            setAuthCreatedAt(rawTimestamp);
+          }
+        }
+      } catch (e) {
+        // Fallback to user.createdAt if available
+      }
+    };
+    resolveRegistrationTimestamp();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.createdAt, user?.email]);
+
+  const formattedMemberSince = React.useMemo(() => {
+    const raw = authCreatedAt || user?.createdAt;
+    if (raw) {
+      const parsed = new Date(raw);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric"
+        });
+      }
+    }
+    return new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+  }, [authCreatedAt, user?.createdAt]);
+
   const studyStreak = (() => {
-    const saved = localStorage.getItem("stba_study_streak_count");
-    if (saved) return parseInt(saved, 10);
-    return hasCompletedSession ? 14 : 0;
+    const saved = localStorage.getItem("stba_study_streak_count_v2");
+    if (saved) return Math.max(0, parseInt(saved, 10));
+    return 0;
   })();
 
-  const totalCompletedVerses = hasCompletedSession ? (completedVerseIds ? completedVerseIds.length : 0) + 46 : 0;
-  const chaptersCompleted = hasCompletedSession ? 3 : 0;
+  const totalCompletedVerses = completedVerseIds ? completedVerseIds.length : 0;
+  const chaptersCompleted = totalCompletedVerses >= 12 ? Math.floor(totalCompletedVerses / 12) : 0;
 
   const milestonesList = [
     {
       id: "first_session",
       name: "Disciple's Spark",
       requirement: "Complete your very first active scripture memory session.",
-      current: hasCompletedSession ? 1 : 0,
+      current: totalCompletedVerses >= 1 ? 1 : 0,
       target: 1,
-      earned: hasCompletedSession,
+      earned: totalCompletedVerses >= 1,
       icon: Sparkles,
       iconColor: "text-amber-500",
       bgAccent: "bg-amber-500/5 border-amber-200",
@@ -164,9 +228,9 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       id: "explorer_compass",
       name: "Theological Voyager",
       requirement: "Explore multiple study tracks to expand your cognitive doctrinal horizons.",
-      current: hasCompletedSession ? 4 : 0,
+      current: Math.min(4, totalCompletedVerses),
       target: 4,
-      earned: hasCompletedSession,
+      earned: totalCompletedVerses >= 4,
       icon: Compass,
       iconColor: "text-rose-500",
       bgAccent: "bg-rose-500/5 border-rose-200",
@@ -541,15 +605,17 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       </AnimatePresence>
 
       {/* HEADER SECTION WRAPPING */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#E8E4DA] pb-5 mb-8 gap-4" id="profile-heading-flow">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#E8E4DA]/20 pb-5 mb-8 gap-4" id="profile-heading-flow">
         <div>
-          <span className="text-xs uppercase font-mono tracking-widest text-[#C9973A] font-bold block mb-1">
+          <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#DFC57B] font-extrabold block mb-1">
             Student Settings & Achievements
           </span>
-          <h1 className="font-serif font-extrabold text-3.5xl text-[#1C2333]" id="profile-title">
+          <h1 className="font-serif text-3xl md:text-4xl text-[#DFC57B] font-black tracking-tight drop-shadow-xs" id="profile-title">
             Disciple Profile
           </h1>
-          <p className="text-sm text-stone-500 mt-0.5">Manage your active recall pacing, translation metrics, & Sabbath rest options.</p>
+          <p className="text-[#FFFFFF] font-sans text-sm md:text-base mt-2 max-w-2xl leading-relaxed">
+            Manage your active recall pacing, translation metrics, & Sabbath rest options.
+          </p>
         </div>
         
         <div className="flex flex-wrap items-center gap-2.5">
@@ -569,7 +635,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 
           <div className="p-2 text-[10px] uppercase font-mono tracking-wide bg-[#C9973A]/10 text-gold border border-[#C9973A]/20 px-3 py-1.5 rounded-full flex items-center gap-1.5" id="member-duration-tag">
             <Calendar className="w-3.5 h-3.5" />
-            <span>Student Member Since Oct 2026</span>
+            <span>Student Member Since {formattedMemberSince}</span>
           </div>
         </div>
       </div>
@@ -701,11 +767,17 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                   </div>
                   <div>
                     <span className="text-[10px] font-mono uppercase tracking-wider text-stone-400 font-extrabold block">
-                      {hasCompletedSession ? "Mastery Status" : "Profile Stats"}
+                      Active Academic Rank
                     </span>
                     <span className="font-serif font-extrabold text-[#1C2333] text-sm group-hover:text-[#C9973A] transition-colors flex items-center gap-1.5">
-                      {hasCompletedSession ? "Scholar Level" : "Beginner Level"}
-                      {hasCompletedSession && <Sparkles className="w-3.5 h-3.5 text-gold" style={{ display: "inline" }} />}
+                      {totalCompletedVerses >= 25 
+                        ? "Noble Berean Scholar (Level 4)" 
+                        : totalCompletedVerses >= 10 
+                          ? "Sanctuary Scribe (Level 3)" 
+                          : totalCompletedVerses >= 3 
+                            ? "Scriptorium Student (Level 2)" 
+                            : "Devout Inquirer (Level 1)"}
+                      {totalCompletedVerses >= 3 && <Sparkles className="w-3.5 h-3.5 text-gold" style={{ display: "inline" }} />}
                     </span>
                   </div>
                 </div>

@@ -17,6 +17,7 @@ export interface Track {
 export type SubscriptionTier = "Beginner" | "Scholar" | "Leader";
 
 export interface UserAccount {
+  id?: string;
   name: string;
   email: string;
   isSda: boolean;
@@ -29,6 +30,7 @@ export interface UserAccount {
   profilePic?: string;
   password?: string;
   autoQuarterlyUpdate?: boolean;
+  createdAt?: string;
 }
 
 export interface Scripture {

@@ -46,17 +46,17 @@ const STORAGE_KEYS = {
   DECAY_INTERVAL: "stba_recall_queue_frequency",
   POPUPS_ENABLED: "stba_recall_popups_enabled",
   SETTINGS_CUSTOMIZED: "stba_settings_customized",
-  QUEUE_ITEMS: "stba_recall_queue_items",
-  TODAY_DATE: "stba_today_recalls_date",
-  TODAY_COUNT: "stba_today_recalls_count",
-  TODAY_COMPLETED_IDS: "stba_today_recalls_verse_ids",
+  QUEUE_ITEMS: "stba_recall_queue_items_v2",
+  TODAY_DATE: "stba_today_recalls_date_v2",
+  TODAY_COUNT: "stba_today_recalls_count_v2",
+  TODAY_COMPLETED_IDS: "stba_today_recalls_verse_ids_v2",
   SNOOZE_UNTIL: "stba_recall_popup_snooze_until",
   LAST_SHOWN: "stba_recall_popup_last_shown",
-  STREAK_COUNT: "stba_recall_streak_count",
-  LAST_RECALL_DATE: "stba_last_recall_completed_date"
+  STREAK_COUNT: "stba_recall_streak_count_v2",
+  LAST_RECALL_DATE: "stba_last_recall_completed_date_v2"
 };
 
-// Seed high-yield theological scriptures across SDA doctrines
+// Foundational theological scriptures across SDA doctrines (initialized at 0 attempts / 0% score)
 const DEFAULT_SEED_SCRIPTURES: Array<Omit<RecallQueueItem, "lastReviewedAt" | "dueAt" | "decayStatus">> = [
   {
     id: "rq-fb-1",
@@ -66,11 +66,11 @@ const DEFAULT_SEED_SCRIPTURES: Array<Omit<RecallQueueItem, "lastReviewedAt" | "d
     keywords: ["inspiration", "profitable", "doctrine", "righteousness"],
     trackTitle: "28 Fundamental Beliefs",
     theologicalContext: "Pillar text defining the divine origin and complete authority of the Holy Scriptures over human traditions.",
-    proficiencyScore: 85,
-    stage: 2,
-    intervalDays: 3,
-    retrievalAttempts: 4,
-    successfulRetrievals: 4
+    proficiencyScore: 0,
+    stage: 1,
+    intervalDays: 1,
+    retrievalAttempts: 0,
+    successfulRetrievals: 0
   },
   {
     id: "rq-ta-3",
@@ -80,11 +80,11 @@ const DEFAULT_SEED_SCRIPTURES: Array<Omit<RecallQueueItem, "lastReviewedAt" | "d
     keywords: ["patience", "saints", "commandments", "faith"],
     trackTitle: "Three Angels' Messages",
     theologicalContext: "The crowning portrait of God's end-time remnant who uphold all Ten Commandments through living faith in Christ.",
-    proficiencyScore: 70,
+    proficiencyScore: 0,
     stage: 1,
     intervalDays: 1,
-    retrievalAttempts: 2,
-    successfulRetrievals: 1
+    retrievalAttempts: 0,
+    successfulRetrievals: 0
   },
   {
     id: "rq-sd-1",
@@ -94,11 +94,11 @@ const DEFAULT_SEED_SCRIPTURES: Array<Omit<RecallQueueItem, "lastReviewedAt" | "d
     keywords: ["sanctuary", "cleansed", "days", "two thousand"],
     trackTitle: "Sanctuary Doctrine",
     theologicalContext: "Prophetic foundation marking the transition to the Investigative Judgment and Christ's final high-priestly ministry in 1844.",
-    proficiencyScore: 60,
+    proficiencyScore: 0,
     stage: 1,
     intervalDays: 1,
-    retrievalAttempts: 1,
-    successfulRetrievals: 1
+    retrievalAttempts: 0,
+    successfulRetrievals: 0
   },
   {
     id: "rq-mv-4",
@@ -108,11 +108,11 @@ const DEFAULT_SEED_SCRIPTURES: Array<Omit<RecallQueueItem, "lastReviewedAt" | "d
     keywords: ["remember", "sabbath", "holy", "seventh", "created"],
     trackTitle: "28 Fundamental Beliefs",
     theologicalContext: "The central seal of the Decalogue identifying the Creator God, His divine territory, and perpetual memorial of creation.",
-    proficiencyScore: 90,
-    stage: 3,
-    intervalDays: 5,
-    retrievalAttempts: 6,
-    successfulRetrievals: 6
+    proficiencyScore: 0,
+    stage: 1,
+    intervalDays: 1,
+    retrievalAttempts: 0,
+    successfulRetrievals: 0
   },
   {
     id: "rq-bb-1",
@@ -122,11 +122,11 @@ const DEFAULT_SEED_SCRIPTURES: Array<Omit<RecallQueueItem, "lastReviewedAt" | "d
     keywords: ["faith", "substance", "hoped", "evidence", "seen"],
     trackTitle: "Book-by-Book Memory",
     theologicalContext: "The biblical definition of dynamic faith as living conviction rooted in the promises of God.",
-    proficiencyScore: 80,
-    stage: 2,
-    intervalDays: 3,
-    retrievalAttempts: 3,
-    successfulRetrievals: 3
+    proficiencyScore: 0,
+    stage: 1,
+    intervalDays: 1,
+    retrievalAttempts: 0,
+    successfulRetrievals: 0
   },
   {
     id: "rq-ss-1",
@@ -136,11 +136,11 @@ const DEFAULT_SEED_SCRIPTURES: Array<Omit<RecallQueueItem, "lastReviewedAt" | "d
     keywords: ["come", "labour", "heavy", "rest", "laden"],
     trackTitle: "Sabbath School Golden Verse",
     theologicalContext: "Christ's invitation to true spiritual Sabbath rest and redemption from the burden of sin and self-effort.",
-    proficiencyScore: 95,
-    stage: 4,
-    intervalDays: 7,
-    retrievalAttempts: 8,
-    successfulRetrievals: 8
+    proficiencyScore: 0,
+    stage: 1,
+    intervalDays: 1,
+    retrievalAttempts: 0,
+    successfulRetrievals: 0
   },
   {
     id: "rq-fb-2",
@@ -150,11 +150,11 @@ const DEFAULT_SEED_SCRIPTURES: Array<Omit<RecallQueueItem, "lastReviewedAt" | "d
     keywords: ["ashamed", "gospel", "power", "salvation", "believeth"],
     trackTitle: "28 Fundamental Beliefs",
     theologicalContext: "The unyielding power of the gospel of grace transforming lives from death unto eternal life.",
-    proficiencyScore: 75,
-    stage: 2,
-    intervalDays: 3,
-    retrievalAttempts: 3,
-    successfulRetrievals: 2
+    proficiencyScore: 0,
+    stage: 1,
+    intervalDays: 1,
+    retrievalAttempts: 0,
+    successfulRetrievals: 0
   }
 ];
 
@@ -367,6 +367,15 @@ export function getDailyRecallProgress(): DailyRecallProgress {
     };
   }
 
+  // Clean up any legacy pre-v2 recall storage keys so stale mock state never persists
+  try {
+    localStorage.removeItem("stba_today_recalls_date");
+    localStorage.removeItem("stba_today_recalls_count");
+    localStorage.removeItem("stba_today_recalls_verse_ids");
+    localStorage.removeItem("stba_recall_streak_count");
+    localStorage.removeItem("stba_recall_queue_items");
+  } catch (e) {}
+
   const todayStr = new Date().toISOString().split("T")[0];
   const settings = getUserRecallSettings();
   const savedDate = localStorage.getItem(STORAGE_KEYS.TODAY_DATE);
@@ -389,7 +398,7 @@ export function getDailyRecallProgress(): DailyRecallProgress {
     completedIds = [];
   }
 
-  const streak = parseInt(localStorage.getItem(STORAGE_KEYS.STREAK_COUNT) || "1", 10);
+  const streak = parseInt(localStorage.getItem(STORAGE_KEYS.STREAK_COUNT) || "0", 10);
   const goal = settings.dailyVerseLimit;
   const remaining = Math.max(0, goal - completedCount);
 

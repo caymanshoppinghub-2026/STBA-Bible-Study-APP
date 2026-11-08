@@ -18,6 +18,7 @@ import {
   VolumeX,
   BookOpen
 } from 'lucide-react'
+import { TieredHighlightDropdown, ToolHighlightableWrapper } from '../stba/HighlightDropdownMenu'
 
 // Custom Indent and Outdent icons
 const IndentIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -680,6 +681,16 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 
+      // Allow <mark data-hl="#HEX">...</mark> and <u data-ul="#HEX">...</u> formatting
+      escaped = escaped.replace(
+        /&lt;mark data-hl=&quot;(#[0-9a-fA-F]{3,8})&quot;&gt;(.*?)&lt;\/mark&gt;/gi,
+        '<span style="background-color: $1; color: #12131a; border-radius: 3px; padding: 1px 4px;">$2</span>'
+      );
+      escaped = escaped.replace(
+        /&lt;u data-ul=&quot;(#[0-9a-fA-F]{3,8})&quot;&gt;(.*?)&lt;\/u&gt;/gi,
+        '<span style="text-decoration: underline; text-decoration-color: $1; text-decoration-thickness: 2.5px; text-underline-offset: 3px;">$2</span>'
+      );
+
       // Allow <u> underline formatting
       escaped = escaped.replace(/&lt;u&gt;(.*?)&lt;\/u&gt;/gi, '<span class="underline underline-offset-2">$1</span>');
 
@@ -984,6 +995,36 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
                 >
                   <Underline className="w-[16px] h-[16px]" />
                 </button>
+                <TieredHighlightDropdown
+                  onSelectColor={(colorVal) => {
+                    if (colorVal.startsWith('underline:')) {
+                      const hex = colorVal.replace('underline:', '').trim();
+                      insertMarkup(`<u data-ul="${hex}">`, '</u>');
+                    } else {
+                      insertMarkup(`<mark data-hl="${colorVal}">`, '</mark>');
+                    }
+                  }}
+                  onClear={() => {
+                    const ta = textareaRef.current;
+                    if (!ta) return;
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const sel = ta.value.substring(start, end);
+                    if (!sel) return;
+                    const cleaned = sel
+                      .replace(/<mark data-hl="[^"]+">(.*?)<\/mark>/gi, '$1')
+                      .replace(/<u data-ul="[^"]+">(.*?)<\/u>/gi, '$1')
+                      .replace(/<u>(.*?)<\/u>/gi, '$1');
+                    const next = ta.value.substring(0, start) + cleaned + ta.value.substring(end);
+                    pushToUndo(ta.value);
+                    contentRef.current = next;
+                    ta.value = next;
+                    onUpdate(next);
+                  }}
+                  theme="dark"
+                  compact={false}
+                  buttonLabel="Mark"
+                />
               </div>
 
               <div className="toolbar-divider" />
@@ -1229,16 +1270,18 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
             </div>
           </div>
 
-          {/* Reader Content Body */}
-          <div 
-            className="flex-1 overflow-y-auto p-6 md:p-8 w-full min-h-0" 
-            id="read-workspace"
-            onClick={handleWorkspaceClick}
+          {/* Reader Content Body (With Tiered Highlight & Underline Support) */}
+          <ToolHighlightableWrapper
+            toolId="NOTEBOOK"
+            referenceKey={note?.id || note?.title || "notebook"}
+            theme="dark"
+            className="flex-1 overflow-y-auto p-6 md:p-8 w-full min-h-0"
           >
-            {/* Render Markdown Content */}
-            <div className="max-w-3xl mx-auto mb-12">
-              {renderReadMode()}
-            </div>
+            <div id="read-workspace" onClick={handleWorkspaceClick}>
+              {/* Render Markdown Content */}
+              <div className="max-w-3xl mx-auto mb-12">
+                {renderReadMode()}
+              </div>
 
             {/* Scripture Tags Footer */}
             {note?.scriptureTags && note.scriptureTags.length > 0 && (
@@ -1271,7 +1314,8 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
               <span>CREATED: {formatDateSafe(note?.createdAt)}</span>
               <span>LAST MODIFIED: {formatDateSafe(note?.updatedAt)}</span>
             </div>
-          </div>
+            </div>
+          </ToolHighlightableWrapper>
         </div>
       )}
     </div>

@@ -270,13 +270,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     { label: "Get Started", id: "get-started" }
   ];
 
-  // Auto alternation step countdown with manual reset support
+  const [isHoveringFeatures, setIsHoveringFeatures] = useState(false);
+
+  // Auto alternation step countdown with hover pause support
   useEffect(() => {
+    if (isHoveringFeatures) return;
     const interval = setInterval(() => {
       setNarrativeStep((prev) => (prev + 1) % 4);
     }, 7000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isHoveringFeatures]);
 
   const handleStart = (isSignIn = false, targetTier?: "beginner" | "scholar" | "leader") => {
     if (onStartOnboarding) {
@@ -285,7 +288,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#041336] text-stone-100 font-sans antialiased selection:bg-[#C9973A] selection:text-[#041336]">
+    <div id="stba-landing-page" className="min-h-screen bg-[#041336] text-stone-100 font-lato antialiased selection:bg-[#C9973A] selection:text-[#041336]">
 
       {/* BACKGROUND ATMOSPHERIC COSMIC GLOWS */}
       <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-gradient-to-br from-[#C9973A]/10 to-transparent rounded-full filter blur-[150px] pointer-events-none" />
@@ -469,7 +472,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </nav>
 
       {/* SECTION 1 — HERO SECTION */}
-      <header id="home" className="relative min-h-[90vh] flex flex-col items-center justify-center text-center px-4 overflow-hidden z-10 bg-[#041336]">
+      <header id="home" className="relative min-h-[82vh] py-16 flex flex-col items-center justify-center text-center px-4 overflow-hidden z-10 bg-[#041336]">
         
         {/* FULL-BLEED HERO BACKGROUND VIDEO */}
         <div className="absolute inset-0 w-full h-full object-cover z-0 overflow-hidden pointer-events-none select-none">
@@ -546,7 +549,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 1.1, ease: "easeOut" }}
-          className="mt-8 text-sm sm:text-base md:text-lg text-stone-100 max-w-2xl font-normal leading-relaxed z-10 drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
+          className="mt-6 text-sm text-stone-100 max-w-2xl font-lato font-normal leading-relaxed z-10 drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
         >
           Move beyond simply reading Scripture; start retaining it for life by hiding it deep within your heart. STBA is a thoughtfully designed, scientifically informed, powerful AI Bible study system that helps believers internalize God’s Word with clarity, confidence, and lasting recall.
         </motion.p>
@@ -556,7 +559,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, delay: 1.4, ease: "easeOut" }}
-          className="mt-12 flex flex-col sm:flex-row items-center gap-4 z-10"
+          className="mt-8 flex flex-col sm:flex-row items-center gap-4 z-10"
         >
           {/* Primary CTA button with persistent pulse, soft lift & shine effect */}
           <motion.button
@@ -586,7 +589,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <motion.div
           animate={{ y: [0, 8, 0] }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute bottom-6 flex flex-col items-center space-y-1 text-[10px] font-mono uppercase tracking-[0.15em] text-[#DFC57B] font-semibold drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] z-10"
+          className="absolute bottom-5 flex flex-col items-center space-y-1 text-[10px] font-mono uppercase tracking-[0.15em] text-[#DFC57B] font-semibold drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] z-10"
           style={{ paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: "0px" }}
         >
           <span>Scroll to discover</span>
@@ -595,7 +598,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </header>
 
       {/* SECTION 2 — METHODOLOGY BLOCK: ACTIVE RECALL vs PASSIVE ILLUSION */}
-      <section id="method" className="bg-[#08132E] relative border-t border-stone-900 overflow-hidden scroll-mt-24" style={{ paddingTop: "80px", paddingBottom: "105px" }}>
+      <section id="method" className="py-14 sm:py-16 bg-[#08132E] relative border-t border-stone-900 overflow-hidden scroll-mt-24">
         <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-[#2A9D8F]/5 rounded-full filter blur-[120px] pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -606,62 +609,78 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.8 }}
-            className="space-y-3 mb-16 text-center"
+            className="space-y-3 mb-10 text-center"
           >
             <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-[#C9973A] font-bold">Linguistic Science</span>
             <h2 className="text-3xl sm:text-5xl font-serif font-extrabold text-stone-100 tracking-tight leading-tight">
-              Active Recall <span className="font-sans font-light text-stone-400">vs</span> Passive Illusion
+              Active Recall <span className="font-lato font-light text-stone-400">vs</span> Passive Illusion
             </h2>
           </motion.div>
 
-          {/* TWO COLUMN CARDS: Passive vs Active */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch mb-20">
+          {/* TWO COLUMN CARDS: Passive vs Active (Interactive with hover states matching pricing cards) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch mb-10">
             
-            {/* Left Card: Passive Illusion — Slightly desaturated, blurred hazy overlay */}
+            {/* Left Card: Passive Illusion — Interactive with pricing-card hover elevation, glow, and specular sweep */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-80px" }}
-              transition={{ duration: 0.8 }}
-              className="bg-stone-900/35 border border-stone-800/80 p-8 rounded-2xl relative overflow-hidden group select-none flex flex-col justify-between"
+              transition={{ type: "spring", stiffness: 150, damping: 18, mass: 0.7 }}
+              whileHover={{
+                y: -10,
+                scale: 1.015,
+                transition: { type: "spring", stiffness: 280, damping: 20 }
+              }}
+              className="bg-[#0B1228]/70 backdrop-blur-md border border-stone-800/90 p-8 rounded-2xl relative overflow-hidden group cursor-pointer flex flex-col justify-between hover:border-[#DFC57B] hover:shadow-[0_20px_45px_rgba(0,0,0,0.5),0_0_28px_rgba(201,151,58,0.22)] transition-[border-color,box-shadow,background-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
             >
-              {/* Subtle hazy blur overlay */}
-              <div className="absolute inset-0 bg-stone-950/20 backdrop-blur-[1px] pointer-events-none" />
+              {/* Top-edge radial highlight on hover */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#DFC57B]/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+              {/* Diagonal specular light sweep */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#DFC57B]/[0.07] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
               
-              <div className="space-y-4 relative z-10 opacity-70 group-hover:opacity-85 transition-opacity duration-300">
-                <div className="w-12 h-12 rounded-xl bg-red-950/25 border border-red-950/50 flex items-center justify-center text-red-500/80">
+              <div className="space-y-4 relative z-10 opacity-85 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="w-12 h-12 rounded-xl bg-red-950/25 border border-red-950/50 group-hover:border-red-500/50 flex items-center justify-center text-red-500/80 group-hover:text-red-400 transition-colors">
                   <BadgeAlert className="w-6 h-6" />
                 </div>
                 <h3 className="text-xl font-serif font-bold text-red-400 tracking-tight">The Passive Recognition Loop</h3>
-                <p className="text-sm font-light text-stone-400 leading-relaxed">
+                <p className="text-sm font-lato font-normal text-stone-300 leading-relaxed">
                   Re-reading sentences, highlighting paragraphs, or reviewing summaries breeds false confidence. 
                   Since the words look familiar, your mind triggers a visual recognition signal and tricks itself into assuming deep database retention. In reality, retrieval latency remains slow and drops sharply over time.
                 </p>
               </div>
 
-              <div className="border-t border-stone-850 pt-5 mt-6 relative z-10 flex items-center justify-between text-[11px] font-mono text-stone-500">
+              <div className="border-t border-stone-800/80 pt-5 mt-6 relative z-10 flex items-center justify-between text-[11px] font-mono text-stone-400">
                 <span>RETENTION METHODOLOGY</span>
-                <span className="text-red-400/80 font-bold uppercase">0% Real Brain Consolidations</span>
+                <span className="text-red-400 font-bold uppercase">0% Real Brain Consolidations</span>
               </div>
             </motion.div>
 
-            {/* Right Card: Active Recall — Sharp gold outline with high-contrast highlight sweep overlay */}
+            {/* Right Card: Active Recall — Interactive with Scholar pricing-card hover elevation, halo, and specular sweep */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-80px" }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="bg-[#11141C] border-2 border-[#C9973A] p-8 rounded-2xl relative overflow-hidden flex flex-col justify-between shadow-2xl shadow-[#C9973A]/5 group"
+              transition={{ type: "spring", stiffness: 150, damping: 18, mass: 0.7, delay: 0.05 }}
+              whileHover={{
+                y: -10,
+                scale: 1.015,
+                transition: { type: "spring", stiffness: 280, damping: 20 }
+              }}
+              className="bg-[#11141C] border-2 border-[#C9973A] p-8 rounded-2xl relative overflow-hidden flex flex-col justify-between cursor-pointer shadow-[0_20px_50px_rgba(0,0,0,0.6),0_0_40px_rgba(201,151,58,0.18)] group hover:border-[#DFC57B] hover:shadow-[0_25px_60px_rgba(0,0,0,0.75),0_0_45px_rgba(201,151,58,0.4)] transition-[border-color,box-shadow,background-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
             >
-              {/* Golden highlight sweep element */}
-              <div className="absolute top-0 -left-full w-1/2 h-full bg-gradient-to-r from-transparent via-[#C9973A]/5 to-transparent skew-x-12 group-hover:left-[150%] transition-all duration-1000 pointer-events-none" />
+              {/* Top-edge radial highlight on hover */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#DFC57B]/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+              {/* Diagonal specular light sweep */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#DFC57B]/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+              {/* Continuous subtle golden glowing halo backdrop animation */}
+              <div className="absolute inset-x-0 -top-40 h-80 bg-[#C9973A]/10 filter blur-[60px] animate-pulse pointer-events-none" />
               
               <div className="space-y-4 relative z-10">
-                <div className="w-12 h-12 rounded-xl bg-[#C9973A]/10 border border-[#C9973A]/30 flex items-center justify-center text-[#DFC57B]">
+                <div className="w-12 h-12 rounded-xl bg-[#C9973A]/10 border border-[#C9973A]/30 group-hover:border-[#DFC57B]/60 flex items-center justify-center text-[#DFC57B] transition-colors">
                   <Dna className="w-6 h-6 animate-pulse" />
                 </div>
                 <h3 className="text-xl font-serif font-bold text-[#DFC57B] tracking-tight">STBA Calibrated Active Recall</h3>
-                <p className="text-sm font-light text-stone-300 leading-relaxed">
+                <p className="text-sm font-lato font-normal text-stone-300 leading-relaxed">
                   Active verification reinforces learning through precise text-calibration checks, recall matching down to the syllable, and scheduled retrieval prompts timed before memory begins to fade. Each recall attempt signals that the gap matters, strengthening the neural pathway and supporting deeper retention.
                 </p>
               </div>
@@ -675,14 +694,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* FORGETTING CURVE SVG MICRO-ANIMATION */}
-          <div className="bg-stone-900/30 border border-stone-800/80 rounded-2xl p-6 sm:p-10 mb-20 relative overflow-hidden">
+          <div className="bg-stone-900/30 border border-stone-800/80 rounded-2xl p-6 sm:p-8 mb-10 relative overflow-hidden">
             <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-stone-900/10 to-transparent pointer-events-none" />
             
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8 items-center">
               <div className="space-y-3 md:col-span-1 border-r border-stone-850/80 pr-4">
                 <span className="font-mono text-[9px] uppercase tracking-wider text-[#C9973A] font-bold">Metric Monitor</span>
                 <h4 className="font-serif text-lg font-bold text-stone-200">The Forgetting Curve</h4>
-                <p className="text-xs text-stone-400 font-light leading-relaxed">
+                <p className="text-sm text-stone-300 font-lato font-normal leading-relaxed">
                   This graph shows how active spaced retrieval reinforces recall at the point memory is most vulnerable to decline, helping strengthen long-term retention.
                 </p>
               </div>
@@ -748,7 +767,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* HORIZONTAL STEPPER TIMELINE BLOCK */}
-          <div className="pt-8 border-t border-stone-850">
+          <div className="pt-6 border-t border-stone-850">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative items-center">
                  {/* Step 1 */}
               <motion.div
@@ -756,7 +775,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.6 }}
-                className="space-y-4 relative"
+                className="space-y-3 relative"
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-full bg-[#C9973A]/10 border border-[#C9973A]/40 flex items-center justify-center text-[#DFC57B] font-mono text-sm font-extrabold shadow-lg shadow-[#C9973A]/5 ring-4 ring-[#C9973A]/5">
@@ -764,7 +783,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   </div>
                   <h5 className="font-serif font-bold text-stone-200">STBA Structured Recall</h5>
                 </div>
-                <p className="text-xs font-light text-stone-400 leading-relaxed">
+                <p className="text-sm font-lato font-normal text-stone-300 leading-relaxed">
                   From your very first session, STBA helps lock Scripture into memory with clarity and lasting retention.
                 </p>
                 <div className="h-0.5 bg-gradient-to-r from-[#C9973A] to-transparent w-full opacity-60 hidden md:block absolute -right-1/2 top-5 z-0" />
@@ -776,7 +795,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.6, delay: 0.2 }}
-                className="space-y-4 relative"
+                className="space-y-3 relative"
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-full bg-[#2A9D8F]/10 border border-[#2A9D8F]/40 flex items-center justify-center text-[#2A9D8F] font-mono text-sm font-extrabold shadow-lg ring-4 ring-[#2A9D8F]/5">
@@ -785,7 +804,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <h5 className="font-serif font-bold text-stone-200">Spaced Intervals Pulse</h5>
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute right-4 top-1" />
                 </div>
-                <p className="text-xs font-light text-stone-400 leading-relaxed">
+                <p className="text-sm font-lato font-normal text-stone-300 leading-relaxed">
                   Our interval engine uses proven memory-decay patterns to reinforce recall before retention fades.
                 </p>
                 <div className="h-0.5 bg-gradient-to-r from-[#2A9D8F] to-transparent w-full opacity-60 hidden md:block absolute -right-1/2 top-5 z-0" />
@@ -797,7 +816,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.6, delay: 0.4 }}
-                className="bg-stone-900/40 p-5 rounded-xl border border-[#C9973A]/20 hover:border-[#C9973A]/50 transition-all duration-300 relative space-y-4"
+                className="bg-stone-900/40 p-5 rounded-xl border border-[#C9973A]/20 hover:border-[#C9973A]/50 transition-all duration-300 relative space-y-3"
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-full bg-stone-950 border border-[#C9973A]/40 flex items-center justify-center text-[#DFC57B] font-mono text-sm font-extrabold">
@@ -805,7 +824,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   </div>
                   <h5 className="font-serif font-bold text-stone-100">Sabbath School Study</h5>
                 </div>
-                <p className="text-xs font-light text-stone-400 leading-relaxed">
+                <p className="text-sm font-lato font-normal text-stone-300 leading-relaxed">
                   Sabbath School Mode helps learners retain Scripture, deepen understanding, and participate and interact with confidence.
                 </p>
                 {/* Micro seal logo watermark */}
@@ -821,117 +840,133 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </section>
 
       {/* SECTION 3 — NARRATIVE FEATURE WALKTHROUGH (IMMERSIVE EXPERIENCE) */}
-      <section id="features" className="py-28 bg-[#041336] relative border-t border-b border-stone-800/50 scroll-mt-20">
+      <section id="features" className="py-14 sm:py-16 bg-[#041336] relative border-t border-b border-stone-800/50 scroll-mt-20">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(201,151,58,0.03),transparent_70%)] pointer-events-none" />
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
-          <div className="text-center space-y-4 mb-20">
+          <div className="text-center space-y-3 mb-10">
             <span className="text-[10px] font-mono tracking-[0.25em] uppercase text-[#C9973A] font-bold">Immersive Experience</span>
             <h2 className="text-3xl sm:text-5xl font-serif font-extrabold tracking-tight text-stone-100">
               Interactive Storyboard Explorer
             </h2>
-            <p className="text-sm font-light text-stone-400 max-w-xl mx-auto leading-relaxed">
+            <p className="text-sm font-lato font-normal text-stone-300 max-w-xl mx-auto leading-relaxed">
               Step into the active cognitive framework. This is how Study To Be Approved™ cements scriptures inside long-term vault storage.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+          <div
+            className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center"
+            onMouseEnter={() => setIsHoveringFeatures(true)}
+            onMouseLeave={() => setIsHoveringFeatures(false)}
+          >
             
-            {/* Left Column: Interactive Story Progress Walkthrough Buttons */}
-            <div className="lg:col-span-5 space-y-4">
+            {/* Left Column: Interactive Story Progress Walkthrough Cards (Hover-Triggered) */}
+            <div className="lg:col-span-5 space-y-3.5">
               
-              {/* Step Button 1 */}
-              <button
-                onClick={() => setNarrativeStep(0)}
-                className={`w-full text-left p-6 rounded-xl border transition-all duration-300 relative overflow-hidden flex gap-4 ${
+              {/* Step Card 1 */}
+              <div
+                role="button"
+                tabIndex={0}
+                onMouseEnter={() => setNarrativeStep(0)}
+                onFocus={() => setNarrativeStep(0)}
+                className={`w-full text-left p-6 rounded-xl border transition-all duration-300 relative overflow-hidden flex gap-4 cursor-pointer group hover:-translate-y-1 hover:border-[#DFC57B] hover:shadow-[0_14px_34px_rgba(0,0,0,0.45),0_0_22px_rgba(201,151,58,0.2)] ${
                   narrativeStep === 0
-                    ? "bg-[#11141C] border-[#C9973A]/60 shadow-xl"
-                    : "bg-stone-900/20 border-stone-850 hover:bg-stone-900/40"
+                    ? "bg-[#11141C] border-[#C9973A] shadow-[0_14px_34px_rgba(0,0,0,0.5),0_0_20px_rgba(201,151,58,0.18)]"
+                    : "bg-stone-900/20 border-stone-800/80 hover:bg-[#11141C]/80"
                 }`}
               >
                 {narrativeStep === 0 && <span className="absolute left-0 top-0 bottom-0 w-1 bg-[#C9973A]" />}
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${narrativeStep === 0 ? "bg-[#C9973A]/20 text-[#DFC57B]" : "bg-stone-800/40 text-stone-500"}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${narrativeStep === 0 ? "bg-[#C9973A]/20 text-[#DFC57B]" : "bg-stone-800/40 text-stone-400 group-hover:text-[#DFC57B]"}`}>
                   <BookOpen className="w-5 h-5" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className={`font-serif text-base font-bold ${narrativeStep === 0 ? "text-[#DFC57B]" : "text-stone-300"}`}>
+                  <h3 className={`font-serif text-base font-bold transition-colors ${narrativeStep === 0 ? "text-[#DFC57B]" : "text-stone-200 group-hover:text-[#DFC57B]"}`}>
                     1. Capture what you study
                   </h3>
-                  <p className="text-xs text-stone-400 font-light leading-relaxed">
+                  <p className="text-sm text-stone-300 font-lato font-normal leading-relaxed">
                     Read text clean of distractions. Highlights or tags are saved securely to configure custom schemas.
                   </p>
                 </div>
-              </button>
+              </div>
 
-              {/* Step Button 2 */}
-              <button
-                onClick={() => setNarrativeStep(1)}
-                className={`w-full text-left p-6 rounded-xl border transition-all duration-300 relative overflow-hidden flex gap-4 ${
+              {/* Step Card 2 */}
+              <div
+                role="button"
+                tabIndex={0}
+                onMouseEnter={() => setNarrativeStep(1)}
+                onFocus={() => setNarrativeStep(1)}
+                className={`w-full text-left p-6 rounded-xl border transition-all duration-300 relative overflow-hidden flex gap-4 cursor-pointer group hover:-translate-y-1 hover:border-[#DFC57B] hover:shadow-[0_14px_34px_rgba(0,0,0,0.45),0_0_22px_rgba(201,151,58,0.2)] ${
                   narrativeStep === 1
-                    ? "bg-[#11141C] border-[#C9973A]/60 shadow-xl"
-                    : "bg-stone-900/20 border-stone-850 hover:bg-stone-900/40"
+                    ? "bg-[#11141C] border-[#C9973A] shadow-[0_14px_34px_rgba(0,0,0,0.5),0_0_20px_rgba(201,151,58,0.18)]"
+                    : "bg-stone-900/20 border-stone-800/80 hover:bg-[#11141C]/80"
                 }`}
               >
                 {narrativeStep === 1 && <span className="absolute left-0 top-0 bottom-0 w-1 bg-[#C9973A]" />}
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${narrativeStep === 1 ? "bg-[#C9973A]/20 text-[#DFC57B]" : "bg-stone-800/40 text-stone-500"}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${narrativeStep === 1 ? "bg-[#C9973A]/20 text-[#DFC57B]" : "bg-stone-800/40 text-stone-400 group-hover:text-[#DFC57B]"}`}>
                   <Clock className="w-5 h-5" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className={`font-serif text-base font-bold ${narrativeStep === 1 ? "text-[#DFC57B]" : "text-stone-300"}`}>
+                  <h3 className={`font-serif text-base font-bold transition-colors ${narrativeStep === 1 ? "text-[#DFC57B]" : "text-stone-200 group-hover:text-[#DFC57B]"}`}>
                     2. Return at the right time
                   </h3>
-                  <p className="text-xs text-stone-400 font-light leading-relaxed">
+                  <p className="text-sm text-stone-300 font-lato font-normal leading-relaxed">
                     Spaced intervals nudge your memory dynamically immediately before storage drops off.
                   </p>
                 </div>
-              </button>
+              </div>
 
-              {/* Step Button 3 */}
-              <button
-                onClick={() => setNarrativeStep(2)}
-                className={`w-full text-left p-6 rounded-xl border transition-all duration-300 relative overflow-hidden flex gap-4 ${
+              {/* Step Card 3 */}
+              <div
+                role="button"
+                tabIndex={0}
+                onMouseEnter={() => setNarrativeStep(2)}
+                onFocus={() => setNarrativeStep(2)}
+                className={`w-full text-left p-6 rounded-xl border transition-all duration-300 relative overflow-hidden flex gap-4 cursor-pointer group hover:-translate-y-1 hover:border-[#DFC57B] hover:shadow-[0_14px_34px_rgba(0,0,0,0.45),0_0_22px_rgba(201,151,58,0.2)] ${
                   narrativeStep === 2
-                    ? "bg-[#11141C] border-[#C9973A]/60 shadow-xl"
-                    : "bg-stone-900/20 border-stone-850 hover:bg-stone-900/40"
+                    ? "bg-[#11141C] border-[#C9973A] shadow-[0_14px_34px_rgba(0,0,0,0.5),0_0_20px_rgba(201,151,58,0.18)]"
+                    : "bg-stone-900/20 border-stone-800/80 hover:bg-[#11141C]/80"
                 }`}
               >
                 {narrativeStep === 2 && <span className="absolute left-0 top-0 bottom-0 w-1 bg-[#C9973A]" />}
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${narrativeStep === 2 ? "bg-[#C9973A]/20 text-[#DFC57B]" : "bg-stone-800/40 text-stone-500"}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${narrativeStep === 2 ? "bg-[#C9973A]/20 text-[#DFC57B]" : "bg-stone-800/40 text-stone-400 group-hover:text-[#DFC57B]"}`}>
                   <Activity className="w-5 h-5" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className={`font-serif text-base font-bold ${narrativeStep === 2 ? "text-[#DFC57B]" : "text-stone-300"}`}>
+                  <h3 className={`font-serif text-base font-bold transition-colors ${narrativeStep === 2 ? "text-[#DFC57B]" : "text-stone-200 group-hover:text-[#DFC57B]"}`}>
                     3. Transform reading to retention
                   </h3>
-                  <p className="text-xs text-stone-400 font-light leading-relaxed">
+                  <p className="text-sm text-stone-300 font-lato font-normal leading-relaxed">
                     Active recall builds deep, unshakeable memory paths so you are always approved.
                   </p>
                 </div>
-              </button>
+              </div>
 
-              {/* Step Button 4 */}
-              <button
-                onClick={() => setNarrativeStep(3)}
-                className={`w-full text-left p-6 rounded-xl border transition-all duration-300 relative overflow-hidden flex gap-4 ${
+              {/* Step Card 4 */}
+              <div
+                role="button"
+                tabIndex={0}
+                onMouseEnter={() => setNarrativeStep(3)}
+                onFocus={() => setNarrativeStep(3)}
+                className={`w-full text-left p-6 rounded-xl border transition-all duration-300 relative overflow-hidden flex gap-4 cursor-pointer group hover:-translate-y-1 hover:border-[#DFC57B] hover:shadow-[0_14px_34px_rgba(0,0,0,0.45),0_0_22px_rgba(201,151,58,0.2)] ${
                   narrativeStep === 3
-                    ? "bg-[#11141C] border-[#C9973A]/60 shadow-xl"
-                    : "bg-stone-900/20 border-stone-850 hover:bg-stone-900/40"
+                    ? "bg-[#11141C] border-[#C9973A] shadow-[0_14px_34px_rgba(0,0,0,0.5),0_0_20px_rgba(201,151,58,0.18)]"
+                    : "bg-stone-900/20 border-stone-800/80 hover:bg-[#11141C]/80"
                 }`}
               >
                 {narrativeStep === 3 && <span className="absolute left-0 top-0 bottom-0 w-1 bg-[#C9973A]" />}
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${narrativeStep === 3 ? "bg-[#C9973A]/20 text-[#DFC57B]" : "bg-stone-800/40 text-stone-500"}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${narrativeStep === 3 ? "bg-[#C9973A]/20 text-[#DFC57B]" : "bg-stone-800/40 text-stone-400 group-hover:text-[#DFC57B]"}`}>
                   <Award className="w-5 h-5" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className={`font-serif text-base font-bold ${narrativeStep === 3 ? "text-[#DFC57B]" : "text-stone-300"}`}>
+                  <h3 className={`font-serif text-base font-bold transition-colors ${narrativeStep === 3 ? "text-[#DFC57B]" : "text-stone-200 group-hover:text-[#DFC57B]"}`}>
                     4. Sabbath School Backed
                   </h3>
-                  <p className="text-xs text-stone-400 font-light leading-relaxed">
+                  <p className="text-sm text-stone-300 font-lato font-normal leading-relaxed">
                     Secure study streaks and track group progress collaboratively in full church alignment.
                   </p>
                 </div>
-              </button>
+              </div>
 
             </div>
 
@@ -969,7 +1004,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
                         {/* Interactive highlights visualizer */}
                         <div className="bg-stone-900/60 border border-stone-850 p-5 rounded-xl space-y-3 relative overflow-hidden">
-                          <p className="text-xs sm:text-sm text-stone-300 leading-relaxed font-serif">
+                          <p className="text-sm text-stone-300 leading-relaxed font-lato">
                             "Study to show thyself approved unto God, a workman that needeth not to be ashamed, <span className="bg-[#C9973A]/25 border-b border-[#C9973A] text-stone-100 font-bold px-1 relative">rightly dividing the word of truth</span>."
                           </p>
                           <div className="flex justify-between items-center pt-2 text-[10px] font-mono text-stone-500">
@@ -1031,7 +1066,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           <div className="bg-stone-900/60 p-4 rounded-xl space-y-2 text-left">
                             <span className="text-[9px] font-mono uppercase tracking-wider text-stone-500 font-bold block">Retrieval Signal Alert</span>
                             <h5 className="text-xs font-serif font-extrabold text-[#DFC57B]">Prompt incoming</h5>
-                            <p className="text-[11px] text-stone-400 font-light leading-relaxed">
+                            <p className="text-sm text-stone-300 font-lato font-normal leading-relaxed">
                               Decay is approaching critical levels. Complete immediate validation recitation to strengthen retention by 400%.
                             </p>
                           </div>
@@ -1146,6 +1181,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     {Array.from({ length: 4 }).map((_, i) => (
                       <button
                         key={i}
+                        onMouseEnter={() => setNarrativeStep(i)}
                         onClick={() => setNarrativeStep(i)}
                         className={`w-5 h-1.5 rounded-full transition-colors cursor-pointer ${
                           narrativeStep === i ? "bg-[#C9973A]" : "bg-stone-800 hover:bg-stone-700"
@@ -1162,23 +1198,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* Micro-Interaction Scroll Navigation Helper Label */}
-          <div className="mt-12 flex justify-center text-xs font-mono text-stone-500 space-x-2">
+          <div className="mt-8 flex justify-center text-xs font-mono text-stone-400 space-x-2">
             <MousePointerClick className="w-4 h-4 text-[#C9973A] animate-pulse" />
-            <span>Interactive sandbox active above • Click individual boxes to skip frames</span>
+            <span>Interactive sandbox active above • Hover over individual cards to preview frames</span>
           </div>
 
         </div>
       </section>
 
       {/* SECTION 4 — SUBSCRIPTION PRICING AND TIERS */}
-      <section id="pricing" className="py-28 bg-[#08132E] relative border-t border-b border-stone-900 scroll-mt-20">
+      <section id="pricing" className="py-14 sm:py-16 bg-[#08132E] relative border-t border-b border-stone-900 scroll-mt-20">
         
         {/* Subtle background gradient shift to midnight cosmic color */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r from-[#C9973A]/5 to-[#2A9D8F]/5 rounded-full filter blur-[150px] pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           
-          <div className="text-center space-y-4 mb-16">
+          <div className="text-center space-y-3 mb-10">
             <span className="text-[10px] font-mono tracking-[0.25em] uppercase text-[#C9973A] font-bold">Investment in Schema</span>
             
             {/* Title with bottom-up delay and letter-spacing transition */}
@@ -1191,7 +1227,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             >
               Choose your path to mastery
             </motion.h2>
-            <p className="text-sm font-light text-stone-400 max-w-sm mx-auto leading-relaxed">
+            <p className="text-sm font-lato font-normal text-stone-300 max-w-sm mx-auto leading-relaxed">
               Every level offers complete intellectual devotion. Select your depth layer.
             </p>
 
@@ -1200,7 +1236,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               initial={{ opacity: 0, y: -10 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="pt-6 flex justify-center items-center space-x-3"
+              className="pt-3 flex justify-center items-center space-x-3"
             >
               <span className={`text-xs font-mono font-bold uppercase transition-colors ${billingPeriod === "monthly" ? "text-stone-200" : "text-stone-500"}`}>
                 Monthly Billing
@@ -1224,7 +1260,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </motion.div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch pt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch pt-2 pb-2">
             
             {/* TIER 1 - Free Tier Beginner */}
             <motion.div
@@ -1262,7 +1298,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
                 <div className="space-y-4">
                   <span className="font-mono text-[10px] uppercase font-bold tracking-wider text-stone-300">Default Access:</span>
-                  <ul className="space-y-3 pb-3 text-xs text-stone-400">
+                  <ul className="space-y-3 pb-3 text-sm font-lato text-stone-300">
                     <li className="flex items-start space-x-2.5">
                       <Check className="w-4 h-4 text-[#C9973A] shrink-0 mt-0.5" />
                       <span>Standard active recall console limit</span>
@@ -1353,7 +1389,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
                 <div className="space-y-4">
                   <span className="font-mono text-[10px] uppercase font-bold tracking-wider text-stone-200">Full Premium Unlocks:</span>
-                  <ul className="space-y-3 pb-3 text-xs text-stone-300">
+                  <ul className="space-y-3 pb-3 text-sm font-lato text-stone-300">
                     <li className="flex items-start space-x-2.5">
                       <Check className="w-4 h-4 text-[#2A9D8F] shrink-0 mt-0.5" />
                       <span>Absolute full mastery recall mechanics</span>
@@ -1447,7 +1483,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
                 <div className="space-y-4">
                   <span className="font-mono text-[10px] uppercase font-bold tracking-wider text-stone-300">Custom Group Tools:</span>
-                  <ul className="space-y-3 pb-3 text-xs text-stone-400">
+                  <ul className="space-y-3 pb-3 text-sm font-lato text-stone-300">
                     <li className="flex items-start space-x-2.5">
                       <Check className="w-4 h-4 text-[#C9973A] shrink-0 mt-0.5" />
                       <span>Full system access and progress tracking</span>
@@ -1478,10 +1514,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </section>
 
       {/* SECTION 5 — TECHNICAL FOUNDATION (SUPABASE + FIREBASE PROOFS) */}
-      <section id="tech" className="py-28 bg-[#041336] relative overflow-hidden">
+      <section id="tech" className="py-14 sm:py-16 bg-[#041336] relative overflow-hidden">
         
         {/* Draw a gorgeous gold dividing line across screen when scrolled into view */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
           <motion.div
             initial={{ width: 0 }}
             whileInView={{ width: "100%" }}
@@ -1493,7 +1529,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           
-          <div className="text-center space-y-4 mb-20">
+          <div className="text-center space-y-3 mb-10">
             <span className="text-[10px] font-mono tracking-[0.25em] uppercase text-[#C9973A] font-bold">Bulletproof Ecosystem</span>
             
             {/* Header slides in from the left */}
@@ -1506,13 +1542,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             >
               Built on a stable, scalable core
             </motion.h2>
-            <p className="text-sm font-light text-stone-400 max-w-xl mx-auto leading-relaxed">
+            <p className="text-sm font-lato font-normal text-stone-300 max-w-xl mx-auto leading-relaxed">
               Permanent knowledge requires database integrity. Our server is fortified using enterprise cloud providers.
             </p>
           </div>
 
           {/* 4 Block Icon Rows with spring popup and soft tooltip display */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
             
             {/* 1. Supabase */}
             <motion.div
@@ -1526,7 +1562,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <Database className="w-6 h-6" />
               </div>
               <h4 className="font-serif font-bold text-stone-200">Supabase SQL Block</h4>
-              <p className="text-xs text-stone-400 mt-2 font-light leading-normal">
+              <p className="text-sm font-lato text-stone-300 mt-2 font-normal leading-relaxed">
                 Synchronized memory nodes and intervals logged securely using robust Postgres structures.
               </p>
               
@@ -1548,8 +1584,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <Shield className="w-6 h-6" />
               </div>
               <h4 className="font-serif font-bold text-stone-200">Firebase Core</h4>
-              <p className="text-xs text-stone-400 mt-2 font-light leading-normal">
-                fortress-level OAuth authentication and instant state listeners handling multi-user synchronizations.
+              <p className="text-sm font-lato text-stone-300 mt-2 font-normal leading-relaxed">
+                Fortress-level OAuth authentication and instant state listeners handling multi-user synchronizations.
               </p>
 
               {/* Tooltip popping above on hover */}
@@ -1570,7 +1606,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <Zap className="w-6 h-6" />
               </div>
               <h4 className="font-serif font-bold text-stone-200">Ultra-low Edge</h4>
-              <p className="text-xs text-stone-400 mt-2 font-light leading-normal">
+              <p className="text-sm font-lato text-stone-300 mt-2 font-normal leading-relaxed">
                 Optimized offline caching systems serving interval feedback in under 12 milliseconds responses.
               </p>
 
@@ -1592,7 +1628,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <Lock className="w-6 h-6" />
               </div>
               <h4 className="font-serif font-bold text-stone-200">Sacred Security</h4>
-              <p className="text-xs text-stone-400 mt-2 font-light leading-normal">
+              <p className="text-sm font-lato text-stone-300 mt-2 font-normal leading-relaxed">
                 TLS 1.3 Transport Encryption and Row-Level Security parameters protecting study journals.
               </p>
 
@@ -1605,12 +1641,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* ANIMATED DIAGRAM (User -> STBA Platform -> Supabase/Firebase -> Insights) */}
-          <div className="bg-stone-900/30 border border-stone-850 p-8 rounded-2xl overflow-hidden relative">
-            <div className="text-left mb-6 font-mono text-[9px] text-[#C9973A] uppercase tracking-[0.2em] font-bold">
+          <div className="bg-stone-900/30 border border-stone-850 p-6 sm:p-8 rounded-2xl overflow-hidden relative">
+            <div className="text-left mb-4 font-mono text-[9px] text-[#C9973A] uppercase tracking-[0.2em] font-bold">
               SYSTEM INFRASTRUCTURE FLOW MAP
             </div>
 
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 py-6 border-t border-b border-stone-850">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6 py-5 border-t border-b border-stone-850">
               
               {/* Box 1: User */}
               <div className="w-40 p-4 bg-stone-950 border border-stone-800 rounded-xl text-center relative shadow-lg">
@@ -1669,7 +1705,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             </div>
 
-            <p className="text-[10px] font-mono text-stone-500 text-center mt-6">
+            <p className="text-sm font-lato text-stone-400 text-center mt-4">
               Row-Level Security (RLS) is perpetually active. All visual sync transactions take under &lt;12ms.
             </p>
           </div>
@@ -1678,12 +1714,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </section>
 
       {/* SECTION 6 — PRIMARY CALL TO ACTION */}
-      <section id="get-started" className="relative py-32 flex flex-col items-center justify-center text-center px-4 overflow-hidden border-t border-b border-stone-900 z-10 bg-[#08132E]">
+      <section id="get-started" className="relative py-14 sm:py-16 flex flex-col items-center justify-center text-center px-4 overflow-hidden border-t border-b border-stone-900 z-10 bg-[#08132E]">
         
         {/* Glow spotlight overlay */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-r from-[#C9973A]/10 to-[#2A9D8F]/10 rounded-full filter blur-[120px] pointer-events-none" />
 
-        <div className="relative z-10 space-y-6 max-w-3xl">
+        <div className="relative z-10 space-y-5 max-w-3xl">
           <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#DFC57B] font-bold bg-[#C9973A]/10 border border-[#C9973A]/30 px-3.5 py-1.5 rounded-full">
             Cognitive Sovereign Vault
           </span>
@@ -1700,11 +1736,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </span>
           </motion.h2>
 
-          <p className="text-[#6B6B6B] font-light text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
+          <p className="text-stone-300 font-lato font-normal text-sm max-w-xl mx-auto leading-relaxed">
             Theological scripture decay ends today. Secure permanent memory structures inside your consciousness with empirical learning mechanics.
           </p>
 
-          <div className="pt-8">
+          <div className="pt-4">
             <motion.button
               onClick={() => handleStart(false, "beginner")}
               whileHover={{ scale: 1.03, boxShadow: "0 0 30px rgba(201,151,58,0.3)" }}

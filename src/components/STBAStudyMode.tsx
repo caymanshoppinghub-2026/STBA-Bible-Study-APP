@@ -516,7 +516,9 @@ export function STBAStudyMode() {
       setLoading(true);
       setErrorMsg("");
       setActiveTopicSearch(cleanTopic);
+      setReport(null);
       setActiveVerseIndex(null); // No verse selected initially!
+      setLeftPaneWidth(50); // Center the analysis panel split during topic searches
     }
 
     try {
@@ -930,7 +932,10 @@ export function STBAStudyMode() {
           </div>
 
           {/* Tool Buttons: Single Horizontal Row with Gold Trim and Smooth 2-3px Lift Hover Effect */}
-          <div className="flex flex-row flex-nowrap items-center justify-start gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar w-full max-w-7xl py-1 px-3 scroll-smooth">
+          <div
+            className="flex flex-row flex-nowrap items-center justify-start gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar w-full max-w-7xl py-1 px-3 scroll-smooth touch-pan-x"
+            style={{ overscrollBehaviorX: "none", touchAction: "pan-x" }}
+          >
             {TOOL_TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeRightTab === tab.id && viewMode !== "bible";
@@ -1054,7 +1059,7 @@ export function STBAStudyMode() {
           </div>
         )}
 
-        {/* Right tools dynamic selection panel */}
+        {/* Right tools dynamic selection / analysis panel (Centered during topic searches) */}
         {viewMode !== "bible" && (
           <div 
             style={
@@ -1067,13 +1072,15 @@ export function STBAStudyMode() {
             className={`w-full flex flex-col overflow-hidden select-none transition-all duration-150 border-none ${
               viewMode === "tools" ? "h-full" : "md:h-full"
             } ${
+              activeTopicSearch ? "items-center justify-center mx-auto" : ""
+            } ${
               theme === "dark" ? "bg-[#161B22]" : "bg-[#FCFAF7]"
             }`}
           >
             {/* Background Theological Synthesis Live Status Indicator */}
             {isExegesisSynthesizing && (
-              <div className="px-4 py-2.5 bg-gradient-to-r from-amber-500/15 via-[#C9973A]/25 to-amber-500/15 border-b border-amber-500/30 flex items-center justify-between gap-2 shrink-0 select-none shadow-xs">
-                <div className="flex items-center gap-2 text-xs font-mono text-amber-500 dark:text-amber-400 font-bold">
+              <div className="w-full px-4 py-2.5 bg-gradient-to-r from-amber-500/15 via-[#C9973A]/25 to-amber-500/15 border-b border-amber-500/30 flex items-center justify-center gap-2 shrink-0 select-none shadow-xs text-center">
+                <div className="flex items-center justify-center gap-2 text-xs font-mono text-amber-500 dark:text-amber-400 font-bold">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C9973A] shrink-0" />
                   <span>Synthesizing 7-step theological exegesis for <strong className="text-white dark:text-amber-300 font-extrabold">{synthesizingVerseRef}</strong> in background...</span>
                 </div>
@@ -1083,9 +1090,9 @@ export function STBAStudyMode() {
               </div>
             )}
 
-            {/* Topic Search Active - Prompt user to click a verse */}
+            {/* Topic Search Active - Centered Analysis Prompt */}
             {activeTopicSearch && !report && !isExegesisSynthesizing && (
-              <div className="px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/25 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 font-sans select-none shrink-0">
+              <div className="w-full px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/25 flex items-center justify-center gap-2 text-xs text-amber-600 dark:text-amber-400 font-sans select-none shrink-0 text-center">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                 <span>
                   Topic <strong>"{activeTopicSearch}"</strong> active ({customVerses?.length || 0} verses loaded). Click any verse row on the left to activate 7-step theological exegesis.
@@ -1093,7 +1100,7 @@ export function STBAStudyMode() {
               </div>
             )}
 
-            <div className="flex-1 overflow-hidden relative">
+            <div className={`flex-1 w-full overflow-hidden relative ${activeTopicSearch ? "flex flex-col items-center justify-center mx-auto" : ""}`}>
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeRightTab}
@@ -1101,7 +1108,7 @@ export function STBAStudyMode() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.12 }}
-                  className="w-full h-full overflow-hidden"
+                  className={`w-full h-full overflow-hidden ${activeTopicSearch ? "mx-auto max-w-4xl flex flex-col justify-center" : ""}`}
                 >
                   {activeRightTab === "csms" && (
                     <CSMSActiveRecall

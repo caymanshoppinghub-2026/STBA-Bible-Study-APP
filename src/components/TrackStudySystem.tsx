@@ -32,6 +32,7 @@ import { useApp } from "../context/AppContext";
 import { DEFAULT_DOCTRINE_TRACKS, DoctrineTrackDb } from "../data/doctrineTracksDb";
 import { supabase } from "../lib/supabase";
 import { ensureSupabaseAuth } from "../lib/notebookSync";
+import { upsertActiveRecallMastery } from "../lib/trackSync";
 import { ElderStevenBubble } from "./mentor/ElderStevenBubble";
 
 export const getTrackTitle = (trackId: string): string => {
@@ -4524,25 +4525,17 @@ export const LessonPreTestPage: React.FC = () => {
   };
 
   const handleLogMasteryAndNext = async () => {
-    // Log recall mastery to Supabase (and state)
+    // Log recall mastery to Supabase (and state) using public.active_recall_mastery schema
     try {
       const sbUser = await ensureSupabaseAuth();
       if (sbUser) {
-        const { error } = await supabase
-          .from("active_recall_mastery")
-          .upsert({
-            user_id: sbUser.id,
-            track_id: id || "fundamental-beliefs",
-            prompt_id: activePrompt.id,
-            user_answer: userAnswer,
-            accuracy_score: checkedScore,
-            mastery_level: masteredSelection,
-            updated_at: new Date().toISOString()
-          }, { onConflict: "user_id,track_id,prompt_id" });
-
-        if (error) {
-          console.warn("Supabase active_recall_mastery log error:", error.message);
-        }
+        await upsertActiveRecallMastery({
+          userId: sbUser.id,
+          trackId: id || "fundamental-beliefs",
+          verseReference: activePrompt.reference || activePrompt.id,
+          masteryLevel: masteredSelection,
+          isSuccess: checkedScore >= 70 || masteredSelection === "Mastered" || masteredSelection === "Developing"
+        });
       }
     } catch (err) {
       console.warn("Supabase auth exception in pretest:", err);

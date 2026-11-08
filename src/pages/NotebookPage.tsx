@@ -2967,7 +2967,11 @@ export const NotebookPage: React.FC = () => {
                 </div>
 
                 {/* Horizontal Category selector */}
-                <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none" id="mobile-category-slider">
+                <div
+                  className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none touch-pan-x"
+                  id="mobile-category-slider"
+                  style={{ overscrollBehaviorX: "none", touchAction: "pan-x" }}
+                >
                   {(Object.keys(categories) as NoteCategory[]).map((catKey) => {
                     const cat = categories[catKey]
                     const isActive = activeCategory === catKey

@@ -556,16 +556,17 @@ export const ThirtyDayRecallPlan: React.FC<ThirtyDayRecallPlanProps> = ({
 
             {onPlayInGamePack && (
               <button
+                type="button"
                 onClick={() => onPlayInGamePack({
                   id: `day-${selectedDay.day}`,
                   reference: selectedDay.reference,
                   text: selectedDay.text,
                   keywords: selectedDay.keywords
                 })}
-                className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                className="workspace-tool-btn px-4 py-2.5 bg-[#06162c] hover:bg-[#0d3060] text-stone-200 hover:text-white border border-[#DFC57B]/70 hover:border-[#F3CF65] text-xs font-sans font-semibold rounded-xl sm:rounded-2xl transition-all duration-200 cursor-pointer inline-flex items-center gap-2 hover:shadow-[0_4px_16px_rgba(223,197,123,0.3)]"
               >
-                <Gamepad2 className="w-3.5 h-3.5 text-[#DFC57B]" />
-                <span>Play in Game Pack</span>
+                <Gamepad2 className="w-4 h-4 text-[#DFC57B] shrink-0" />
+                <span>Scripture Game Pack</span>
               </button>
             )}
           </div>
