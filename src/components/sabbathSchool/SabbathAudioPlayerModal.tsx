@@ -25,6 +25,8 @@ import {
   Headphones
 } from "lucide-react";
 import { useSabbathSchoolStore, EGW_NOTES_LESSON_8 } from "../../store/useSabbathSchoolStore";
+import { apiFetch, safeParseResponseJson } from "../../lib/apiFetch";
+import { cleanLessonTextForSpokenNarration, getMicrosoftEmmaVoice } from "../../utils/sabbathAudioNarrator";
 
 interface SabbathAudioPlayerModalProps {
   isOpen: boolean;
@@ -82,38 +84,25 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
       } else if (activeMediaSource) {
         setSelectedAudioTab(activeMediaSource);
       }
-      fetch("/api/sabbath/audio-stream")
-        .then((res) => res.json())
+      apiFetch("/api/sabbath/audio-stream")
+        .then((res) => (res.ok ? safeParseResponseJson<any>(res) : null))
         .then((data) => {
           if (data && data.audioStreamUrl) {
             setRetrievedStreamUrl(data.audioStreamUrl);
+          } else {
+            setRetrievedStreamUrl(null);
           }
         })
-        .catch((err) => console.error("Audio stream retrieval error:", err));
+        .catch(() => {
+          setRetrievedStreamUrl(null);
+        });
     }
   }, [isOpen, initialSource, activeMediaSource]);
 
   const activeEgwDay = EGW_NOTES_LESSON_8.days[selectedEgwIdx] || EGW_NOTES_LESSON_8.days[0];
 
-  // Default audio stream URL or scraped Sabbath School Personal Ministries URL
-  const audioSourceUrl =
-    selectedAudioTab === "egwNotes"
-      ? `https://cdn.adventech.io/audio/en/egw-notes-2026-q3-l6-${selectedEgwIdx + 1}.mp3`
-      : (retrievedStreamUrl ||
-        `https://cdn.adventech.io/audio/en/2026-03/06/en-2026-03-06-0${(selectedDayIndex % 7) + 1}.mp3`);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetch("/api/sabbath/audio-stream")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && data.audioStreamUrl) {
-            setRetrievedStreamUrl(data.audioStreamUrl);
-          }
-        })
-        .catch((err) => console.error("Audio stream retrieval error:", err));
-    }
-  }, [isOpen]);
+  // Only bind a verified external MP3 stream URL when present; otherwise use built-in narration
+  const audioSourceUrl = selectedAudioTab === "standard" ? retrievedStreamUrl : null;
 
   useEffect(() => {
     if (audioRef.current) {
@@ -122,8 +111,13 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
   }, [playbackSpeed]);
 
   useEffect(() => {
-    if (!isOpen && audioRef.current) {
-      audioRef.current.pause();
+    if (!isOpen) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
       setIsPlaying(false);
     }
   }, [isOpen]);
@@ -134,19 +128,48 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
   };
 
   const togglePlay = () => {
-    if (!audioRef.current) return;
     if (isPlaying) {
-      audioRef.current.pause();
+      if (audioRef.current) audioRef.current.pause();
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
       setIsPlaying(false);
-    } else {
+      return;
+    }
+
+    if (audioSourceUrl && audioRef.current) {
       audioRef.current
         .play()
         .then(() => setIsPlaying(true))
         .catch(() => {
-          // If browser blocks autoplay or network fails, handle gracefully
-          setIsPlaying(true);
+          playBuiltInNarration();
         });
+      return;
     }
+
+    playBuiltInNarration();
+  };
+
+  const playBuiltInNarration = () => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      showToast("Voice synthesis is unavailable in this browser.");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const rawNarration =
+      selectedAudioTab === "egwNotes"
+        ? `${EGW_NOTES_LESSON_8.title}. ${activeEgwDay.label}. ${activeEgwDay.topic}.`
+        : `${quarterlyTitle}. ${lessonTitle}. ${activeDay?.label || ""}: ${activeDay?.title || ""}. ${(activeDay as any)?.content || (activeDay as any)?.summary || ""}`;
+    const cleanSpeech = cleanLessonTextForSpokenNarration(rawNarration);
+    const utterance = new SpeechSynthesisUtterance(cleanSpeech);
+    const emma = getMicrosoftEmmaVoice();
+    if (emma?.voice) utterance.voice = emma.voice;
+    utterance.rate = playbackSpeed || 1;
+    utterance.onend = () => setIsPlaying(false);
+    utterance.onerror = () => setIsPlaying(false);
+    window.speechSynthesis.speak(utterance);
+    setIsPlaying(true);
+    showToast("Playing lesson via built-in AI Voice Narrator.");
   };
 
   const handleTimeUpdate = () => {
@@ -198,13 +221,27 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
 
   // Feature hooks: Download, Playlist, Offline, Watch Video
   const handleDownloadAudio = () => {
-    showToast("Downloading Sabbath School Audio file for offline listening...");
+    if (audioSourceUrl) {
+      showToast("Downloading Sabbath School Audio file for offline listening...");
+      const link = document.createElement("a");
+      link.href = audioSourceUrl;
+      link.download = `SabbathSchool_${activeDay?.label.replace(/[^a-zA-Z0-9]/g, "_")}.mp3`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return;
+    }
+    const transcript = `${quarterlyTitle}\n${lessonTitle}\n${activeDay?.label || ""}: ${activeDay?.title || ""}\n\n${(activeDay as any)?.content || ""}`;
+    const blob = new Blob([transcript], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = audioSourceUrl;
-    link.download = `SabbathSchool_${activeDay?.label.replace(/[^a-zA-Z0-9]/g, "_")}.mp3`;
+    link.href = url;
+    link.download = `SabbathSchool_${(activeDay?.label || "Lesson").replace(/[^a-zA-Z0-9]/g, "_")}_Script.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast("Downloaded lesson reading script for offline study.");
   };
 
   const handleSaveToPlaylist = () => {
@@ -241,14 +278,16 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Hidden HTML5 Audio Element */}
-        <audio
-          ref={audioRef}
-          src={audioSourceUrl}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleTimeUpdate}
-          onEnded={() => setIsPlaying(false)}
-        />
+        {/* Hidden HTML5 Audio Element (only rendered when a verified stream URL exists) */}
+        {audioSourceUrl && (
+          <audio
+            ref={audioRef}
+            src={audioSourceUrl}
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={handleTimeUpdate}
+            onEnded={() => setIsPlaying(false)}
+          />
+        )}
 
         {/* Modal Top Header */}
         <div className="flex items-center justify-between pb-3 border-b border-stone-200/60 dark:border-neutral-800 mb-4">

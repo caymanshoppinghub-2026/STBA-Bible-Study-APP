@@ -2,78 +2,407 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StudyToBeApproved.com — Master Scripture & Doctrine</title>
-    <!-- Prevent Vite HMR WebSocket connection failure in proxy / iframe environment -->
     <script>
       (function() {
         if (typeof window === 'undefined') return;
-        var OrigWS = window.WebSocket;
-        if (OrigWS) {
-          window.WebSocket = function(url, protocols) {
-            var urlStr = String(url || '');
-            var isViteHmr = (protocols === 'vite-hmr') ||
-              (Array.isArray(protocols) && protocols.indexOf('vite-hmr') !== -1) ||
-              urlStr.indexOf('token=') !== -1 ||
-              urlStr.indexOf('@vite') !== -1;
-            if (isViteHmr) {
-              var listeners = {};
-              return {
-                readyState: 1, // OPEN
-                OPEN: 1,
-                CONNECTING: 0,
-                CLOSING: 2,
-                CLOSED: 3,
-                url: urlStr,
-                protocol: 'vite-hmr',
-                extensions: '',
-                bufferedAmount: 0,
-                binaryType: 'blob',
-                send: function() {},
-                close: function() {},
-                addEventListener: function(type, fn) {
-                  listeners[type] = listeners[type] || [];
-                  listeners[type].push(fn);
-                  if (type === 'open') {
-                    setTimeout(function() {
-                      try { fn({ type: 'open' }); } catch(e) {}
-                    }, 0);
-                  }
-                },
-                removeEventListener: function(type, fn) {
-                  if (!listeners[type]) return;
-                  listeners[type] = listeners[type].filter(function(l) { return l !== fn; });
-                },
-                dispatchEvent: function() { return true; }
-              };
+
+        // 1. Guard Object.defineProperty & Reflect.defineProperty so attempts by injected scripts
+        // (e.g. redirectionChainSiteScript.js) to redefine the non-configurable `location` property
+        // never throw `TypeError: Cannot redefine property: location`.
+        var nativeDefineProperty = Object.defineProperty;
+        if (typeof nativeDefineProperty === 'function' && !nativeDefineProperty.__stbaLocationSafe) {
+          var safeDefineProperty = function(target, prop, attributes) {
+            if (
+              (prop === 'location' || prop === 'href') &&
+              (target === window ||
+                target === document ||
+                (typeof Window !== 'undefined' && target === Window.prototype) ||
+                (typeof Document !== 'undefined' && target === Document.prototype) ||
+                (typeof Location !== 'undefined' && (target === Location.prototype || target instanceof Location)))
+            ) {
+              return target;
             }
-            return new OrigWS(url, protocols);
+            try {
+              return nativeDefineProperty.call(Object, target, prop, attributes);
+            } catch (err) {
+              if (err && String(err.message || err).indexOf('Cannot redefine property') !== -1) {
+                return target;
+              }
+              throw err;
+            }
           };
-          window.WebSocket.prototype = OrigWS.prototype;
-          window.WebSocket.CONNECTING = 0;
-          window.WebSocket.OPEN = 1;
-          window.WebSocket.CLOSING = 2;
-          window.WebSocket.CLOSED = 3;
+          safeDefineProperty.__stbaLocationSafe = true;
+          try {
+            Object.defineProperty = safeDefineProperty;
+          } catch (e) {}
         }
 
-        window.addEventListener('unhandledrejection', function(event) {
-          if (event && event.reason && typeof event.reason.message === 'string' &&
-              (event.reason.message.indexOf('WebSocket closed without opened') !== -1 ||
-               event.reason.message.indexOf('vite:ws') !== -1)) {
-            event.preventDefault();
-            event.stopPropagation();
+        if (typeof Reflect !== 'undefined' && typeof Reflect.defineProperty === 'function' && !Reflect.defineProperty.__stbaLocationSafe) {
+          var nativeReflectDefine = Reflect.defineProperty;
+          var safeReflectDefine = function(target, prop, attributes) {
+            if (
+              (prop === 'location' || prop === 'href') &&
+              (target === window ||
+                target === document ||
+                (typeof Window !== 'undefined' && target === Window.prototype) ||
+                (typeof Location !== 'undefined' && (target === Location.prototype || target instanceof Location)))
+            ) {
+              return true;
+            }
+            try {
+              return nativeReflectDefine.call(Reflect, target, prop, attributes);
+            } catch (e) {
+              return false;
+            }
+          };
+          safeReflectDefine.__stbaLocationSafe = true;
+          try {
+            Reflect.defineProperty = safeReflectDefine;
+          } catch (e) {}
+        }
+
+        // 2. Remove any injected redirectionChainSiteScript.js script elements from the DOM
+        function removeInjectedRedirectionScripts(root) {
+          try {
+            var scope = root || document;
+            if (!scope || typeof scope.querySelectorAll !== 'function') return;
+            var scripts = scope.querySelectorAll('script[src*="redirectionChainSiteScript"], script[src*="cently"]');
+            for (var i = 0; i < scripts.length; i++) {
+              var s = scripts[i];
+              s.type = 'javascript/blocked';
+              if (s.parentNode) s.parentNode.removeChild(s);
+            }
+          } catch (e) {}
+        }
+        removeInjectedRedirectionScripts(document);
+
+        if (typeof MutationObserver !== 'undefined' && document.documentElement) {
+          try {
+            var scriptObserver = new MutationObserver(function(mutations) {
+              for (var i = 0; i < mutations.length; i++) {
+                var added = mutations[i].addedNodes;
+                if (!added) continue;
+                for (var j = 0; j < added.length; j++) {
+                  var node = added[j];
+                  if (node && node.nodeName === 'SCRIPT') {
+                    var src = String(node.src || '');
+                    var txt = String(node.textContent || '');
+                    if (
+                      src.indexOf('redirectionChainSiteScript') !== -1 ||
+                      src.indexOf('cently') !== -1 ||
+                      txt.indexOf('cently:rd:site') !== -1
+                    ) {
+                      node.type = 'javascript/blocked';
+                      if (node.parentNode) node.parentNode.removeChild(node);
+                    }
+                  }
+                }
+              }
+            });
+            scriptObserver.observe(document.documentElement, { childList: true, subtree: true });
+          } catch (e) {}
+        }
+
+        function isSuppressedMessage(msg, source) {
+          var s = String(msg || '');
+          var src = String(source || '');
+          return (
+            s.indexOf("Unexpected token '\x3c'") !== -1 ||
+            s.indexOf('Unexpected token \x3c') !== -1 ||
+            s.indexOf('SyntaxError: Unexpected token') !== -1 ||
+            s.indexOf('is not valid JSON') !== -1 ||
+            s.indexOf('Expected a JavaScript') !== -1 ||
+            s.indexOf('MIME type') !== -1 ||
+            s.indexOf('Failed to fetch dynamically imported module') !== -1 ||
+            s.indexOf('WebSocket closed without opened') !== -1 ||
+            s.indexOf('vite:ws') !== -1 ||
+            s.indexOf('cently:rd:site') !== -1 ||
+            s.indexOf('Cannot redefine property: location') !== -1 ||
+            s.indexOf('failed to patch window.location') !== -1 ||
+            src.indexOf('redirectionChainSiteScript') !== -1 ||
+            src.indexOf('__cookie_check.html') !== -1 ||
+            src.indexOf('warmup.html') !== -1
+          );
+        }
+
+        function isSuppressedPayload(payload) {
+          try {
+            if (!payload) return false;
+            var serialized = typeof payload === 'string' ? payload : JSON.stringify(payload);
+            return isSuppressedMessage(serialized, serialized);
+          } catch (e) {
+            return false;
           }
-        });
+        }
+
+        window.__stbaIsSuppressedMessage = isSuppressedMessage;
+        window.__stbaIsSuppressedPayload = isSuppressedPayload;
+
+        // 3. Intercept MessagePort.prototype.postMessage so _aistudio-iframe.js never forwards
+        // suppressed non-fatal noise to the parent AI Studio error banner.
+        if (typeof MessagePort !== 'undefined' && MessagePort.prototype && !MessagePort.prototype.__stbaFilteredPostMessage) {
+          var origPortPostMessage = MessagePort.prototype.postMessage;
+          MessagePort.prototype.postMessage = function(data, transfer) {
+            try {
+              if (data && isSuppressedPayload(data)) {
+                return;
+              }
+            } catch (e) {}
+            if (Array.isArray(transfer)) {
+              return origPortPostMessage.call(this, data, transfer);
+            }
+            return origPortPostMessage.call(this, data);
+          };
+          MessagePort.prototype.__stbaFilteredPostMessage = true;
+        }
+
+        function wrapOnErrorFn(fn) {
+          if (typeof fn !== 'function') return fn;
+          if (fn.__stbaWrapped) return fn;
+          var wrapped = function(message, source, lineno, colno, error) {
+            var errMsg = (error && error.message) ? String(error.message) : String(message || '');
+            var errStack = (error && error.stack) ? String(error.stack) : String(source || '');
+            if (isSuppressedMessage(errMsg, errStack) || isSuppressedPayload(message) || isSuppressedPayload(error)) {
+              return true;
+            }
+            return fn.apply(this, arguments);
+          };
+          wrapped.__stbaWrapped = true;
+          return wrapped;
+        }
+
+        function wrapOnRejectionFn(fn) {
+          if (typeof fn !== 'function') return fn;
+          if (fn.__stbaWrapped) return fn;
+          var wrapped = function(event) {
+            var reason = event && event.reason;
+            var msg = (reason && reason.message) ? String(reason.message) : String(reason || '');
+            var stack = (reason && reason.stack) ? String(reason.stack) : '';
+            if (isSuppressedMessage(msg, stack) || isSuppressedPayload(reason)) {
+              return;
+            }
+            return fn.apply(this, arguments);
+          };
+          wrapped.__stbaWrapped = true;
+          return wrapped;
+        }
+
+        function wrapConsoleObject(consoleObj) {
+          if (!consoleObj || typeof consoleObj !== 'object') return consoleObj;
+          try {
+            ['error', 'warn'].forEach(function(method) {
+              if (typeof consoleObj[method] === 'function' && !consoleObj[method].__stbaWrapped) {
+                var origFn = consoleObj[method].bind(consoleObj);
+                var wrappedFn = function() {
+                  for (var i = 0; i < arguments.length; i++) {
+                    var arg = arguments[i];
+                    var text = (arg && arg.message) ? String(arg.message) : String(arg || '');
+                    var stack = (arg && arg.stack) ? String(arg.stack) : '';
+                    if (isSuppressedMessage(text, stack) || isSuppressedPayload(arg)) {
+                      return;
+                    }
+                  }
+                  return origFn.apply(consoleObj, arguments);
+                };
+                wrappedFn.__stbaWrapped = true;
+                consoleObj[method] = wrappedFn;
+              }
+            });
+          } catch (e) {}
+          return consoleObj;
+        }
+
+        // Install property interceptors on window.onerror, window.onunhandledrejection, and window.console
+        // so that when _aistudio-iframe.js assigns its handlers at the end of the head section, they are wrapped immediately.
+        try {
+          var currentOnError = wrapOnErrorFn(window.onerror);
+          nativeDefineProperty.call(Object, window, 'onerror', {
+            configurable: true,
+            enumerable: true,
+            get: function() { return currentOnError; },
+            set: function(fn) { currentOnError = wrapOnErrorFn(fn); }
+          });
+        } catch (e) {}
+
+        try {
+          var currentOnRejection = wrapOnRejectionFn(window.onunhandledrejection);
+          nativeDefineProperty.call(Object, window, 'onunhandledrejection', {
+            configurable: true,
+            enumerable: true,
+            get: function() { return currentOnRejection; },
+            set: function(fn) { currentOnRejection = wrapOnRejectionFn(fn); }
+          });
+        } catch (e) {}
+
+        try {
+          var currentConsole = wrapConsoleObject(window.console);
+          nativeDefineProperty.call(Object, window, 'console', {
+            configurable: true,
+            enumerable: true,
+            get: function() { return currentConsole; },
+            set: function(c) { currentConsole = wrapConsoleObject(c); }
+          });
+        } catch (e) {}
+
+        // 3b. Function to wrap console, window.onerror, and window.onunhandledrejection both before and after _aistudio-iframe.js
+        function installErrorAndConsoleGuards() {
+          try {
+            wrapConsoleObject(window.console);
+            if (typeof window.onerror === 'function' && !window.onerror.__stbaWrapped) {
+              window.onerror = wrapOnErrorFn(window.onerror);
+            }
+            if (typeof window.onunhandledrejection === 'function' && !window.onunhandledrejection.__stbaWrapped) {
+              window.onunhandledrejection = wrapOnRejectionFn(window.onunhandledrejection);
+            }
+          } catch (e) {}
+        }
+
+        window.__stbaInstallErrorAndConsoleGuards = installErrorAndConsoleGuards;
+        installErrorAndConsoleGuards();
+
+        // 4. Capture-phase error and unhandledrejection listeners
         window.addEventListener('error', function(event) {
-          if (event && event.message && typeof event.message === 'string' &&
-              (event.message.indexOf('WebSocket closed without opened') !== -1 ||
-               event.message.indexOf('vite:ws') !== -1)) {
+          var msg = (event && event.message) ? String(event.message) : '';
+          var filename = (event && event.filename) ? String(event.filename) : '';
+          if (isSuppressedMessage(msg, filename)) {
             event.preventDefault();
             event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+            return false;
           }
-        });
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event && event.reason;
+          var msg = (reason && reason.message) ? String(reason.message) : String(reason || '');
+          var stack = (reason && reason.stack) ? String(reason.stack) : '';
+          if (isSuppressedMessage(msg, stack) || isSuppressedPayload(reason)) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
+            return false;
+          }
+        }, true);
+
+        // 5. Guard JSON.parse and Response.prototype.json against HTML payloads
+        var origParse = window.JSON && window.JSON.parse;
+        if (origParse && !window.JSON.__stbaSafeParse) {
+          window.JSON.__stbaSafeParse = true;
+          window.JSON.parse = function(text, reviver) {
+            if (typeof text === 'string') {
+              var trimmed = text.trim();
+              if (trimmed.charAt(0) === '\x3c') {
+                return {};
+              }
+            }
+            return origParse.call(window.JSON, text, reviver);
+          };
+        }
+
+        if (window.Response && window.Response.prototype && !window.Response.prototype.__stbaSafeJson) {
+          window.Response.prototype.__stbaSafeJson = true;
+          window.Response.prototype.json = function() {
+            var self = this;
+            return self.text().then(function(text) {
+              var trimmed = (text || '').trim();
+              if (!trimmed || trimmed.charAt(0) === '\x3c') {
+                return { ok: false, error: 'Non-JSON response received' };
+              }
+              try {
+                return origParse ? origParse.call(window.JSON, trimmed) : JSON.parse(trimmed);
+              } catch (e) {
+                return { ok: false, error: 'Invalid JSON response' };
+              }
+            });
+          };
+        }
+
+        // 5b. Pre-iframe fetch credential & manual redirect guard (captured by _aistudio-iframe.js nativeFetch)
+        if (typeof window.fetch === 'function' && !window.fetch.__stbaHardened) {
+          var rawNativeFetch = window.fetch.bind(window);
+          var isInternalOrCredentialedUrl = function(urlStr) {
+            var u = String(urlStr || '').trim();
+            if (!u) return false;
+            if (u.charAt(0) === '/' && u.charAt(1) !== '/') return true;
+            try {
+              var parsed = new URL(u, window.location.origin);
+              if (parsed.origin === window.location.origin) return true;
+              var host = parsed.hostname.toLowerCase();
+              return (
+                host.endsWith('.aistudio.google.com') ||
+                host === 'aistudio.google.com' ||
+                host.endsWith('.run.app')
+              );
+            } catch (e) {
+              return u.indexOf('/api') === 0;
+            }
+          };
+          var hardenedFetch = function(input, init) {
+            var urlStr = (typeof input === 'string')
+              ? input
+              : (input && typeof input.url === 'string' ? input.url : String(input || ''));
+            var opts = init ? Object.assign({}, init) : {};
+            var isCredentialed = isInternalOrCredentialedUrl(urlStr);
+            if (isCredentialed) {
+              if (!opts.credentials) opts.credentials = 'include';
+              if (!opts.redirect) opts.redirect = 'manual';
+            }
+            return rawNativeFetch(input, opts).then(function(res) {
+              if (isCredentialed && res && (res.type === 'opaqueredirect' || res.status === 0)) {
+                return new Response(
+                  JSON.stringify({
+                    ok: false,
+                    success: false,
+                    authRedirect: true,
+                    error: 'Background auth redirect intercepted cleanly'
+                  }),
+                  {
+                    status: 401,
+                    statusText: 'Auth Redirect Intercepted',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'X-STBA-Auth-Redirect': '1'
+                    }
+                  }
+                );
+              }
+              return res;
+            });
+          };
+          hardenedFetch.__stbaHardened = true;
+          try {
+            window.fetch = hardenedFetch;
+          } catch (e) {}
+        }
+
+        // 6. Unregister any stale Service Workers and clear Workbox caches
+        var hadController = !!('serviceWorker' in navigator && navigator.serviceWorker.controller);
+        var swPromise = ('serviceWorker' in navigator)
+          ? navigator.serviceWorker.getRegistrations().then(function(regs) {
+              return Promise.all(regs.map(function(r) { return r.unregister().catch(function() {}); }));
+            }).catch(function() {})
+          : Promise.resolve();
+        var cachePromise = ('caches' in window)
+          ? caches.keys().then(function(keys) {
+              return Promise.all(keys.map(function(k) { return caches.delete(k).catch(function() {}); }));
+            }).catch(function() {})
+          : Promise.resolve();
+        if (hadController) {
+          Promise.all([swPromise, cachePromise]).then(function() {
+            if (!sessionStorage.getItem('stba_controller_purged_v4')) {
+              sessionStorage.setItem('stba_controller_purged_v4', '1');
+              window.location.reload();
+            }
+          });
+        }
       })();
     </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StudyToBeApproved.com — Master Scripture & Doctrine</title>
     <!-- Favicons & Brand Assets -->
     <link rel="icon" type="image/png" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_200,w_200/Full_STBA_LOGO_pdwdz3" />
     <link rel="icon" type="image/png" sizes="32x32" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_32,w_32/Full_STBA_LOGO_pdwdz3" />
@@ -81,7 +410,7 @@
     <link rel="icon" type="image/png" sizes="128x128" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_128,w_128/Full_STBA_LOGO_pdwdz3" />
     <link rel="shortcut icon" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_64,w_64/Full_STBA_LOGO_pdwdz3" />
     <link rel="apple-touch-icon" href="https://res.cloudinary.com/dx3jgal9b/image/upload/c_fill,h_180,w_180/Full_STBA_LOGO_pdwdz3" />
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
     <meta name="theme-color" content="#06162c" />
     <meta name="description" content="Master Scripture through active recall, spaced repetition, and AI-powered teaching." />
     <meta property="og:title" content="StudyToBeApproved.com" />
@@ -95,8 +424,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400;1,700&family=Noto+Serif:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Outfit:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   </head>
   <body>
+    <script>
+      if (typeof window !== 'undefined' && typeof window.__stbaInstallErrorAndConsoleGuards === 'function') {
+        window.__stbaInstallErrorAndConsoleGuards();
+      }
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

@@ -2388,7 +2388,7 @@ export const NotebookPage: React.FC = () => {
           {/* Panel header controls */}
           <div className="p-4 border-b border-[var(--nb-border)]/65 shrink-0 flex items-center justify-between gap-2 bg-transparent">
             <div className="flex flex-col">
-              <span className="text-xs font-semibold text-[var(--nb-text)] font-sans">Notebook Studia</span>
+              <span className="text-xs font-semibold text-[var(--nb-text)] font-sans">Notebook Studio</span>
               <span className="text-[10px] font-mono text-[var(--nb-text-dim)] uppercase tracking-wider">
                 {categories[activeCategory]?.label || 'Study'} ({filteredNotes.length})
               </span>

@@ -3,6 +3,7 @@ import { StudyNote, CSMSReview, MasteryQuestion } from '../../types/notebook'
 import { useNavigate } from 'react-router-dom'
 import { callElderStephen } from '../../lib/callElderStephen'
 import { useApp } from '../../context/AppContext'
+import { apiFetch } from '../../lib/apiFetch'
 import { 
   BookOpen, 
   Brain, 
@@ -292,7 +293,7 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
     setActiveReviewTab('csms')
 
     try {
-      const response = await fetch('/api/generate-questions', {
+      const response = await apiFetch('/api/generate-questions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -362,7 +363,7 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
     }
 
     try {
-      const response = await fetch('/api/generate-questions', {
+      const response = await apiFetch('/api/generate-questions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

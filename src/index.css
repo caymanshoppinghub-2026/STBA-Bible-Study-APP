@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400;1,700&display=swap');
 @import "tailwindcss";
 @config "../tailwind.config.ts";
 
@@ -39,16 +40,36 @@
 }
 
 /* Global minimum font size baseline clamp for micro utility classes (<12px -> 12px / 0.75rem) */
-.text-\[8px\],
-.text-\[8\.5px\],
-.text-\[9px\],
-.text-\[9\.5px\],
+.text-\[8px\]:not(.stba-header-subtitle),
+.text-\[8\.5px\]:not(.stba-header-subtitle),
+.text-\[9px\]:not(.stba-header-subtitle),
+.text-\[9\.5px\]:not(.stba-header-subtitle),
 .text-\[10px\],
 .text-\[10\.5px\],
 .text-\[11px\],
 .text-\[11\.5px\] {
   font-size: 0.75rem !important;
   line-height: 1.125rem !important;
+}
+
+/* Compact 'Study To Be Approved' header text so profile & HUD buttons never overflow off screen */
+header#stba-top-bar > div:nth-of-type(1) > a#topbar-brand-link > div:nth-of-type(2) > span:nth-of-type(1),
+#topbar-brand-subtitle,
+#sidebar-brand-header .stba-header-subtitle,
+.stba-header-subtitle {
+  font-size: 7px !important;
+  line-height: 1 !important;
+  letter-spacing: 0.02em !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 480px) {
+  header#stba-top-bar > div:nth-of-type(1) > a#topbar-brand-link > div:nth-of-type(2) > span:nth-of-type(1),
+  #topbar-brand-subtitle,
+  .stba-header-subtitle {
+    font-size: 6px !important;
+    letter-spacing: 0.01em !important;
+  }
 }
 
 html {
@@ -733,11 +754,60 @@ main {
   box-shadow: 0 0 12px rgba(223, 197, 123, 0.35), 0 0 0 1px #DFC57B !important;
 }
 
-/* Homepage (#stba-landing-page) — Uniform Lato font family and Active Recall card body text size (0.875rem / 14px) */
+/* Homepage (#stba-landing-page) — Apply Lato font family to all body text across the home page */
+#stba-landing-page,
 #stba-landing-page p,
-#stba-landing-page li {
+#stba-landing-page ul,
+#stba-landing-page li,
+#stba-landing-page li span,
+#stba-landing-page .font-sans,
+#stba-landing-page .font-lato,
+#stba-landing-page #pricing p,
+#stba-landing-page #pricing ul,
+#stba-landing-page #pricing li,
+#stba-landing-page #pricing li span,
+#stba-global-footer,
+#stba-global-footer p:not(.font-serif):not(.font-mono),
+#stba-global-footer ul,
+#stba-global-footer li,
+#stba-global-footer li span,
+#stba-global-footer .font-sans {
+  font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+}
+
+#stba-landing-page section p,
+#stba-landing-page section li,
+#stba-landing-page #pricing li span {
   font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif !important;
   font-size: 0.875rem !important;
   line-height: 1.625 !important;
 }
+
+#stba-landing-page header p,
+#stba-landing-page #hero-subtitle-description {
+  font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+  font-size: 18px !important;
+  line-height: 1.625 !important;
+}
+
+/* Signup Page (#stba-signup-container) — Apply Lato font family to all body text across the pricing cards and left preview card */
+#stba-signup-container #contextual-preview-panel p,
+#stba-signup-container #contextual-preview-panel li,
+#stba-signup-container #contextual-preview-panel .preview-body-text,
+#stba-signup-container #tier-cards-grid p,
+#stba-signup-container #tier-cards-grid ul,
+#stba-signup-container #tier-cards-grid li,
+#stba-signup-container #tier-cards-grid li span,
+#tier-card-beginner p,
+#tier-card-beginner li,
+#tier-card-beginner li span,
+#tier-card-scholar p,
+#tier-card-scholar li,
+#tier-card-scholar li span,
+#tier-card-leader p,
+#tier-card-leader li,
+#tier-card-leader li span {
+  font-family: "Lato", ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+}
+
 

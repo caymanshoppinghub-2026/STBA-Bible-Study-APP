@@ -30,7 +30,8 @@ The application uses the following variables (configured in `.env` and `.env.exa
 | Variable | Description | Client Exposed | Example Value |
 |---|---|---|---|
 | `VITE_SUPABASE_URL` | Base Supabase project URL | Yes (`VITE_` prefix) | `https://ygsatsfcvodstgjhmths.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | Public Supabase Anonymous Key (JWT) | Yes (`VITE_` prefix) | `eyJhbGciOiJIUzI1NiIsInR5...` |
+| `SUPABASE_PUBLISHABLE_KEY` | Public Supabase Publishable Key | Yes | `sb_publishable_...` / `eyJhbGciOiJIUzI1NiIsInR5...` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Public Supabase Publishable Key (Vite alias) | Yes (`VITE_` prefix) | `sb_publishable_...` / `eyJhbGciOiJIUzI1NiIsInR5...` |
 | `SUPABASE_TEST_EMAIL` | *(Optional)* Test user email for live CRUD verification | No (CI / Test only) | `scholar.test@stba.internal` |
 | `SUPABASE_TEST_PASSWORD` | *(Optional)* Test user password for live CRUD verification | No (CI / Test only) | `SecurePassword123!` |
 

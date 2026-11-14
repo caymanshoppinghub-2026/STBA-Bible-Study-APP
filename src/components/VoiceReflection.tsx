@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch } from "../lib/apiFetch";
 import {
   Mic,
   MicOff,
@@ -25,6 +26,7 @@ import {
   Compass
 } from "lucide-react";
 import { Scripture } from "../types";
+import { stitchDictatedFragments, recombineFragmentedTranscript } from "../utils/dictationBuffer";
 
 // Standard preset scriptures for exegesis
 const REFLECTION_PRESETS: Scripture[] = [
@@ -112,15 +114,11 @@ export const VoiceReflection: React.FC = () => {
           let finalTranscript = "";
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript + " ";
+              finalTranscript = stitchDictatedFragments(finalTranscript, event.results[i][0].transcript);
             }
           }
           if (finalTranscript) {
-            setTranscript((prev) => {
-              // Deduplicate trailing spaces
-              const next = (prev + " " + finalTranscript).trim().replace(/\s+/g, " ");
-              return next;
-            });
+            setTranscript((prev) => stitchDictatedFragments(prev, finalTranscript));
           }
         };
 
@@ -217,7 +215,7 @@ export const VoiceReflection: React.FC = () => {
 
     // Capture Simulation response if transcript is empty
     setTranscript((prev) => {
-      const trimmed = prev.trim();
+      const trimmed = recombineFragmentedTranscript(prev);
       if (!trimmed) {
         if (mode === "explain") {
           return `In Exodus chapter 20, God declares the Seventh-day Sabbath as a holy memorial of creation. We find that we should rest and keep it because Christ finished His work is a sign of sanctification, connecting our heart and high priest on the sanctuary.`;
@@ -254,7 +252,7 @@ export const VoiceReflection: React.FC = () => {
     setErrorText(null);
 
     try {
-      const response = await fetch("/api/study/evaluate-reflection", {
+      const response = await apiFetch("/api/study/evaluate-reflection", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

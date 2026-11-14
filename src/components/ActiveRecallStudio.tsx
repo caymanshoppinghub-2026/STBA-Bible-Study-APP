@@ -442,6 +442,7 @@ export const ActiveRecallStudio: React.FC = () => {
           {activeTab === "blueprint" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <MemorizationBlueprint
+                initialScripture={activeScripture || belief1Scripture}
                 onLaunchRecall={() => setActiveTab("recall")}
               />
             </motion.div>

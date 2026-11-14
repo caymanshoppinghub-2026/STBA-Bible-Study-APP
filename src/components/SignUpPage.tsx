@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { apiFetch, safeParseResponseJson, isAuthRedirectResponse } from "../lib/apiFetch";
 import { 
   ArrowLeft, 
   User, 
@@ -343,9 +344,12 @@ export const SignUpPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch("/api/auth/register", {
+      const res = await apiFetch("/api/auth/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({
           name: fullName.trim(),
           email: email.trim(),
@@ -353,7 +357,22 @@ export const SignUpPage: React.FC = () => {
         })
       });
 
-      const data = await res.json();
+      // Verify Content-Type and guard against HTML redirect/challenge responses
+      const contentType = (res.headers.get("content-type") || "").toLowerCase();
+      if (isAuthRedirectResponse(res) || contentType.includes("text/html")) {
+        throw new Error("Registration request was intercepted by an unexpected redirect or HTML response. Please retry.");
+      }
+
+      const data = await safeParseResponseJson<{
+        success?: boolean;
+        error?: string;
+        message?: string;
+        fallbackCode?: string;
+      }>(res);
+
+      if (!data) {
+        throw new Error("Received a non-JSON response from the registration service. Please retry.");
+      }
 
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Account registration failed.");
@@ -383,17 +402,26 @@ export const SignUpPage: React.FC = () => {
     setVerificationError(null);
 
     try {
-      const res = await fetch("/api/auth/send-code", {
+      const res = await apiFetch("/api/auth/send-code", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({
           email: email.trim(),
           name: fullName.trim()
         })
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await safeParseResponseJson<{
+        success?: boolean;
+        error?: string;
+        message?: string;
+        fallbackCode?: string;
+      }>(res);
+
+      if (res.ok && data?.success) {
         if (data.fallbackCode) {
           setSandboxFallbackCode(data.fallbackCode);
           setVerificationCodeInput(data.fallbackCode);
@@ -401,7 +429,7 @@ export const SignUpPage: React.FC = () => {
         setVerificationMsg(data.message || `Fresh verification code dispatched to ${email.trim()}.`);
         setResendCooldown(30);
       } else {
-        setVerificationError(data.error || "Failed to resend code.");
+        setVerificationError(data?.error || "Failed to resend code.");
       }
     } catch {
       setVerificationError("Network error while requesting code resend.");
@@ -423,19 +451,32 @@ export const SignUpPage: React.FC = () => {
     setIsVerifyingCode(true);
 
     try {
-      const res = await fetch("/api/auth/verify-email", {
+      const res = await apiFetch("/api/auth/verify-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({
           email: email.trim(),
           code: verificationCodeInput.trim()
         })
       });
 
-      const data = await res.json();
+      const contentType = (res.headers.get("content-type") || "").toLowerCase();
+      if (isAuthRedirectResponse(res) || contentType.includes("text/html")) {
+        setVerificationError("Verification response returned HTML instead of JSON after redirect. Please retry.");
+        setIsVerifyingCode(false);
+        return;
+      }
 
-      if (!res.ok || !data.success) {
-        setVerificationError(data.error || "Invalid verification code. Please check your inbox or request a new code.");
+      const data = await safeParseResponseJson<{
+        success?: boolean;
+        error?: string;
+      }>(res);
+
+      if (!res.ok || !data?.success) {
+        setVerificationError(data?.error || "Invalid verification code. Please check your inbox or request a new code.");
         setIsVerifyingCode(false);
         return;
       }
@@ -508,11 +549,24 @@ export const SignUpPage: React.FC = () => {
         await ensureInitialUserTrackProgress(authUserId, "fundamental-beliefs");
       }
 
+      // Zero out any stale cached progress metrics for new verified accounts
+      localStorage.removeItem("stba_latest_weekly_recap");
+      localStorage.removeItem("stba_completed_verses");
+      localStorage.removeItem("stba_vaulted_verses");
+      localStorage.removeItem("stba_study_streak_count_v2");
+      localStorage.removeItem("stba_has_completed_session");
+      localStorage.removeItem("stba_tracks_progress");
+      localStorage.removeItem("stba_memory_vault_list");
+      localStorage.removeItem("stba_tour_completed");
+      localStorage.removeItem("stba_profile_tour_completed");
+      localStorage.removeItem("stba_onboarding_v3_completed");
+
       localStorage.setItem("stba_onboarding_explain_first", "true");
       localStorage.setItem("stba_onboarding_pending", "true");
       localStorage.setItem("stba_is_new_user", "true");
+      localStorage.setItem("stba_onboarding_stage", "welcome_modal");
 
-      navigate("/onboarding", { state: { targetTier: selectedTier } });
+      navigate("/dashboard", { state: { targetTier: selectedTier, fromVerification: true } });
     } catch {
       setVerificationError("Error connecting to verification service. Please retry.");
     } finally {
@@ -721,12 +775,12 @@ export const SignUpPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <p className="text-xs text-stone-300 leading-relaxed font-sans mb-5">
+                    <p className="text-xs text-stone-300 leading-relaxed font-lato preview-body-text mb-5">
                       {activeTierConfig.summary}
                     </p>
 
                     {/* Bullet Points of Unlocked Benefits */}
-                    <div className="space-y-3.5">
+                    <div className="space-y-3.5 font-lato">
                       <span className="text-[10px] font-mono uppercase tracking-widest text-[#EAD49E] font-bold block">
                         Included in this tier:
                       </span>
@@ -748,10 +802,10 @@ export const SignUpPage: React.FC = () => {
                             <Check className="w-2.5 h-2.5" />
                           </div>
                           <div>
-                            <span className="text-xs font-semibold text-white block">
+                            <span className="text-xs font-semibold text-white font-lato preview-body-text block">
                               {item.title}
                             </span>
-                            <span className="text-[11px] text-stone-400 leading-snug block mt-0.5">
+                            <span className="text-[11px] text-stone-400 leading-snug font-lato preview-body-text block mt-0.5">
                               {item.desc}
                             </span>
                           </div>
@@ -812,23 +866,23 @@ export const SignUpPage: React.FC = () => {
                         Free Forever
                       </p>
 
-                      <p className="text-xs text-stone-300 leading-relaxed font-sans mt-4">
+                      <p className="text-xs text-stone-300 leading-relaxed font-lato mt-4">
                         Master the core principles of 2 Timothy with essential Explain Mode and Active Recall tools.
                       </p>
 
                       {/* Feature Highlights */}
-                      <ul className="mt-5 space-y-2 text-xs text-stone-300 border-t border-white/5 pt-4">
+                      <ul className="mt-5 space-y-2 text-xs text-stone-300 font-lato border-t border-white/5 pt-4">
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>Explain Mode Exegesis</span>
+                          <span className="font-lato">Explain Mode Exegesis</span>
                         </li>
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>Fundamental SDA Tracks</span>
+                          <span className="font-lato">Fundamental SDA Tracks</span>
                         </li>
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>Active Recall Checks</span>
+                          <span className="font-lato">Active Recall Checks</span>
                         </li>
                       </ul>
                     </div>
@@ -892,27 +946,27 @@ export const SignUpPage: React.FC = () => {
                         {billingCycle === "yearly" ? "Save 17% • $79/yr ($6.58/mo)" : "$7.99 billed monthly"}
                       </p>
 
-                      <p className="text-xs text-stone-300 leading-relaxed font-sans mt-4">
+                      <p className="text-xs text-stone-300 leading-relaxed font-lato mt-4">
                         Unlocks scientific Leitner memory vaults, cognitive retention curves, Greek/Hebrew concordances, & syllabus plans.
                       </p>
 
                       {/* Feature Highlights */}
-                      <ul className="mt-5 space-y-2 text-xs text-stone-300 border-t border-white/5 pt-4">
+                      <ul className="mt-5 space-y-2 text-xs text-stone-300 font-lato border-t border-white/5 pt-4">
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                          <span>Leitner Spaced Repetition Vaults</span>
+                          <span className="font-lato">Leitner Spaced Repetition Vaults</span>
                         </li>
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                          <span>Cognitive Telemetry & Analytics</span>
+                          <span className="font-lato">Cognitive Telemetry & Analytics</span>
                         </li>
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                          <span>Greek & Hebrew Exegesis Tools</span>
+                          <span className="font-lato">Greek & Hebrew Exegesis Tools</span>
                         </li>
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                          <span>Sabbath School Lesson Planner</span>
+                          <span className="font-lato">Sabbath School Lesson Planner</span>
                         </li>
                       </ul>
                     </div>
@@ -971,27 +1025,27 @@ export const SignUpPage: React.FC = () => {
                         {billingCycle === "yearly" ? "Save ~15% • $139/yr ($11.58/mo)" : "$14.99 billed monthly"}
                       </p>
 
-                      <p className="text-xs text-stone-300 leading-relaxed font-sans mt-4">
+                      <p className="text-xs text-stone-300 leading-relaxed font-lato mt-4">
                         Equipped for pastors, Sabbath School teachers, and discipleship mentors who train others and lead small groups.
                       </p>
 
                       {/* Feature Highlights */}
-                      <ul className="mt-5 space-y-2 text-xs text-stone-300 border-t border-white/5 pt-4">
+                      <ul className="mt-5 space-y-2 text-xs text-stone-300 font-lato border-t border-white/5 pt-4">
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          <span>Teach It Homiletic Preaching Studio</span>
+                          <span className="font-lato">Teach It Homiletic Preaching Studio</span>
                         </li>
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          <span>Curriculum & Lesson Generator</span>
+                          <span className="font-lato">Curriculum & Lesson Generator</span>
                         </li>
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          <span>Shepherd Small Group Discipleship</span>
+                          <span className="font-lato">Shepherd Small Group Discipleship</span>
                         </li>
                         <li className="flex items-center gap-2">
                           <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          <span>Exportable Handouts, PDFs & Slides</span>
+                          <span className="font-lato">Exportable Handouts, PDFs & Slides</span>
                         </li>
                       </ul>
                     </div>

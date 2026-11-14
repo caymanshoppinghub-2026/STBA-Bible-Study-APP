@@ -165,15 +165,15 @@ export const TopBar: React.FC<TopBarProps> = ({
   return (
     <header
       id="stba-top-bar"
-      className="h-[68px] bg-[#06162c]/95 backdrop-blur-md border-b border-[#E5B842]/20 px-4 sm:px-6 flex items-center justify-between shrink-0 relative z-30 transition-all duration-300 select-none text-left shadow-lg shadow-black/20"
+      className="h-[68px] bg-[#06162c]/95 backdrop-blur-md border-b border-[#E5B842]/20 px-3 sm:px-6 flex items-center justify-between gap-2 shrink-0 relative z-30 transition-all duration-300 select-none text-left shadow-lg shadow-black/20"
     >
       {/* LEFT: SLIDE-OUT MENU TOGGLE & STBA LOGO BRANDING */}
-      <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 shrink-0">
+      <div className="flex items-center space-x-2.5 sm:space-x-4 min-w-0 flex-1">
         {/* Mobile / Tablet Menu Button */}
         <button
           id="stba-sidebar-toggle-btn"
           onClick={handleMenuClick}
-          className="p-2 -ml-1.5 rounded-xl bg-[#0d3060]/60 hover:bg-[#0d3060] text-[#F3CF65] border border-[#E5B842]/30 focus:outline-none transition-all cursor-pointer shadow-xs active:scale-95 group flex items-center justify-center"
+          className="p-2 -ml-1 rounded-xl bg-[#0d3060]/60 hover:bg-[#0d3060] text-[#F3CF65] border border-[#E5B842]/30 focus:outline-none transition-all cursor-pointer shadow-xs active:scale-95 group flex items-center justify-center shrink-0"
           aria-label="Toggle Navigation Menu"
           title="Toggle Navigation Menu"
         >
@@ -184,9 +184,9 @@ export const TopBar: React.FC<TopBarProps> = ({
         <Link
           to="/"
           id="topbar-brand-link"
-          className="flex items-center space-x-2.5 group focus:outline-none"
+          className="flex items-center space-x-2 sm:space-x-2.5 min-w-0 group focus:outline-none"
         >
-          <div className="relative">
+          <div className="relative shrink-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full ring-2 ring-[#E5B842]/50 group-hover:ring-[#F3CF65] transition-all p-0.5 bg-[#0a2246] overflow-hidden flex items-center justify-center shadow-md shadow-[#E5B842]/10">
               <img
                 src={STBA_LOGO_URL}
@@ -198,13 +198,16 @@ export const TopBar: React.FC<TopBarProps> = ({
             <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[#F3CF65] rounded-full border-2 border-[#06162c] shadow-xs" />
           </div>
 
-          <div className="flex flex-col">
+          <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-serif font-black text-[#F3CF65] text-lg sm:text-xl tracking-tight leading-none group-hover:text-amber-200 transition-colors">
+              <span className="font-serif font-black text-[#F3CF65] text-base sm:text-lg tracking-tight leading-none group-hover:text-amber-200 transition-colors">
                 STBA
               </span>
             </div>
-            <span className="text-[8px] sm:text-[9px] uppercase font-mono tracking-widest text-[#94A3B8] font-bold leading-none mt-0.5">
+            <span
+              id="topbar-brand-subtitle"
+              className="stba-header-subtitle text-[6.5px] sm:text-[7.5px] uppercase font-mono tracking-tight text-[#94A3B8] font-bold leading-none mt-0.5 whitespace-nowrap"
+            >
               Study To Be Approved™
             </span>
           </div>

@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
+
 export interface LessonParagraph {
   type?: string;
   text: string;
@@ -40,7 +42,7 @@ export interface SabbathSchoolLessonPackage {
  */
 export async function parseSabbathSchoolLesson(text: string): Promise<SabbathSchoolLessonPackage> {
   try {
-    const response = await fetch("/api/sabbath/parse", {
+    const response = await apiFetch("/api/sabbath/parse", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -49,7 +51,8 @@ export async function parseSabbathSchoolLesson(text: string): Promise<SabbathSch
     });
 
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<SabbathSchoolLessonPackage>(response);
+      if (parsed && !("ok" in (parsed as any) && (parsed as any).ok === false)) return parsed;
     }
   } catch (e) {
     console.warn("[SabbathAPI] parseSabbathSchoolLesson network warning:", e);
@@ -72,7 +75,7 @@ export async function parseSabbathSchoolLesson(text: string): Promise<SabbathSch
  */
 export async function scrapeQuarterlyLesson(targetUrl: string = ""): Promise<SabbathSchoolLessonPackage> {
   try {
-    const response = await fetch("/api/sabbath/scrape", {
+    const response = await apiFetch("/api/sabbath/scrape", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -81,7 +84,8 @@ export async function scrapeQuarterlyLesson(targetUrl: string = ""): Promise<Sab
     });
 
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<SabbathSchoolLessonPackage>(response);
+      if (parsed && !("ok" in (parsed as any) && (parsed as any).ok === false)) return parsed;
     }
   } catch (e) {
     console.warn("[SabbathAPI] scrapeQuarterlyLesson network warning:", e);
@@ -101,7 +105,7 @@ export async function scrapeQuarterlyLesson(targetUrl: string = ""): Promise<Sab
  */
 export async function triggerAutoUpdate(enabled: boolean): Promise<SabbathSchoolLessonPackage | { status: string; message: string }> {
   try {
-    const response = await fetch("/api/sabbath/auto-update", {
+    const response = await apiFetch("/api/sabbath/auto-update", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -110,7 +114,8 @@ export async function triggerAutoUpdate(enabled: boolean): Promise<SabbathSchool
     });
 
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<any>(response);
+      if (parsed && parsed.ok !== false) return parsed;
     }
   } catch (e) {
     console.warn("[SabbathAPI] triggerAutoUpdate network warning:", e);
@@ -124,7 +129,7 @@ export async function triggerAutoUpdate(enabled: boolean): Promise<SabbathSchool
  */
 export async function fetchLessonByDate(dateStr: string): Promise<SabbathSchoolLessonPackage & { selectedDate?: string }> {
   try {
-    const response = await fetch("/api/sabbath/fetch-by-date", {
+    const response = await apiFetch("/api/sabbath/fetch-by-date", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -133,7 +138,8 @@ export async function fetchLessonByDate(dateStr: string): Promise<SabbathSchoolL
     });
 
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<SabbathSchoolLessonPackage & { selectedDate?: string }>(response);
+      if (parsed && !("ok" in (parsed as any) && (parsed as any).ok === false)) return parsed;
     }
   } catch (e) {
     console.warn("[SabbathAPI] fetchLessonByDate network warning:", e);
@@ -164,9 +170,10 @@ export async function getClassroomAnalytics(): Promise<{
   roster: Array<{ id: string; name: string; role: string; status: string; progress: number; lastActive: string }>;
 }> {
   try {
-    const response = await fetch("/api/sabbath/classroom-analytics");
+    const response = await apiFetch("/api/sabbath/classroom-analytics");
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<any>(response);
+      if (parsed && parsed.ok !== false) return parsed;
     }
   } catch (e) {
     console.warn("[SabbathAPI] getClassroomAnalytics network warning:", e);
@@ -205,7 +212,7 @@ export async function updateClassroomEnrollment(payload: {
   className?: string;
 }): Promise<any> {
   try {
-    const response = await fetch("/api/sabbath/enrollment", {
+    const response = await apiFetch("/api/sabbath/enrollment", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -214,7 +221,8 @@ export async function updateClassroomEnrollment(payload: {
     });
 
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<any>(response);
+      if (parsed && parsed.ok !== false) return parsed;
     }
   } catch (e) {
     console.warn("[SabbathAPI] updateClassroomEnrollment network warning:", e);
@@ -233,7 +241,7 @@ export async function recordClassroomActivity(payload: {
   progressDelta?: number;
 }): Promise<any> {
   try {
-    const response = await fetch("/api/sabbath/record-activity", {
+    const response = await apiFetch("/api/sabbath/record-activity", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -242,7 +250,8 @@ export async function recordClassroomActivity(payload: {
     });
 
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<any>(response);
+      if (parsed && parsed.ok !== false) return parsed;
     }
   } catch (e) {
     console.warn("[SabbathAPI] recordClassroomActivity network warning:", e);
@@ -258,14 +267,16 @@ export async function getSabbathSchoolSyncData(forceRefresh: boolean = false): P
   try {
     const url = forceRefresh ? "/api/sabbath/sync/trigger" : "/api/sabbath/sync/current";
     const method = forceRefresh ? "POST" : "GET";
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" }
     });
 
     if (response.ok) {
-      const data = await response.json();
-      return forceRefresh && data.payload ? data.payload : data;
+      const data = await safeParseResponseJson<any>(response);
+      if (data && data.ok !== false) {
+        return forceRefresh && data.payload ? data.payload : data;
+      }
     }
   } catch (err) {
     console.warn("[SabbathAPI] getSabbathSchoolSyncData warning:", err);
@@ -285,9 +296,10 @@ export async function triggerSabbathSchoolSync(): Promise<any> {
  */
 export async function getSabbathSchoolVideos(): Promise<any> {
   try {
-    const response = await fetch("/api/sabbath/videos");
+    const response = await apiFetch("/api/sabbath/videos");
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<any>(response);
+      if (parsed && parsed.ok !== false) return parsed;
     }
   } catch (err) {
     console.warn("[SabbathAPI] getSabbathSchoolVideos warning:", err);
@@ -300,9 +312,10 @@ export async function getSabbathSchoolVideos(): Promise<any> {
  */
 export async function getEgwNotesDailyBreakdown(): Promise<any> {
   try {
-    const response = await fetch("/api/sabbath/egw-notes");
+    const response = await apiFetch("/api/sabbath/egw-notes");
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<any>(response);
+      if (parsed && parsed.ok !== false) return parsed;
     }
   } catch (err) {
     console.warn("[SabbathAPI] getEgwNotesDailyBreakdown warning:", err);
@@ -316,12 +329,13 @@ export async function getEgwNotesDailyBreakdown(): Promise<any> {
 export async function getTheologicalTakeawaysFromSource(forceRefresh: boolean = false): Promise<any> {
   try {
     const url = `/api/sabbath/theological-takeaways?refresh=${forceRefresh ? "true" : "false"}`;
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       method: "GET",
       headers: { "Content-Type": "application/json" }
     });
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<any>(response);
+      if (parsed && parsed.ok !== false) return parsed;
     }
   } catch (err) {
     console.warn("[SabbathAPI] getTheologicalTakeawaysFromSource warning:", err);
@@ -334,9 +348,10 @@ export async function getTheologicalTakeawaysFromSource(forceRefresh: boolean = 
  */
 export async function getScrapedLessonTalkingPoints(): Promise<any> {
   try {
-    const response = await fetch("/api/sabbath/scraped-talking-points");
+    const response = await apiFetch("/api/sabbath/scraped-talking-points");
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<any>(response);
+      if (parsed && parsed.ok !== false) return parsed;
     }
   } catch (err) {
     console.warn("[SabbathAPI] getScrapedLessonTalkingPoints warning:", err);

@@ -46,7 +46,6 @@ import { initContentUpdatesWatcher } from "./utils/contentUpdatesWatcher";
 import { AppLayout } from "./components/AppLayout";
 import { ThemeProvider } from "./context/ThemeContext";
 import { MediaInitializationProvider, StartupSafetyWrapper } from "./components/MediaInitializationProvider";
-import { SpeedInsights } from '@vercel/speed-insights/react';
 
 function PublicLayout({ children }: { children: React.ReactNode }) {
   const { sabbathMode } = useSabbathMode();
@@ -237,26 +236,22 @@ function AnimatedRoutes() {
             }
           />
 
-          {/* PUBLIC ONBOARDING SECURE SYSTEM */}
+          {/* ONBOARDING WALKTHROUGH ROUTE (RENDERS DASHBOARD UNDER BLURRED CELEBRATORY MODAL) */}
           <Route
             path="/onboarding"
             element={
-              <PublicLayout>
-                <div className="max-w-[560px] mx-auto px-4 py-8">
-                  <OnboardingFlow
-                    onComplete={(profile) => {
-                      setUser(profile);
-                      navigate("/dashboard");
-                    }}
-                    onExploreFirst={() => {
-                      setUser(activeUser);
-                      navigate("/dashboard");
-                    }}
-                    isSabbathMode={sabbathMode}
-                    isSignIn={location.state?.isSignIn || false}
-                  />
-                </div>
-              </PublicLayout>
+              <AppLayout>
+                <Dashboard
+                  key={location.key || location.pathname}
+                  user={activeUser}
+                  isSabbathMode={sabbathMode}
+                  onToggleSabbathMode={toggleManualOverride}
+                  onLogOut={() => {
+                    setUser(null);
+                    navigate("/");
+                  }}
+                />
+              </AppLayout>
             }
           />
 
@@ -497,7 +492,6 @@ export function App() {
           </StartupSafetyWrapper>
         </MediaInitializationProvider>
       </ThemeProvider>
-      <SpeedInsights scriptSrc="https://va.vercel-scripts.com/v1/speed-insights/script.js" />
     </Router>
   );
 }

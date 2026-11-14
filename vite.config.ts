@@ -1,272 +1,180 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { defineConfig } from 'vite';
-import { VitePWA } from 'vite-plugin-pwa';
+import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const publishableKey =
+    env.SUPABASE_PUBLISHABLE_KEY ||
+    env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    env.VITE_SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    '';
+  const supabaseUrl = (
+    env.VITE_SUPABASE_URL ||
+    env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    'https://ygsatsfcvodstgjhmths.supabase.co'
+  ).replace(/\/+$/, '');
+
+  const rawEdgeFunctionUrl = (
+    env.VITE_SUPABASE_LIVE_EDGE_FUNCTION_URL ||
+    env.VITE_SUPABASE_EDGE_FUNCTION_URL ||
+    env.SUPABASE_EDGE_FUNCTION_URL ||
+    process.env.VITE_SUPABASE_LIVE_EDGE_FUNCTION_URL ||
+    process.env.VITE_SUPABASE_EDGE_FUNCTION_URL ||
+    process.env.SUPABASE_EDGE_FUNCTION_URL ||
+    `${supabaseUrl}/functions/v1/gemini-live-relay`
+  ).trim();
+
+  const normalizedEdgeCandidate = rawEdgeFunctionUrl.replace(
+    /\/functions\/v1\/gemini-live(\b|\/|$)/i,
+    '/functions/v1/gemini-live-relay'
+  );
+  const edgeFunctionUrl = /^https?:\/\/|^wss?:\/\//i.test(normalizedEdgeCandidate)
+    ? normalizedEdgeCandidate.replace(/\/+$/, '')
+    : `${supabaseUrl}/functions/v1/${normalizedEdgeCandidate
+        .replace(/^\/+|\/+$/g, '')
+        .replace(/^functions\/v1\//i, '')
+        .replace(/^gemini-live$/i, 'gemini-live-relay') || 'gemini-live-relay'}`;
+
+  // Target local Express backend directly (avoid external auth-bridge hairpinning inside container)
+  const backendPort = Number(
+    env.BACKEND_PORT ||
+      env.PORT ||
+      process.env.BACKEND_PORT ||
+      process.env.PORT ||
+      3000
+  );
+  const apiProxyTarget = (
+    env.VITE_API_PROXY_TARGET ||
+    env.BACKEND_URL ||
+    process.env.VITE_API_PROXY_TARGET ||
+    process.env.BACKEND_URL ||
+    `http://127.0.0.1:${Number.isFinite(backendPort) && backendPort > 0 ? backendPort : 3000}`
+  ).replace(/\/+$/, '');
+
+  // When server.ts embeds Vite via middlewareMode, Express handles /api directly before vite.middlewares
+  const isEmbeddedExpressVite = process.env.STBA_EMBEDDED_VITE === 'true';
+
+  const attachApiProxyHandlers = (proxy: any, label: string) => {
+    proxy.on('proxyReq', (proxyReq: any, req: any) => {
+      if (req.headers?.authorization && !proxyReq.getHeader('authorization')) {
+        proxyReq.setHeader('authorization', req.headers.authorization);
+      }
+      if (req.headers?.cookie && !proxyReq.getHeader('cookie')) {
+        proxyReq.setHeader('cookie', req.headers.cookie);
+      }
+      if (req.headers?.host) {
+        proxyReq.setHeader('x-forwarded-host', req.headers.host);
+      }
+    });
+
+    proxy.on('error', (err: any, req: any, res: any) => {
+      console.warn(`[Vite Proxy:${label}] Forwarding error for ${req?.url}:`, err?.message || err);
+      if (res && typeof res.writeHead === 'function' && !res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: `Backend proxy unavailable (${label})`,
+            details: err?.message || 'Upstream connection error',
+          })
+        );
+      }
+    });
+  };
+
+  const proxyRules: Record<string, string | ProxyOptions> = {
+    '/api': {
+      target: apiProxyTarget,
+      changeOrigin: true,
+      secure: false,
+      ws: true,
+      xfwd: true,
+      configure: (proxy) => attachApiProxyHandlers(proxy, 'api'),
+    },
+    '/functions/v1': {
+      target: supabaseUrl,
+      changeOrigin: true,
+      secure: true,
+      ws: true,
+      configure: (proxy) => attachApiProxyHandlers(proxy, 'supabase-functions'),
+    },
+  };
+
   return {
+    base: '/',
+    define: {
+      'process.env.SUPABASE_PUBLISHABLE_KEY': JSON.stringify(publishableKey),
+      'process.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(publishableKey),
+      'process.env.SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'process.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'process.env.SUPABASE_EDGE_FUNCTION_URL': JSON.stringify(edgeFunctionUrl),
+      'process.env.VITE_SUPABASE_EDGE_FUNCTION_URL': JSON.stringify(edgeFunctionUrl),
+      'process.env.VITE_SUPABASE_LIVE_EDGE_FUNCTION_URL': JSON.stringify(edgeFunctionUrl),
+      'import.meta.env.SUPABASE_PUBLISHABLE_KEY': JSON.stringify(publishableKey),
+      'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(publishableKey),
+      'import.meta.env.SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'import.meta.env.SUPABASE_EDGE_FUNCTION_URL': JSON.stringify(edgeFunctionUrl),
+      'import.meta.env.VITE_SUPABASE_EDGE_FUNCTION_URL': JSON.stringify(edgeFunctionUrl),
+      'import.meta.env.VITE_SUPABASE_LIVE_EDGE_FUNCTION_URL': JSON.stringify(edgeFunctionUrl),
+    },
     plugins: [
       {
-        name: 'suppress-vite-hmr-ws-error',
+        name: 'stba-clean-html-and-credentials',
         transformIndexHtml: {
-          order: 'pre',
-          handler() {
-            return [
-              {
-                tag: 'script',
-                attrs: { type: 'text/javascript' },
-                children: `
-                  (function() {
-                    if (typeof window === 'undefined') return;
-                    var OrigWS = window.WebSocket;
-                    if (OrigWS) {
-                      window.WebSocket = function(url, protocols) {
-                        var urlStr = String(url || '');
-                        var isViteHmr = (protocols === 'vite-hmr') ||
-                          (Array.isArray(protocols) && protocols.indexOf('vite-hmr') !== -1) ||
-                          urlStr.indexOf('token=') !== -1 ||
-                          urlStr.indexOf('@vite') !== -1;
-                        if (isViteHmr) {
-                          var listeners = {};
-                          return {
-                            readyState: 1,
-                            OPEN: 1,
-                            CONNECTING: 0,
-                            CLOSING: 2,
-                            CLOSED: 3,
-                            url: urlStr,
-                            protocol: 'vite-hmr',
-                            extensions: '',
-                            bufferedAmount: 0,
-                            binaryType: 'blob',
-                            send: function() {},
-                            close: function() {},
-                            addEventListener: function(type, fn) {
-                              listeners[type] = listeners[type] || [];
-                              listeners[type].push(fn);
-                              if (type === 'open') {
-                                setTimeout(function() {
-                                  try { fn({ type: 'open' }); } catch(e) {}
-                                }, 0);
-                              }
-                            },
-                            removeEventListener: function(type, fn) {
-                              if (!listeners[type]) return;
-                              listeners[type] = listeners[type].filter(function(l) { return l !== fn; });
-                            },
-                            dispatchEvent: function() { return true; }
-                          };
-                        }
-                        return new OrigWS(url, protocols);
-                      };
-                      window.WebSocket.prototype = OrigWS.prototype;
-                      window.WebSocket.CONNECTING = 0;
-                      window.WebSocket.OPEN = 1;
-                      window.WebSocket.CLOSING = 2;
-                      window.WebSocket.CLOSED = 3;
-                    }
-                    window.addEventListener('unhandledrejection', function(event) {
-                      if (event && event.reason && typeof event.reason.message === 'string' &&
-                          (event.reason.message.indexOf('WebSocket closed without opened') !== -1 ||
-                           event.reason.message.indexOf('vite:ws') !== -1)) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }
-                    });
-                    window.addEventListener('error', function(event) {
-                      if (event && event.message && typeof event.message === 'string' &&
-                          (event.message.indexOf('WebSocket closed without opened') !== -1 ||
-                           event.message.indexOf('vite:ws') !== -1)) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }
-                    });
-                  })();
-                `,
-                injectTo: 'head-prepend'
-              }
-            ];
+          order: 'post',
+          handler(html) {
+            // 1. Remove bare crossorigin attributes on local /assets/ tags so partitioned auth cookies are always sent
+            let cleaned = html
+              .replace(/<script\s+type="module"\s+crossorigin\s+src="\/assets\//g, '<script type="module" src="/assets/')
+              .replace(/<link\s+rel="modulepreload"\s+crossorigin\s+href="\/assets\//g, '<link rel="modulepreload" href="/assets/')
+              .replace(/<link\s+rel="stylesheet"\s+crossorigin\s+href="\/assets\//g, '<link rel="stylesheet" href="/assets/');
+
+            // 2. Move any <script type="module" src="/assets/..."> injected in <head> to <body> after <div id="root"></div>
+            // so </head> (_aistudio-iframe.js) and the body error guards execute before module evaluation
+            const scriptMatch = cleaned.match(/<script\s+type="module"\s+src="\/assets\/[^"]+"><\/script>/);
+            if (scriptMatch && cleaned.includes('<div id="root"></div>')) {
+              const scriptTag = scriptMatch[0];
+              cleaned = cleaned
+                .replace(scriptTag, '')
+                .replace('<div id="root"></div>', `<div id="root"></div>\n    ${scriptTag}`);
+            }
+            return cleaned;
           }
         }
       },
       react(),
-      tailwindcss(),
-      VitePWA({
-        registerType: 'autoUpdate',
-        includeAssets: [
-          'favicon.ico',
-          'apple-touch-icon.png',
-          'icon.svg',
-          'pwa-192x192.png',
-          'pwa-512x512.png',
-          'pwa-maskable-512x512.png'
-        ],
-        manifest: {
-          id: '/',
-          name: 'Study To Be Approved (STBA)',
-          short_name: 'STBA',
-          description: 'Cognitive Scripture Mastery & SDA Doctrinal Training Platform',
-          start_url: '/',
-          scope: '/',
-          display: 'standalone',
-          background_color: '#06162c',
-          theme_color: '#06162c',
-          icons: [
-            {
-              src: '/pwa-192x192.png',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'any'
-            },
-            {
-              src: '/pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any'
-            },
-            {
-              src: '/pwa-maskable-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'maskable'
-            },
-            {
-              src: '/icon.svg',
-              sizes: 'any',
-              type: 'image/svg+xml',
-              purpose: 'any'
-            }
-          ]
-        },
-        workbox: {
-          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-          globPatterns: ['**/*.{js,css,html,ico,svg,woff,woff2}', 'pwa-*.png', 'apple-touch-icon.png'],
-          runtimeCaching: [
-            {
-              // Cache Google Fonts Stylesheets
-              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'google-fonts-cache',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            },
-            {
-              // Cache Google Fonts Webfonts
-              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'gstatic-fonts-cache',
-                expiration: {
-                  maxEntries: 30,
-                  maxAgeSeconds: 60 * 60 * 24 * 365
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            },
-            {
-              // Cache Scripture Bible API Proxy - Offline-First with NetworkFirst Fallback
-              urlPattern: /\/api\/bible.*/i,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'stba-bible-api-cache',
-                networkTimeoutSeconds: 3,
-                expiration: {
-                  maxEntries: 500,
-                  maxAgeSeconds: 60 * 60 * 24 * 60 // 60 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            },
-            {
-              // Cache Seventh-day Adventist Bible Commentary (SDABC) API
-              urlPattern: /\/api\/study\/sdabc-commentary.*/i,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'stba-sdabc-commentary-cache',
-                networkTimeoutSeconds: 3,
-                expiration: {
-                  maxEntries: 500,
-                  maxAgeSeconds: 60 * 60 * 24 * 60 // 60 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            },
-            {
-              // Cache Topical Tracks, Word Studies, and Study Tools
-              urlPattern: /\/api\/study\/.*/i,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'stba-study-content-cache',
-                networkTimeoutSeconds: 3,
-                expiration: {
-                  maxEntries: 300,
-                  maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            },
-            {
-              // Public Bible API Fallback (bible-api.com)
-              urlPattern: /^https:\/\/bible-api\.com\/.*/i,
-              handler: 'StaleWhileRevalidate',
-              options: {
-                cacheName: 'public-bible-api-cache',
-                expiration: {
-                  maxEntries: 300,
-                  maxAgeSeconds: 60 * 60 * 24 * 60
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            },
-            {
-              // Cloudinary brand images
-              urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'stba-cloudinary-cache',
-                expiration: {
-                  maxEntries: 50,
-                  maxAgeSeconds: 60 * 60 * 24 * 90
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            }
-          ]
-        },
-        devOptions: {
-          enabled: false,
-          type: 'module'
-        }
-      })
+      tailwindcss()
     ],
     resolve: {
       alias: {
         '@': path.resolve(process.cwd(), '.'),
       },
     },
+    build: {
+      emptyOutDir: false,
+      cssCodeSplit: false,
+      sourcemap: false,
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 6000,
+    },
     server: {
       hmr: false,
+      ws: false,
       watch: null,
+      allowedHosts: true,
+      ...(isEmbeddedExpressVite ? {} : { proxy: proxyRules }),
+    },
+    preview: {
+      allowedHosts: true,
+      proxy: proxyRules,
     },
   };
 });

@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate, Link } from "react-router-dom";
+import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
 import {
   BookOpen,
   CheckCircle2,
@@ -471,7 +472,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       const recentPayload = recentStudiesList.map(s => `${s.reference} (${s.topic})`);
       const statsSnapshot = aggregateUserStats(user, completedVerseIds, favoriteScriptures);
 
-      const response = await fetch("/api/study/weekly-recap", {
+      const response = await apiFetch("/api/study/weekly-recap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -487,7 +488,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data = await safeParseResponseJson<any>(response);
+        if (!data || data.ok === false || !data.title) {
+          throw new Error(data?.error || "Weekly recap endpoint returned non-JSON payload");
+        }
         setWeeklyRecap(data);
         setShowRecapModal(true);
         try {
@@ -591,16 +595,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const handleSupport = () => navigate("/help#contact");
     const handleHelpCenter = () => navigate("/help");
 
+    const handleIntroCoursePrompt = (e: any) => {
+      const promptText =
+        e?.detail?.prompt ||
+        "Guide me in starting my first Study Track on the 28 Fundamental Beliefs and 2 Timothy 2:15.";
+      setAiPrompt(promptText);
+      handleAskAi(promptText);
+    };
+
     window.addEventListener("open-stba-faq-modal", handleFaq);
     window.addEventListener("open-stba-ticket-modal", handleTicket);
     window.addEventListener("open-stba-support-modal", handleSupport);
     window.addEventListener("open-stba-help-center-modal", handleHelpCenter);
+    window.addEventListener("stba-trigger-intro-course-prompt", handleIntroCoursePrompt);
 
     return () => {
       window.removeEventListener("open-stba-faq-modal", handleFaq);
       window.removeEventListener("open-stba-ticket-modal", handleTicket);
       window.removeEventListener("open-stba-support-modal", handleSupport);
       window.removeEventListener("open-stba-help-center-modal", handleHelpCenter);
+      window.removeEventListener("stba-trigger-intro-course-prompt", handleIntroCoursePrompt);
     };
   }, []);
 
@@ -1378,10 +1392,39 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
               <ChevronRight className="w-3.5 h-3.5 text-[#DFC57B] group-hover:translate-x-0.5 group-hover:text-white transition-all duration-300" />
             </div>
           </a>
+
+          {/* Tour Dashboard Button */}
+          <button
+            id="start-onboarding-tour-btn"
+            type="button"
+            onClick={() => {
+              localStorage.setItem("stba_onboarding_stage", "welcome_modal");
+              window.dispatchEvent(new CustomEvent("start-stba-onboarding-flow"));
+            }}
+            className="w-full sm:w-auto min-w-[210px] md:min-w-[230px] flex items-center justify-between gap-3.5 px-4.5 py-3 rounded-2xl bg-[#06162c]/75 hover:bg-[#0d3060]/80 border border-[#DFC57B] hover:border-[#F3CF65] text-stone-200 hover:text-white transition-all duration-300 ease-out cursor-pointer group text-left shadow-md hover:-translate-y-0.5 hover:shadow-[0_0_16px_rgba(223,197,123,0.3)] active:translate-y-0 active:scale-[0.99]"
+            title="Launch Elder Stephen's Guided Onboarding & Dashboard Tour"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0e274a] via-[#091b35] to-[#040e1c] border border-[#DFC57B]/70 group-hover:border-[#F3CF65] shadow-[0_4px_12px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,242,168,0.25)] flex items-center justify-center text-[#F3CF65] group-hover:text-white transition-all duration-300 group-hover:scale-110 group-hover:shadow-[0_0_14px_rgba(243,207,101,0.4)] shrink-0">
+                <Compass className="w-5 h-5 stroke-[2.2] drop-shadow-[0_0_6px_rgba(223,197,123,0.5)]" />
+              </div>
+              <div className="flex flex-col">
+                <span className="font-sans font-bold text-xs sm:text-sm text-white tracking-wide">
+                  Guided Tour
+                </span>
+                <span className="text-[11px] font-sans text-stone-300/90">
+                  Walkthrough with Elder Stephen
+                </span>
+              </div>
+            </div>
+            <div className="w-6 h-6 rounded-lg bg-[#040e1c]/60 border border-[#DFC57B]/30 group-hover:border-[#DFC57B] flex items-center justify-center transition-all duration-300 shrink-0">
+              <ChevronRight className="w-3.5 h-3.5 text-[#DFC57B] group-hover:translate-x-0.5 group-hover:text-white transition-all duration-300" />
+            </div>
+          </button>
         </div>
 
         {/* Right Balance Spacer for Large Screens */}
-        <div className="hidden lg:block w-[180px] shrink-0 pointer-events-none" />
+        <div className="hidden xl:block w-[80px] shrink-0 pointer-events-none" />
       </section>
 
       {/* ========================================================================= */}
@@ -1406,6 +1449,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
             return (
               <div
                 key={mode.id}
+                id={`study-mode-card-${mode.id}`}
                 onClick={() => navigate(mode.path)}
                 className="col-span-1 p-4 sm:p-4.5 rounded-2xl bg-gradient-to-b from-[#08172c]/95 via-[#051121]/95 to-[#030914]/95 border border-[#152a4a] hover:border-[#DFC57B]/70 shadow-[0_6px_20px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,242,168,0.06)] hover:shadow-[0_10px_28px_rgba(0,0,0,0.7),0_0_20px_rgba(223,197,123,0.22)] hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col items-center justify-between text-center min-h-[195px] sm:min-h-[210px] group relative overflow-hidden"
               >
@@ -1557,14 +1601,14 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
             id="dashboard-my-notebook-widget"
             className="flex-1 min-h-0 flex flex-col justify-between p-5 rounded-3xl glass-card border border-[#0d3060] shadow-xl sheen-overlay space-y-3.5"
           >
-            <div className="flex items-center justify-between border-b border-[#0d3060] pb-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-[#E5B842]/20 text-[#F3CF65]">
+            <div className="flex items-center justify-between gap-2 border-b border-[#0d3060] pb-3 shrink-0">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="p-1.5 rounded-lg bg-[#E5B842]/20 text-[#F3CF65] shrink-0">
                   <FileText className="w-4 h-4" />
                 </div>
-                <div>
-                  <h3 className="font-serif font-bold text-sm text-white">My Notebook</h3>
-                  <p className="text-[10px] text-stone-300 font-sans">
+                <div className="min-w-0">
+                  <h3 className="font-serif font-bold text-sm text-white leading-tight whitespace-nowrap">My Notebook</h3>
+                  <p className="text-[10px] text-stone-300 font-sans whitespace-nowrap leading-tight">
                     Your personal knowledge base
                   </p>
                 </div>
@@ -1572,10 +1616,10 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
 
               <Link
                 to="/notebook"
-                className="text-[11px] font-mono font-bold text-[#F3CF65] hover:underline flex items-center gap-1"
+                className="text-[11px] font-mono font-bold text-[#F3CF65] hover:underline flex items-center gap-1 shrink-0 whitespace-nowrap"
               >
-                <span>Open Notebook</span>
-                <ArrowRight className="w-3 h-3" />
+                <span className="whitespace-nowrap">Open Notebook</span>
+                <ArrowRight className="w-3 h-3 shrink-0" />
               </Link>
             </div>
 

@@ -12,6 +12,7 @@ import { callElderStephen, ChatMessagePayload } from "../lib/callElderStephen";
 import { ElderStephenMemoryEngine } from "../lib/elderStephenEngine";
 import { formatProperElderSpacing, extractScriptureReference } from "../utils/elderSpacing";
 import { getElderStephenVoice } from "../components/stba/RightPaneTools";
+import { stitchDictatedFragments, recombineFragmentedTranscript, getAdaptivePauseBufferMs } from "../utils/dictationBuffer";
 
 export type StudyMode =
   | "Notebook"
@@ -283,7 +284,17 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Text-To-Speech Clean Handling
   const speakMessage = useCallback((msgId: string, text: string) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      alert("Text-to-speech is not supported in this browser.");
+      return;
+    }
+
+    // Disable browser-level TTS narration during the onboarding flow;
+    // ensure it only activates after the tour is completed.
+    const activeOnboardingStage = localStorage.getItem("stba_onboarding_stage");
+    const tourCompleted = localStorage.getItem("stba_tour_completed") === "true";
+    const onboardingV3Completed = localStorage.getItem("stba_onboarding_v3_completed") === "true";
+    if (activeOnboardingStage || !tourCompleted || !onboardingV3Completed) {
+      window.speechSynthesis.cancel();
+      setSpeakingMsgId(null);
       return;
     }
 
@@ -324,7 +335,10 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setSpeakingMsgId(null);
   }, []);
 
-  // Web Speech Dictation Handling
+  // Web Speech Dictation Handling with Pause Buffering & Context Stitching
+  const dictationPauseTimerRef = useRef<any>(null);
+  const dictationAccumulatedRef = useRef<string>("");
+
   const toggleDictation = useCallback((onTranscript?: (text: string) => void) => {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -335,6 +349,10 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     if (isDictating) {
+      if (dictationPauseTimerRef.current) {
+        clearTimeout(dictationPauseTimerRef.current);
+        dictationPauseTimerRef.current = null;
+      }
       try {
         recognitionRef.current?.stop();
       } catch (_) {}
@@ -343,25 +361,57 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     try {
+      dictationAccumulatedRef.current = "";
       const rec = new SpeechRecognition();
-      rec.continuous = false;
-      rec.interimResults = false;
+      rec.continuous = true;
+      rec.interimResults = true;
       rec.lang = "en-US";
 
       rec.onstart = () => setIsDictating(true);
       rec.onresult = (evt: any) => {
-        if (evt.results && evt.results[0] && evt.results[0][0]) {
-          const transcript = evt.results[0][0].transcript;
-          if (onTranscript && transcript) {
-            onTranscript(transcript);
+        let finalSegment = "";
+        let interimSegment = "";
+        for (let i = evt.resultIndex; i < evt.results.length; ++i) {
+          if (evt.results[i].isFinal) {
+            finalSegment += evt.results[i][0].transcript + " ";
+          } else {
+            interimSegment += evt.results[i][0].transcript;
           }
+        }
+        if (finalSegment.trim()) {
+          dictationAccumulatedRef.current = stitchDictatedFragments(
+            dictationAccumulatedRef.current,
+            finalSegment.trim()
+          );
+        }
+        const combined = interimSegment.trim()
+          ? stitchDictatedFragments(dictationAccumulatedRef.current, interimSegment.trim())
+          : dictationAccumulatedRef.current;
+
+        if (combined && onTranscript) {
+          if (dictationPauseTimerRef.current) {
+            clearTimeout(dictationPauseTimerRef.current);
+          }
+          const bufferMs = getAdaptivePauseBufferMs(combined);
+          dictationPauseTimerRef.current = setTimeout(() => {
+            const unified = recombineFragmentedTranscript(dictationAccumulatedRef.current || combined);
+            if (unified && onTranscript) {
+              onTranscript(unified);
+            }
+          }, Math.min(bufferMs, 900));
         }
       };
       rec.onerror = (e: any) => {
+        if (e.error === "no-speech") return;
         console.warn("Speech recognition error:", e.error);
         setIsDictating(false);
       };
-      rec.onend = () => setIsDictating(false);
+      rec.onend = () => {
+        if (dictationAccumulatedRef.current && onTranscript) {
+          onTranscript(recombineFragmentedTranscript(dictationAccumulatedRef.current));
+        }
+        setIsDictating(false);
+      };
 
       recognitionRef.current = rec;
       rec.start();

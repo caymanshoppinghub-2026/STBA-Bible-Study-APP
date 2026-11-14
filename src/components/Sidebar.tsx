@@ -135,11 +135,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-full h-full object-contain"
               />
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col min-w-0">
               <span className="font-serif font-black text-[#F3CF65] text-lg tracking-tight leading-none group-hover:text-amber-200">
                 STBA
               </span>
-              <span className="text-[9px] uppercase font-mono tracking-widest text-[#94A3B8] font-bold leading-none mt-1">
+              <span className="stba-header-subtitle text-[9px] uppercase font-mono tracking-wider text-[#94A3B8] font-bold leading-none mt-1 truncate">
                 Study To Be Approved™
               </span>
             </div>

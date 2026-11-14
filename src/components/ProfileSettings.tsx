@@ -6,6 +6,7 @@
 import React, { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch } from "../lib/apiFetch";
 import {
   User,
   Bell,
@@ -50,7 +51,7 @@ import { UserStatsPage } from "./UserStatsPage";
 import { WeeklyScribeHeatmap } from "./WeeklyScribeHeatmap";
 import { triggerManualRecallPopup } from "../utils/recallScheduler";
 import { useApp } from "../context/AppContext";
-import { saveProfileToSupabase } from "../lib/notebookSync";
+import { saveProfileToSupabase, uploadProfileAvatarToSupabase } from "../lib/notebookSync";
 import { supabase } from "../lib/supabase";
 import { triggerAutoUpdate } from "../api/sabbathSchoolApi";
 import { useSabbathSchoolStore } from "../store/useSabbathSchoolStore";
@@ -81,10 +82,18 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   const [tempUserName, setTempUserName] = useState("");
   const [tempUserEmail, setTempUserEmail] = useState("");
   const [profilePic, setProfilePic] = useState("");
+  const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
+  const avatarUploadPromiseRef = useRef<Promise<string | null> | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showEmailVerificationAlert, setShowEmailVerificationAlert] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (user?.profilePic && !profileModalOpen) {
+      setProfilePic(user.profilePic);
+    }
+  }, [user?.profilePic, profileModalOpen]);
 
   const [authCreatedAt, setAuthCreatedAt] = useState<string | null>(() => user?.createdAt || null);
 
@@ -247,10 +256,13 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
     setTempUserName(user?.name || userName || "Noble Berean");
     setTempUserEmail(user?.email || userEmail || "disciple@berean.org");
     setProfilePic(user?.profilePic || profilePic || "");
+    setPendingAvatarFile(null);
+    avatarUploadPromiseRef.current = null;
     setProfileModalOpen(true);
+    window.dispatchEvent(new CustomEvent("stba-profile-edit-modal-opened"));
   };
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
     const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/svg+xml"];
     if (!validTypes.includes(file.type) && !file.type.startsWith("image/")) {
       displayMessage("Please select a valid image file (PNG, JPEG, WEBP, or GIF).");
@@ -260,14 +272,46 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       displayMessage("Image is too large. Choose an image under 3MB.");
       return;
     }
+
+    setPendingAvatarFile(file);
+
+    // Show immediate preview while uploading to Supabase Storage
     const reader = new FileReader();
     reader.onload = () => {
       if (reader.result) {
-        setProfilePic(reader.result as string);
-        displayMessage("Profile picture loaded successfully!");
+        setProfilePic((prev) => (prev && prev.startsWith("http") && !pendingAvatarFile ? prev : (reader.result as string)));
       }
     };
     reader.readAsDataURL(file);
+
+    // Upload to Supabase Storage under `${userId}/avatar-...` and save public URL to database
+    const uploadPromise = uploadProfileAvatarToSupabase(file);
+    avatarUploadPromiseRef.current = uploadPromise;
+
+    try {
+      const publicUrl = await uploadPromise;
+      if (publicUrl) {
+        setProfilePic(publicUrl);
+        setPendingAvatarFile(null);
+        if (user) {
+          const updatedWithAvatar = {
+            ...user,
+            profilePic: publicUrl
+          };
+          setUser(updatedWithAvatar);
+        }
+        displayMessage("Profile picture uploaded and saved to your profile!");
+      } else {
+        displayMessage("Profile picture loaded successfully!");
+      }
+    } catch (err) {
+      console.warn("Failed to upload profile image:", err);
+      displayMessage("Profile picture loaded successfully!");
+    } finally {
+      if (avatarUploadPromiseRef.current === uploadPromise) {
+        avatarUploadPromiseRef.current = null;
+      }
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -325,20 +369,57 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       emailChanged = true;
     }
 
+    let resolvedProfilePic = profilePic || baseUser.profilePic || "";
+
+    // Wait for any in-flight avatar upload triggered by processFile
+    if (avatarUploadPromiseRef.current) {
+      try {
+        const inFlightUrl = await avatarUploadPromiseRef.current;
+        if (inFlightUrl) {
+          resolvedProfilePic = inFlightUrl;
+          setProfilePic(inFlightUrl);
+          setPendingAvatarFile(null);
+        }
+      } catch (e) {}
+    }
+
+    // If a file was selected and not yet uploaded to a public URL, upload it now using the logged-in user's ID
+    if (pendingAvatarFile && (!resolvedProfilePic || resolvedProfilePic.startsWith("data:"))) {
+      const uploadedUrl = await uploadProfileAvatarToSupabase(pendingAvatarFile);
+      if (uploadedUrl) {
+        resolvedProfilePic = uploadedUrl;
+        setProfilePic(uploadedUrl);
+        setPendingAvatarFile(null);
+      }
+    }
+
     const updatedUser = {
       ...baseUser,
       name: trimmedName,
       email: newEmail,
-      profilePic: profilePic || baseUser.profilePic,
+      profilePic: resolvedProfilePic,
       emailVerified: emailChanged ? false : baseUser.emailVerified,
     };
 
+    if (!updatedUser.isGuest) {
+      const persistedUrl = await saveProfileToSupabase(updatedUser).catch(() => null);
+      if (persistedUrl) {
+        updatedUser.profilePic = persistedUrl;
+        setProfilePic(persistedUrl);
+      }
+    }
+
     setUser(updatedUser);
     setProfileModalOpen(false);
+    window.dispatchEvent(
+      new CustomEvent("stba-profile-avatar-saved", {
+        detail: { user: updatedUser, profilePic: updatedUser.profilePic }
+      })
+    );
 
     if (emailChanged) {
       try {
-        await fetch("/api/auth/verify-email", {
+        await apiFetch("/api/auth/verify-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: newEmail })
@@ -480,6 +561,20 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
     const handleEnsureSettings = () => {
       setActiveSubTab("settings");
     };
+    const handleSwitchTab = (e: any) => {
+      const targetTab = e?.detail?.tab;
+      if (targetTab === "settings" || targetTab === "journal" || targetTab === "stats") {
+        setActiveSubTab(targetTab);
+      }
+    };
+    const handleOpenAvatarModal = () => {
+      setActiveSubTab("settings");
+      setTempUserName(user?.name || userName || "Noble Berean");
+      setTempUserEmail(user?.email || userEmail || "disciple@berean.org");
+      setProfilePic(user?.profilePic || profilePic || "");
+      setProfileModalOpen(true);
+      window.dispatchEvent(new CustomEvent("stba-profile-edit-modal-opened"));
+    };
     const handleFinalStep = (e: any) => {
       const isFinal = e?.detail?.isFinalStep ?? true;
       setIsReturnToDesktopGlowing(isFinal);
@@ -489,16 +584,20 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
     };
 
     window.addEventListener("stba-ensure-settings-tab", handleEnsureSettings);
+    window.addEventListener("stba-switch-profile-tab", handleSwitchTab);
+    window.addEventListener("stba-open-avatar-upload-modal", handleOpenAvatarModal);
     window.addEventListener("start-stba-profile-tour", handleEnsureSettings);
     window.addEventListener("stba-profile-tour-final-step", handleFinalStep);
     window.addEventListener("stba-profile-tour-completed", handleTourCompleted);
     return () => {
       window.removeEventListener("stba-ensure-settings-tab", handleEnsureSettings);
+      window.removeEventListener("stba-switch-profile-tab", handleSwitchTab);
+      window.removeEventListener("stba-open-avatar-upload-modal", handleOpenAvatarModal);
       window.removeEventListener("start-stba-profile-tour", handleEnsureSettings);
       window.removeEventListener("stba-profile-tour-final-step", handleFinalStep);
       window.removeEventListener("stba-profile-tour-completed", handleTourCompleted);
     };
-  }, []);
+  }, [user, userName, userEmail, profilePic]);
 
   const handleFetchDateLesson = async (targetDateStr: string) => {
     if (!targetDateStr) return;
@@ -656,7 +755,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         </button>
         <button
           onClick={() => setActiveSubTab("journal")}
-          className={`pb-3 font-sans font-bold uppercase tracking-wider text-xs transition-colors cursor-pointer relative ${
+          className={`pb-3 font-sans font-bold uppercase tracking-wider text-xs transition-colors cursor-pointer relative border-0 outline-none focus:outline-none focus:ring-0 ${
             activeSubTab === "journal" ? "text-[#C9973A] font-semibold" : "text-stone-400 hover:text-stone-700"
           }`}
           id="tab-btn-journal"
@@ -668,7 +767,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         </button>
         <button
           onClick={() => setActiveSubTab("stats")}
-          className={`pb-3 font-sans font-bold uppercase tracking-wider text-xs transition-colors cursor-pointer relative ${
+          className={`pb-3 font-sans font-bold uppercase tracking-wider text-xs transition-colors cursor-pointer relative border-0 outline-none focus:outline-none focus:ring-0 ${
             activeSubTab === "stats" ? "text-[#C9973A] font-semibold" : "text-stone-400 hover:text-stone-700"
           }`}
           id="tab-btn-stats"
@@ -729,7 +828,11 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
           >
             <div className="flex flex-col items-center text-center space-y-4">
               {/* Profile Avatar Sphere */}
-              <div className="w-20 h-20 rounded-full bg-[#1C2333] text-gold border-2 border-[#C9973A] flex items-center justify-center font-serif text-2xl font-extrabold shadow-sm relative group overflow-hidden">
+              <div
+                onClick={handleEditProfileClick}
+                title="Click to upload or update your profile avatar"
+                className="w-20 h-20 rounded-full bg-[#1C2333] text-gold border-2 border-[#C9973A] flex items-center justify-center font-serif text-2xl font-extrabold shadow-sm relative group overflow-hidden cursor-pointer hover:ring-4 hover:ring-[#C9973A]/30 transition-all"
+              >
                 {activeProfilePic ? (
                   <img
                     src={activeProfilePic}
@@ -2188,6 +2291,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                   <button
                     onClick={() => {
                       setProfileModalOpen(false);
+                      window.dispatchEvent(new CustomEvent("stba-profile-edit-modal-closed"));
                       displayMessage("Edit session cancelled. No changes were committed.");
                     }}
                     className="flex-1 py-3 bg-stone-100 hover:bg-stone-200 text-stone-600 font-sans font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer"

@@ -5,7 +5,7 @@ import {
   ExternalLink, Layers, ShieldCheck, BookMarked, ArrowRight,
   Filter, Bookmark, CornerDownRight, Book, Compass
 } from "lucide-react";
-import { ToolProps, getElderStephenVoice } from "./RightPaneTools";
+import { ToolProps, getElderStephenVoice, AutoRetractToolbar } from "./RightPaneTools";
 import { BIBLE_METADATA, parseScriptureLookup } from "./bibleMetadata";
 import { saveResponseAsNewNote } from "../../data/notebookData";
 import { stbaStorage } from "../../lib/storage/indexedDbClient";
@@ -13,6 +13,7 @@ import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
 import { ScriptureLinkedText } from "./ScriptureLinkedText";
 import { bibleService } from "../../services/bibleService";
 import { ToolHighlightableWrapper } from "./HighlightDropdownMenu";
+import { apiFetch, safeParseResponseJson } from "../../lib/apiFetch";
 
 // ==========================================
 // 7-VOLUME CANONICAL SDABC METADATA
@@ -216,8 +217,8 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
 
   // Cross-panel reactive synchronization listener (< 1ms inter-panel coordination)
   useEffect(() => {
-    const unsubVerse = panelSyncBus.subscribe("VERSE_SELECTED", (payload: any) => {
-      if (!payload || payload.source === "SDABibleCommentary") return;
+    const unsubVerse = panelSyncBus.subscribe("VERSE_SELECTED", (payload: any, msg: any) => {
+      if (!payload || payload.source === "SDABibleCommentary" || msg?.sourcePanel === "SDABibleCommentary") return;
       if (payload.reference) {
         const parsed = parseScriptureLookup(payload.reference);
         if (parsed) {
@@ -236,16 +237,24 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
       }
     });
 
-    const unsubPassage = panelSyncBus.subscribe("PASSAGE_LOADED", (payload: any) => {
-      if (!payload || payload.source === "SDABibleCommentary") return;
+    const unsubPassage = panelSyncBus.subscribe("PASSAGE_LOADED", (payload: any, msg: any) => {
+      if (!payload || payload.source === "SDABibleCommentary" || msg?.sourcePanel === "SDABibleCommentary") return;
       if (payload.reference) {
         loadReferenceCommentary(payload.reference);
+      }
+    });
+
+    const unsubCommentary = panelSyncBus.subscribe("COMMENTARY_SYNC", (payload: any, msg: any) => {
+      if (!payload || payload.source === "SDABibleCommentary" || msg?.sourcePanel === "SDABibleCommentary") return;
+      if (payload.reference) {
+        loadReferenceCommentary(payload.reference, typeof payload.verse === "number" ? payload.verse : undefined);
       }
     });
 
     return () => {
       unsubVerse();
       unsubPassage();
+      unsubCommentary();
     };
   }, []);
 
@@ -294,17 +303,57 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
       setActiveVolumeTab(vol.volNumber);
     }
 
-    // 1. Check pre-compiled instant cache in memory FIRST (0ms instantaneous switch)
+    // 1. Check pre-compiled instant cache in memory FIRST (strict canonical/verse matching to prevent substring collisions)
+    const normalizedQuery = clean.replace(/[^a-z0-9]/g, "");
+    const isGenesisOrExodusChapter =
+      parsed &&
+      (parsed.book === "Genesis" || parsed.book === "Exodus") &&
+      !parsed.isSingleVerse &&
+      parsed.startVerse === 1;
+
     for (const key of Object.keys(PRELOADED_SDABC_DATA)) {
-      if (clean.includes(key) || key.includes(clean)) {
+      if (
+        isGenesisOrExodusChapter &&
+        parsed &&
+        parsed.endVerse > 10 &&
+        (key === "genesis 1" || key === "genesis 2" || key === "genesis 3" || key === "genesis 1:1-31")
+      ) {
+        continue;
+      }
+      const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (normalizedKey === normalizedQuery || key === clean) {
         const found = PRELOADED_SDABC_DATA[key];
         setCommentaryData(found);
         setActiveVolumeTab(found.volumeNumber);
         setIsLoading(false);
-        // Persist to IndexedDB asynchronously
         stbaStorage.saveCommentary(refStr, found, found.volumeNumber, parsed?.book || selectedBook, parsed?.chapter || selectedChapter).catch(() => {});
         if (targetVerse) scrollToVerse(targetVerse);
         return;
+      }
+
+      if (parsed && !key.includes("overview")) {
+        const keyParsed = parseScriptureLookup(key);
+        if (
+          keyParsed &&
+          keyParsed.book === parsed.book &&
+          keyParsed.chapter === parsed.chapter &&
+          !(isGenesisOrExodusChapter && parsed.endVerse > 10 && key === "genesis 1:1-31")
+        ) {
+          const requestedStart = parsed.startVerse || 1;
+          const requestedEnd = parsed.endVerse || requestedStart;
+          const exactRangeOverlap =
+            requestedStart >= keyParsed.startVerse &&
+            requestedEnd <= keyParsed.endVerse;
+          if (exactRangeOverlap) {
+            const found = PRELOADED_SDABC_DATA[key];
+            setCommentaryData(found);
+            setActiveVolumeTab(found.volumeNumber);
+            setIsLoading(false);
+            stbaStorage.saveCommentary(refStr, found, found.volumeNumber, parsed.book, parsed.chapter).catch(() => {});
+            if (targetVerse) scrollToVerse(targetVerse);
+            return;
+          }
+        }
       }
     }
 
@@ -325,7 +374,7 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
     // 3. Try API fetch for comprehensive Bible commentary across all 66 books
     setIsLoading(true);
     try {
-      const res = await fetch("/api/study/sdabc-commentary", {
+      const res = await apiFetch("/api/study/sdabc-commentary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -336,7 +385,7 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
         })
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeParseResponseJson<SDABCEntry>(res);
         if (data && data.verses && data.verses.length > 0) {
           setCommentaryData(data);
           setActiveVolumeTab(data.volumeNumber || getVolumeForBook(parsed?.book || selectedBook).volNumber);
@@ -362,7 +411,7 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
         signal: AbortSignal.timeout(4500)
       });
       if (hubRes.ok) {
-        const hubData = await hubRes.json();
+        const hubData = await safeParseResponseJson<{ reply?: string }>(hubRes);
         if (hubData && hubData.reply) {
           const actualText = await bibleService.getText(refStr, "KJV").catch(() => `Scripture passage for ${refStr}`);
           const targetBook = parsed ? parsed.book : selectedBook;
@@ -554,6 +603,7 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
       return;
     }
 
+    panelSyncBus.loadPassage(query, undefined, "SDABibleCommentary");
     loadReferenceCommentary(query);
     setSearchQuery("");
   };
@@ -678,160 +728,153 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
     <div className={`w-full h-full flex flex-col font-sans select-text overflow-hidden ${
       theme === "dark" ? "bg-[#0A0E17] text-[#E2E8F0]" : "bg-[#FAF7F2] text-[#1E293B]"
     }`}>
-      {/* 1. TOP HEADER & SEARCH / NAVIGATION BAR */}
-      <div className={`p-3 border-b flex flex-col gap-2 shrink-0 ${
-        theme === "dark" 
-          ? "bg-gradient-to-r from-[#0E1524] via-[#141C30] to-[#0E1524] border-[#1E2B45]" 
-          : "bg-gradient-to-r from-[#FAF5EE] via-[#F4EDE0] to-[#FAF5EE] border-[#E8DFC8]"
-      }`}>
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          {/* Title and Volume Badge */}
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-[#C9973A]/15 text-[#C9973A] border border-[#C9973A]/40 flex items-center justify-center">
-              <BookOpen className="w-5 h-5" />
-            </div>
+      {/* 1. AUTO-RETRACTING TOP HEADER, SEARCH & FILTER AREA (Collapses upon activation like other workspace tools) */}
+      <AutoRetractToolbar
+        theme={theme}
+        collapseTrigger={`${commentaryData?.reference || ""}:${selectedVerse}`}
+        initialDelay={900}
+      >
+        <div className={`p-3 border-b flex flex-col gap-2 shrink-0 ${
+          theme === "dark" 
+            ? "bg-gradient-to-r from-[#0E1524] via-[#141C30] to-[#0E1524] border-[#1E2B45]" 
+            : "bg-gradient-to-r from-[#FAF5EE] via-[#F4EDE0] to-[#FAF5EE] border-[#E8DFC8]"
+        }`}>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            {/* Clean Streamlined Title */}
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-serif font-extrabold uppercase tracking-wide text-[#C9973A]">
-                  SDA Bible Commentary
-                </h2>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold uppercase tracking-wider border ${
-                  theme === "dark" 
-                    ? "bg-[#C9973A]/10 text-amber-300 border-[#C9973A]/30" 
-                    : "bg-amber-100/80 text-amber-900 border-amber-300"
-                }`}>
-                  {commentaryData ? `Vol. ${commentaryData.volumeNumber} • ${commentaryData.pageRange}` : "7 Volumes Available"}
-                </span>
-              </div>
+              <h2 className="text-sm font-serif font-extrabold uppercase tracking-wide text-[#C9973A]">
+                SDA Bible Commentary
+              </h2>
               <p className="text-[11px] opacity-75 font-sans truncate">
-                Full 7-Volume SDABC Exegetical Commentary & Ellen G. White Notes
+                Exegetical Commentary &amp; Ellen G. White Notes
               </p>
             </div>
-          </div>
 
-          {/* Quick Tool Actions (Listen, Copy, Save to Notebook, Font Size) */}
-          <div className="flex items-center gap-1.5">
-            {/* Audio Listen Button */}
-            <button
-              onClick={handleToggleAudio}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer border ${
-                isPlayingAudio 
-                  ? "bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse" 
-                  : theme === "dark"
-                    ? "bg-[#162032] text-stone-300 border-[#2A3B58] hover:text-amber-300 hover:border-[#C9973A]/50"
-                    : "bg-white text-stone-700 border-stone-300 hover:text-amber-800 hover:border-amber-500"
-              }`}
-              title={isPlayingAudio ? "Stop reading commentary aloud" : `Listen to audio narration (Profile Voice: ${profileVoiceName || "Default"})`}
-            >
-              {isPlayingAudio ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-[#C9973A]" />}
-              <span className="hidden sm:inline">{isPlayingAudio ? "Stop Audio" : "Listen"}</span>
-              {profileVoiceName && (
-                <span className={`text-[9.5px] px-1 rounded font-mono hidden md:inline ${
-                  theme === "dark" ? "bg-[#0B101D] text-amber-300/80" : "bg-stone-100 text-stone-600"
-                }`}>
-                  {profileVoiceName.includes("Andrew") ? "Andrew" : profileVoiceName.split(" ")[0]}
-                </span>
-              )}
-            </button>
-
-            {/* Save to Notebook */}
-            <button
-              onClick={handleSaveToNotebook}
-              className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer border ${
-                notebookSavedToast
-                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                  : theme === "dark"
-                    ? "bg-[#162032] text-stone-300 border-[#2A3B58] hover:text-amber-300 hover:border-[#C9973A]/50"
-                    : "bg-white text-stone-700 border-stone-300 hover:text-amber-800 hover:border-amber-500"
-              }`}
-              title="Save excerpt to My Notebook"
-            >
-              {notebookSavedToast ? <Check className="w-4 h-4 text-emerald-400" /> : <FileText className="w-4 h-4 text-[#C9973A]" />}
-            </button>
-
-            {/* Copy Full Commentary */}
-            <button
-              onClick={handleCopyCommentary}
-              className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer border ${
-                copiedToast
-                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                  : theme === "dark"
-                    ? "bg-[#162032] text-stone-300 border-[#2A3B58] hover:text-amber-300 hover:border-[#C9973A]/50"
-                    : "bg-white text-stone-700 border-stone-300 hover:text-amber-800 hover:border-amber-500"
-              }`}
-              title="Copy complete commentary to clipboard"
-            >
-              {copiedToast ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-[#C9973A]" />}
-            </button>
-
-            {/* Font Size Adjusters (16px default, 1px increments) */}
-            <div className={`flex items-center rounded-lg border px-1.5 py-0.5 gap-1 ${
-              theme === "dark" ? "bg-[#162032] border-[#2A3B58]" : "bg-white border-stone-300"
-            }`}>
+            {/* Quick Tool Actions (Listen, Copy, Save to Notebook, Font Size) */}
+            <div className="flex items-center gap-1.5">
+              {/* Audio Listen Button */}
               <button
-                onClick={() => setFontSize(prev => Math.max(12, prev - 1))}
-                className="px-1 py-0.5 text-xs font-bold hover:text-[#C9973A] cursor-pointer transition-colors"
-                title="Decrease font size (-1px)"
-              >
-                A-
-              </button>
-              <span className="text-[10px] font-mono font-bold text-[#C9973A] px-1 select-none">
-                {fontSize}px
-              </span>
-              <button
-                onClick={() => setFontSize(prev => Math.min(26, prev + 1))}
-                className="px-1 py-0.5 text-xs font-bold hover:text-[#C9973A] cursor-pointer transition-colors"
-                title="Increase font size (+1px)"
-              >
-                A+
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Search Jump Input & Quick Presets */}
-        <div className="flex items-center gap-2 pt-0.5">
-          <form onSubmit={handleSearchSubmit} className="flex-1 flex items-center gap-1.5">
-            <div className="relative flex-1">
-              <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Jump to any verse (e.g. Dan 8:14, Rev 14:7, Ex 20:8, Gen 2:1-3, Heb 8:1)..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full pl-8 pr-3 py-1.5 rounded-lg text-xs outline-none transition-all border ${
-                  theme === "dark"
-                    ? "bg-[#0D131F] border-[#24334C] text-stone-100 placeholder-stone-500 focus:border-[#C9973A]"
-                    : "bg-white border-stone-300 text-stone-900 placeholder-stone-400 focus:border-amber-600 shadow-2xs"
+                onClick={handleToggleAudio}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer border ${
+                  isPlayingAudio 
+                    ? "bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse" 
+                    : theme === "dark"
+                      ? "bg-[#162032] text-stone-300 border-[#2A3B58] hover:text-amber-300 hover:border-[#C9973A]/50"
+                      : "bg-white text-stone-700 border-stone-300 hover:text-amber-800 hover:border-amber-500"
                 }`}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={isLoading || !searchQuery.trim()}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#C9973A] hover:bg-[#B3832B] disabled:opacity-50 text-white transition-all cursor-pointer shrink-0 shadow-xs"
-            >
-              {isLoading ? "Loading..." : "Jump"}
-            </button>
-          </form>
+                title={isPlayingAudio ? "Stop reading commentary aloud" : `Listen to audio narration (Profile Voice: ${profileVoiceName || "Default"})`}
+              >
+                {isPlayingAudio ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-[#C9973A]" />}
+                <span className="hidden sm:inline">{isPlayingAudio ? "Stop Audio" : "Listen"}</span>
+                {profileVoiceName && (
+                  <span className={`text-[9.5px] px-1 rounded font-mono hidden md:inline ${
+                    theme === "dark" ? "bg-[#0B101D] text-amber-300/80" : "bg-stone-100 text-stone-600"
+                  }`}>
+                    {profileVoiceName.includes("Andrew") ? "Andrew" : profileVoiceName.split(" ")[0]}
+                  </span>
+                )}
+              </button>
 
-          {/* Sync to Current Study Reference */}
-          {report?.reference && (
-            <button
-              onClick={() => loadReferenceCommentary(report.reference)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 shrink-0 border transition-all cursor-pointer ${
-                theme === "dark"
-                  ? "bg-[#182337] border-[#2E3F5E] text-amber-300 hover:bg-[#1E2E48]"
-                  : "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100"
-              }`}
-              title={`Sync commentary to active study passage: ${report.reference}`}
-            >
-              <RotateCcw className="w-3 h-3 text-[#C9973A]" />
-              <span className="hidden md:inline">Sync Lesson ({report.reference.split(":")[0]})</span>
-            </button>
-          )}
+              {/* Save to Notebook */}
+              <button
+                onClick={handleSaveToNotebook}
+                className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer border ${
+                  notebookSavedToast
+                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                    : theme === "dark"
+                      ? "bg-[#162032] text-stone-300 border-[#2A3B58] hover:text-amber-300 hover:border-[#C9973A]/50"
+                      : "bg-white text-stone-700 border-stone-300 hover:text-amber-800 hover:border-amber-500"
+                }`}
+                title="Save excerpt to My Notebook"
+              >
+                {notebookSavedToast ? <Check className="w-4 h-4 text-emerald-400" /> : <FileText className="w-4 h-4 text-[#C9973A]" />}
+              </button>
+
+              {/* Copy Full Commentary */}
+              <button
+                onClick={handleCopyCommentary}
+                className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer border ${
+                  copiedToast
+                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                    : theme === "dark"
+                      ? "bg-[#162032] text-stone-300 border-[#2A3B58] hover:text-amber-300 hover:border-[#C9973A]/50"
+                      : "bg-white text-stone-700 border-stone-300 hover:text-amber-800 hover:border-amber-500"
+                }`}
+                title="Copy complete commentary to clipboard"
+              >
+                {copiedToast ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-[#C9973A]" />}
+              </button>
+
+              {/* Font Size Adjusters (16px default, 1px increments) */}
+              <div className={`flex items-center rounded-lg border px-1.5 py-0.5 gap-1 ${
+                theme === "dark" ? "bg-[#162032] border-[#2A3B58]" : "bg-white border-stone-300"
+              }`}>
+                <button
+                  onClick={() => setFontSize(prev => Math.max(12, prev - 1))}
+                  className="px-1 py-0.5 text-xs font-bold hover:text-[#C9973A] cursor-pointer transition-colors"
+                  title="Decrease font size (-1px)"
+                >
+                  A-
+                </button>
+                <span className="text-[10px] font-mono font-bold text-[#C9973A] px-1 select-none">
+                  {fontSize}px
+                </span>
+                <button
+                  onClick={() => setFontSize(prev => Math.min(26, prev + 1))}
+                  className="px-1 py-0.5 text-xs font-bold hover:text-[#C9973A] cursor-pointer transition-colors"
+                  title="Increase font size (+1px)"
+                >
+                  A+
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Search Jump Input & Filter Input */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-0.5">
+            <form onSubmit={handleSearchSubmit} className="flex-1 flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Jump to any verse (e.g. Dan 8:14, Rev 14:7, Ex 20:8, Gen 2:1-3, Heb 8:1)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`w-full pl-8 pr-3 py-1.5 rounded-lg text-xs outline-none transition-all border ${
+                    theme === "dark"
+                      ? "bg-[#0D131F] border-[#24334C] text-stone-100 placeholder-stone-500 focus:border-[#C9973A]"
+                      : "bg-white border-stone-300 text-stone-900 placeholder-stone-400 focus:border-amber-600 shadow-2xs"
+                  }`}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isLoading || !searchQuery.trim()}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#C9973A] hover:bg-[#B3832B] disabled:opacity-50 text-white transition-all cursor-pointer shrink-0 shadow-xs"
+              >
+                {isLoading ? "Loading..." : "Jump"}
+              </button>
+            </form>
+
+            {commentaryData && (
+              <div className="relative sm:w-48 md:w-56 shrink-0">
+                <Filter className="w-3 h-3 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Filter commentary notes..."
+                  value={searchTermFilter}
+                  onChange={(e) => setSearchTermFilter(e.target.value)}
+                  className={`w-full pl-7 pr-2.5 py-1.5 rounded-lg text-xs outline-none transition-all border ${
+                    theme === "dark"
+                      ? "bg-[#0D131F] border-[#24334C] text-stone-100 placeholder-stone-500 focus:border-[#C9973A]"
+                      : "bg-white border-stone-300 text-stone-900 placeholder-stone-400 focus:border-amber-600 shadow-2xs"
+                  }`}
+                />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </AutoRetractToolbar>
 
       {/* Toast Alert Banner */}
       {(notebookSavedToast || copiedToast) && (
@@ -857,70 +900,7 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
         </div>
       )}
 
-      {/* 3. 7-VOLUME CANONICAL SELECTOR STRIP WITH HOVER-TRIGGERED ARROWS */}
-      <div className="relative group w-full overflow-hidden shrink-0">
-        {/* Left hover-triggered scroll arrow */}
-        <button
-          type="button"
-          onClick={() => volumesScrollRef.current?.scrollBy({ left: -160, behavior: "smooth" })}
-          className={`absolute left-0.5 top-1/2 -translate-y-1/2 z-20 p-1 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer border ${
-            theme === "dark" 
-              ? "bg-[#101726]/90 text-amber-300 border-[#C9973A]/50 hover:bg-[#C9973A] hover:text-white" 
-              : "bg-white/95 text-stone-800 border-amber-300 hover:bg-[#C9973A] hover:text-white"
-          }`}
-          title="Scroll volumes left"
-          aria-label="Scroll volumes left"
-        >
-          <ChevronLeft className="w-3.5 h-3.5" />
-        </button>
-
-        <div 
-          ref={volumesScrollRef}
-          className={`px-6 py-1.5 border-b flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 select-none scroll-smooth ${
-            theme === "dark" ? "bg-[#0D131F] border-[#1E2B45]" : "bg-[#F3EDE2] border-[#E5DAC6]"
-          }`}
-        >
-          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#C9973A] shrink-0 mr-1 flex items-center gap-1">
-            <Book className="w-3 h-3" /> VOLUMES:
-          </span>
-          {SDABC_VOLUMES.map(vol => {
-            const isCurrent = commentaryData ? commentaryData.volumeNumber === vol.volNumber : activeVolumeTab === vol.volNumber;
-            return (
-              <button
-                key={vol.volNumber}
-                onClick={() => handleVolumeSwitch(vol.volNumber)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-sans font-semibold transition-all shrink-0 cursor-pointer border ${
-                  isCurrent
-                    ? "bg-[#C9973A] text-white border-[#C9973A] shadow-xs"
-                    : theme === "dark"
-                      ? "bg-[#151D2C] border-[#22304A] text-stone-300 hover:text-amber-300 hover:border-[#C9973A]/50"
-                      : "bg-white border-stone-300 text-stone-700 hover:text-amber-900 hover:border-amber-500"
-                }`}
-                title={`${vol.romanNumeral}: ${vol.title} (${vol.scope}) - Click to switch volume instantly`}
-              >
-                {vol.romanNumeral} <span className="opacity-80 text-[10px] hidden sm:inline">({vol.books[0].slice(0, 3)}-{vol.books[vol.books.length - 1].slice(0, 3)})</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Right hover-triggered scroll arrow */}
-        <button
-          type="button"
-          onClick={() => volumesScrollRef.current?.scrollBy({ left: 160, behavior: "smooth" })}
-          className={`absolute right-0.5 top-1/2 -translate-y-1/2 z-20 p-1 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer border ${
-            theme === "dark" 
-              ? "bg-[#101726]/90 text-amber-300 border-[#C9973A]/50 hover:bg-[#C9973A] hover:text-white" 
-              : "bg-white/95 text-stone-800 border-amber-300 hover:bg-[#C9973A] hover:text-white"
-          }`}
-          title="Scroll volumes right"
-          aria-label="Scroll volumes right"
-        >
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {/* 4. SECTION SUB-TABS WITH HOVER-TRIGGERED ARROWS */}
+      {/* SECTION SUB-TABS WITH HOVER-TRIGGERED ARROWS */}
       <div className="relative group w-full overflow-hidden shrink-0">
         {/* Left hover-triggered scroll arrow */}
         <button
@@ -1038,7 +1018,15 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
                   <button
                     key={ref}
                     type="button"
-                    onClick={() => loadReferenceCommentary(ref)}
+                    onClick={() => {
+                      const parsed = parseScriptureLookup(ref);
+                      if (parsed) {
+                        notifyCrossPanelSync(parsed.book, parsed.chapter, parsed.startVerse || 1);
+                      } else {
+                        panelSyncBus.loadPassage(ref, undefined, "SDABibleCommentary");
+                      }
+                      loadReferenceCommentary(ref);
+                    }}
                     className="px-3 py-1.5 rounded-xl text-xs font-mono font-semibold bg-[#101726] border border-[#243552] text-stone-200 hover:text-white hover:border-[#C9973A] transition-all cursor-pointer shadow-xs active:scale-95"
                   >
                     {ref}
@@ -1080,24 +1068,20 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
         {/* SUBTAB 1: VERSE-BY-VERSE EXEGESIS */}
         {activeSubTab === "commentary" && (
           <div className="space-y-3">
-            {/* Search filter within verse notes */}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#C9973A]">
-                {displayedVerses.length} Exegetical Verse Notes
-              </span>
-              <div className="relative w-48 sm:w-64">
-                <Filter className="w-3 h-3 text-stone-400 absolute left-2 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Filter commentary notes..."
-                  value={searchTermFilter}
-                  onChange={(e) => setSearchTermFilter(e.target.value)}
-                  className={`w-full pl-7 pr-2 py-1 rounded text-xs outline-none border ${
-                    theme === "dark" ? "bg-[#0D131F] border-[#24334C]" : "bg-white border-stone-300"
-                  }`}
-                />
+            {searchTermFilter.trim() && (
+              <div className="flex items-center justify-between gap-2 text-xs font-mono">
+                <span className="text-[#C9973A] font-bold uppercase tracking-wider">
+                  Filtered: &ldquo;{searchTermFilter}&rdquo; ({displayedVerses.length} matching)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSearchTermFilter("")}
+                  className="text-[11px] underline text-stone-400 hover:text-[#C9973A] cursor-pointer"
+                >
+                  Clear Filter
+                </button>
               </div>
-            </div>
+            )}
 
             {/* List of verse commentary cards */}
             {displayedVerses.map(v => (
@@ -1390,21 +1374,6 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
       </>
     )}
   </ToolHighlightableWrapper>
-
-      {/* 6. BOTTOM STATUS BAR */}
-      <div className={`p-2.5 px-3 border-t flex items-center justify-between text-xs shrink-0 select-none ${
-        theme === "dark" ? "bg-[#090D15] border-[#182338] text-stone-400" : "bg-[#EDE5D8] border-[#DFD3BF] text-stone-600"
-      }`}>
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="text-[11px] font-mono truncate">
-            SDABC Canonical Library Active • {commentaryData ? commentaryData.reference : "Ready to Search"}
-          </span>
-        </div>
-        <div className="text-[11px] opacity-75 font-mono">
-          Review and Herald Publishing Assoc.
-        </div>
-      </div>
     </div>
   );
 };

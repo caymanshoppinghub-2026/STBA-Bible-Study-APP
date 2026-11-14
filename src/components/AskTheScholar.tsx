@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch } from "../lib/apiFetch";
 import {
   MessageSquare,
   HelpCircle,
@@ -586,7 +587,7 @@ Ask me about:
         text: m.text
       }));
 
-      const res = await fetch("/api/study/ask-scholar", {
+      const res = await apiFetch("/api/study/ask-scholar", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

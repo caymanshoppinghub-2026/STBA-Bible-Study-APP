@@ -13,60 +13,61 @@ import {
   BookOpen,
   Sparkles,
   Quote,
-  Hash,
   List,
   ExternalLink,
-  Minimize2,
-  Maximize2,
-  ChevronDown,
-  ChevronUp,
   FileText,
   Clock,
-  Trash2,
   Tag
 } from "lucide-react";
-import { loadNotes, saveNotes, CATEGORY_META } from "../../data/notebookData";
+import { loadNotes, saveNotes } from "../../data/notebookData";
 import { saveNoteToSupabase } from "../../lib/notebookSync";
 import { StudyNote, NoteCategory } from "../../types/notebook";
 import { useApp } from "../../context/AppContext";
 
 /**
- * Determines whether the current route represents an active study mode or lesson context.
+ * Restricted strictly to the specified study sections:
+ * STBA Study Workspace, Sabbath School, 28 Fundamental Beliefs (Doctrine),
+ * Study Tracks, Active Recall Studio, Teach It Studio, and Memory Vault.
  */
 export function isStudyModeRoute(pathname: string): boolean {
   return (
-    pathname === "/" ||
-    pathname.startsWith("/dashboard") ||
     pathname.startsWith("/stba") ||
+    pathname.startsWith("/sabbath-school") ||
+    pathname.startsWith("/doctrine") ||
+    pathname.startsWith("/tracks") ||
     pathname.startsWith("/recall") ||
     pathname.startsWith("/teach") ||
-    pathname.startsWith("/tracks") ||
-    pathname.startsWith("/doctrine") ||
-    pathname.startsWith("/sabbath-school") ||
     pathname.startsWith("/vault")
   );
 }
 
 /**
- * Derives a human-readable title and default tags for the current study mode context.
+ * Derives a human-readable title and default tags for the current study section context.
  */
 function resolveCurrentContext(pathname: string): {
   contextName: string;
   category: Exclude<NoteCategory, "all">;
   suggestedTag: string;
 } {
-  if (pathname === "/" || pathname.startsWith("/dashboard")) {
-    return {
-      contextName: "Bible Study Overview",
-      category: "theology",
-      suggestedTag: "BibleStudy"
-    };
-  }
   if (pathname.startsWith("/stba")) {
     return {
-      contextName: "STBA Scripture Mastery",
+      contextName: "STBA Scripture Mastery & Daily Syllabus",
       category: "theology",
       suggestedTag: "STBA-Exegesis"
+    };
+  }
+  if (pathname.startsWith("/sabbath-school")) {
+    return {
+      contextName: "Sabbath School Daily Lesson",
+      category: "theology",
+      suggestedTag: "SabbathSchool"
+    };
+  }
+  if (pathname.startsWith("/doctrine")) {
+    return {
+      contextName: "28 Fundamental Beliefs",
+      category: "theology",
+      suggestedTag: "FundamentalBeliefs"
     };
   }
   if (pathname.startsWith("/recall")) {
@@ -83,20 +84,6 @@ function resolveCurrentContext(pathname: string): {
       suggestedTag: "Discipleship-Outline"
     };
   }
-  if (pathname.startsWith("/sabbath-school")) {
-    return {
-      contextName: "Sabbath School Lesson",
-      category: "theology",
-      suggestedTag: "SabbathSchool"
-    };
-  }
-  if (pathname.startsWith("/doctrine")) {
-    return {
-      contextName: "28 Fundamental Beliefs",
-      category: "theology",
-      suggestedTag: "FundamentalBeliefs"
-    };
-  }
   if (pathname.startsWith("/vault")) {
     return {
       contextName: "Memory Vault",
@@ -105,7 +92,6 @@ function resolveCurrentContext(pathname: string): {
     };
   }
   if (pathname.startsWith("/tracks")) {
-    // Check if lesson detail
     const matches = pathname.match(/\/tracks\/([^/]+)(?:\/lessons\/([^/]+))?/);
     if (matches && matches[2]) {
       return {
@@ -121,7 +107,7 @@ function resolveCurrentContext(pathname: string): {
     };
   }
   return {
-    contextName: "Study Lesson",
+    contextName: "Scripture Study Section",
     category: "theology",
     suggestedTag: "ScriptureStudy"
   };
@@ -134,9 +120,8 @@ export const FloatingQuickNote: React.FC = () => {
 
   const isStudy = isStudyModeRoute(pathname);
 
-  // Floating Window States
+  // Slide-Out Discipleship Vault Side Panel States
   const [isOpen, setIsOpen] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
   const [activeTab, setActiveTab] = useState<"write" | "recent">("write");
 
   // Form Fields
@@ -155,6 +140,30 @@ export const FloatingQuickNote: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const context = resolveCurrentContext(pathname);
 
+  // Listen for global 'open-discipleship-vault' custom events from Daily Syllabus & Study sections
+  useEffect(() => {
+    const handleOpenVaultEvent = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      setIsOpen(true);
+      setActiveTab("write");
+      if (detail?.title) {
+        setNoteTitle(detail.title);
+      }
+      if (detail?.category) {
+        setSelectedCategory(detail.category);
+      }
+      if (Array.isArray(detail?.tags) && detail.tags.length > 0) {
+        setScriptureTags(detail.tags);
+      }
+      if (detail?.content) {
+        setNoteContent((prev) => (prev ? `${prev}\n\n${detail.content}` : detail.content));
+      }
+    };
+
+    window.addEventListener("open-discipleship-vault", handleOpenVaultEvent);
+    return () => window.removeEventListener("open-discipleship-vault", handleOpenVaultEvent);
+  }, []);
+
   // Sync category and tag default when switching paths or opening
   useEffect(() => {
     if (isOpen) {
@@ -164,7 +173,6 @@ export const FloatingQuickNote: React.FC = () => {
       if (scriptureTags.length === 0 && context.suggestedTag) {
         setScriptureTags([context.suggestedTag]);
       }
-      // Attempt to inspect selected text on page
       try {
         const sel = window.getSelection()?.toString().trim();
         if (sel && sel.length > 3 && sel.length < 300) {
@@ -178,36 +186,33 @@ export const FloatingQuickNote: React.FC = () => {
     }
   }, [isOpen, pathname]);
 
-  // Global Keyboard Shortcut: Alt + N toggles the quick note window
+  // Global Keyboard Shortcut: Alt + N toggles the slide-out Discipleship Vault side panel
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isStudy) return;
 
-      // Alt+N (or Option+N on Mac)
       if (e.altKey && (e.key === "n" || e.key === "N")) {
         e.preventDefault();
         setIsOpen((prev) => !prev);
-        setIsMinimized(false);
-      } else if (e.key === "Escape" && isOpen && !isMinimized) {
+      } else if (e.key === "Escape" && isOpen) {
         setIsOpen(false);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isStudy, isOpen, isMinimized]);
+  }, [isStudy, isOpen]);
 
   // Focus textarea when opened
   useEffect(() => {
-    if (isOpen && !isMinimized && activeTab === "write") {
+    if (isOpen && activeTab === "write") {
       const t = setTimeout(() => {
         textareaRef.current?.focus();
       }, 150);
       return () => clearTimeout(t);
     }
-  }, [isOpen, isMinimized, activeTab]);
+  }, [isOpen, activeTab]);
 
-  // Add Tag
   const handleAddTag = () => {
     const trimmed = tagInput.trim().replace(/^#/, "");
     if (trimmed && !scriptureTags.includes(trimmed)) {
@@ -216,12 +221,10 @@ export const FloatingQuickNote: React.FC = () => {
     }
   };
 
-  // Remove Tag
   const handleRemoveTag = (tag: string) => {
     setScriptureTags(scriptureTags.filter((t) => t !== tag));
   };
 
-  // Insert Selected Quote
   const handleInsertQuote = () => {
     if (!selectedQuoteText) return;
     const formatted = `\n> "${selectedQuoteText}"\n\n`;
@@ -230,7 +233,6 @@ export const FloatingQuickNote: React.FC = () => {
     textareaRef.current?.focus();
   };
 
-  // Quick Markdown Helper: insert bullet list, quote, or bold
   const handleInsertSnippet = (type: "bullet" | "quote" | "scripture") => {
     let snippet = "";
     if (type === "bullet") snippet = "\n- ";
@@ -241,7 +243,6 @@ export const FloatingQuickNote: React.FC = () => {
     textareaRef.current?.focus();
   };
 
-  // Save Note to Notebook
   const handleSaveNote = async () => {
     if (!noteContent.trim() && !noteTitle.trim()) return;
 
@@ -257,9 +258,8 @@ export const FloatingQuickNote: React.FC = () => {
 
       const title =
         noteTitle.trim() ||
-        `Insight: ${context.contextName} (${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`;
+        `Discipleship Vault: ${context.contextName} (${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`;
 
-      // Create structured Markdown content
       let fullContent = `# ${title}\n\n`;
       fullContent += `*Context: ${context.contextName} • Recorded on ${new Date().toLocaleDateString()}*\n\n`;
       fullContent += noteContent.trim();
@@ -278,27 +278,21 @@ export const FloatingQuickNote: React.FC = () => {
         order: -1
       };
 
-      // 1. Save to local storage
       const existingNotes = loadNotes();
       const updatedNotes = [newNote, ...existingNotes];
       saveNotes(updatedNotes);
 
-      // 2. Sync to backend & Supabase
       saveNoteToSupabase(newNote).catch((e) => {
         console.warn("Background cloud note sync warning:", e);
       });
 
-      // 3. Dispatch global event so open notebook tabs can update
       window.dispatchEvent(
         new CustomEvent("stba-note-created", {
           detail: newNote
         })
       );
 
-      // 4. Update session memory
       setRecentSessionNotes((prev) => [newNote, ...prev]);
-
-      // 5. Success state
       setSaveSuccess(true);
       showConfetti("notebook");
 
@@ -309,424 +303,491 @@ export const FloatingQuickNote: React.FC = () => {
         setScriptureTags([context.suggestedTag]);
       }, 1800);
     } catch (err) {
-      console.error("Failed to save quick note:", err);
+      console.error("Failed to save Discipleship Vault note:", err);
     } finally {
       setIsSaving(false);
     }
   };
 
-  // If not on study mode, do not render
+  // Vertical sliding state for the Discipleship Vault trigger tab
+  const [triggerTopPct, setTriggerTopPct] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("stba_quick_note_top_pct");
+      if (saved !== null) {
+        const parsed = parseFloat(saved);
+        if (!Number.isNaN(parsed) && parsed >= 10 && parsed <= 90) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return 50;
+  });
+
+  const dragStateRef = useRef<{
+    isDragging: boolean;
+    startY: number;
+    startTopPct: number;
+    moved: boolean;
+  }>({
+    isDragging: false,
+    startY: 0,
+    startTopPct: 50,
+    moved: false
+  });
+
+  const handlePointerDownTrigger = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragStateRef.current = {
+      isDragging: true,
+      startY: e.clientY,
+      startTopPct: triggerTopPct,
+      moved: false
+    };
+  };
+
+  const handlePointerMoveTrigger = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!dragStateRef.current.isDragging) return;
+    const dy = e.clientY - dragStateRef.current.startY;
+    if (Math.abs(dy) > 5) {
+      dragStateRef.current.moved = true;
+    }
+    if (dragStateRef.current.moved && typeof window !== "undefined") {
+      const vh = Math.max(window.innerHeight, 300);
+      const deltaPct = (dy / vh) * 100;
+      const clampedPct = Math.min(90, Math.max(10, dragStateRef.current.startTopPct + deltaPct));
+      setTriggerTopPct(clampedPct);
+    }
+  };
+
+  const handlePointerUpTrigger = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!dragStateRef.current.isDragging) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+    const wasMoved = dragStateRef.current.moved;
+    dragStateRef.current.isDragging = false;
+    if (wasMoved) {
+      try {
+        localStorage.setItem("stba_quick_note_top_pct", String(triggerTopPct));
+      } catch {}
+    } else {
+      setIsOpen(true);
+    }
+  };
+
+  // Restricted strictly to the specified study sections
   if (!isStudy) return null;
 
   return (
     <>
-      {/* FLOATING ACTION BUTTON (TRIGGER) - Tucked at mid-screen with smooth hover slide-out and occasional nudge */}
+      {/* RIGHT-EDGE SLIDE-OUT TRIGGER TAB (Restricted to specified study sections) */}
       {!isOpen && (
         <div
           id="floating-quick-note-trigger-wrapper"
-          className="fixed top-1/2 -translate-y-1/2 right-0 z-40 select-none group"
+          style={{ top: `${triggerTopPct}%`, fontFamily: "'Lato', sans-serif" }}
+          className="fixed -translate-y-1/2 right-0 z-40 select-none touch-none font-['Lato',sans-serif] not-italic"
         >
-          {/* Nudge animation wrapper: subtle occasional peek every 5.5s, pauses on hover */}
-          <div className="animate-quick-note-nudge group-hover:animate-none">
-            <button
-              id="floating-quick-note-trigger"
-              onClick={() => {
+          <button
+            id="floating-quick-note-trigger"
+            type="button"
+            onPointerDown={handlePointerDownTrigger}
+            onPointerMove={handlePointerMoveTrigger}
+            onPointerUp={handlePointerUpTrigger}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
                 setIsOpen(true);
-                setIsMinimized(false);
-              }}
-              className="flex items-center gap-2.5 pl-3.5 pr-4 py-2.5 sm:py-3 rounded-l-full rounded-r-none bg-gradient-to-r from-[#C5A059] via-[#D4AF37] to-[#B38A38] text-stone-950 font-sans font-bold text-xs sm:text-sm shadow-xl shadow-black/50 hover:shadow-[#C5A059]/40 border border-r-0 border-[#FFE7A3]/70 cursor-pointer whitespace-nowrap transform translate-x-[calc(100%-42px)] group-hover:translate-x-0 focus:translate-x-0 focus-visible:translate-x-0 transition-transform duration-300 ease-out will-change-transform"
-              title="Quick Note: Jot down lesson insights immediately (Alt+N)"
-              aria-label="Open Quick Note window"
-            >
-              <div className="w-5 h-5 flex items-center justify-center shrink-0">
-                <PenLine className="w-4 h-4 text-stone-950 stroke-[2.2] group-hover:rotate-12 transition-transform duration-200" />
-              </div>
-              <span className="tracking-wide">Quick Note</span>
+              }
+            }}
+            style={{ fontFamily: "'Lato', sans-serif" }}
+            className="flex items-center gap-2 pl-3.5 pr-3 py-3 rounded-l-2xl rounded-r-none bg-[#0B111E] hover:bg-[#131D31] text-[#F3CF65] font-['Lato',sans-serif] font-bold not-italic text-xs shadow-2xl border border-r-0 border-[#C9973A]/60 cursor-grab active:cursor-grabbing whitespace-nowrap touch-none"
+            title="Open slide-out Discipleship Vault side panel • Drag vertically to reposition (Alt+N)"
+            aria-label="Open Discipleship Vault side panel"
+          >
+            <div className="w-5 h-5 flex items-center justify-center shrink-0 relative">
+              <PenLine className="w-4 h-4 text-[#C9973A] stroke-[2.2]" />
               {recentSessionNotes.length > 0 && (
-                <span className="w-5 h-5 rounded-full bg-stone-950 text-[#C5A059] text-[10px] font-mono flex items-center justify-center font-bold shrink-0">
+                <span className="absolute -top-2 -left-2 w-4 h-4 rounded-full bg-[#C9973A] text-stone-950 text-[9px] font-bold flex items-center justify-center">
                   {recentSessionNotes.length}
                 </span>
               )}
-              <span className="hidden lg:inline text-[9px] font-mono px-1.5 py-0.5 rounded bg-stone-950/15 text-stone-900 font-semibold tracking-wider shrink-0">
-                Alt+N
-              </span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MINIMIZED FLOATING PILL */}
-      {isOpen && isMinimized && (
-        <div
-          id="floating-quick-note-minimized"
-          className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-40 select-none animate-in fade-in slide-in-from-bottom-2 duration-200"
-        >
-          <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-[#0c182b] border border-[#C5A059]/50 shadow-2xl text-stone-200 text-xs">
-            <span className="w-2 h-2 rounded-full bg-[#C5A059] animate-pulse" />
-            <span className="font-semibold text-[11px] text-[#C5A059] font-sans">
-              Quick Note: {noteTitle || context.contextName}
+            </div>
+            <span className="hidden sm:inline text-xs font-bold tracking-wide">
+              Discipleship Vault
             </span>
-            <button
-              onClick={() => setIsMinimized(false)}
-              className="p-1 hover:bg-white/10 rounded-full text-stone-300 hover:text-white transition-colors cursor-pointer"
-              title="Expand note"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-1 hover:bg-red-500/20 rounded-full text-stone-400 hover:text-red-400 transition-colors cursor-pointer"
-              title="Close note"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          </button>
         </div>
       )}
 
-      {/* EXPANDED FLOATING QUICK NOTE WINDOW */}
+      {/* SLIDE-OUT DARK-THEMED 'DISCIPLESHIP VAULT' SIDE PANEL */}
       <AnimatePresence>
-        {isOpen && !isMinimized && (
-          <motion.div
-            id="floating-quick-note-window"
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-50 w-[420px] max-w-[calc(100vw-32px)] max-h-[85vh] flex flex-col rounded-2xl bg-[#0c192d]/98 border border-[#C5A059]/40 shadow-2xl shadow-black/90 backdrop-blur-2xl text-stone-100 overflow-hidden font-sans"
+        {isOpen && (
+          <div
+            id="discipleship-vault-side-panel-overlay"
+            style={{ fontFamily: "'Lato', sans-serif" }}
+            className="fixed inset-0 z-50 overflow-hidden flex justify-end font-['Lato',sans-serif] not-italic"
           >
-            {/* WINDOW HEADER */}
-            <div className="px-4 py-3 bg-[#11223b] border-b border-[#C5A059]/25 flex items-center justify-between gap-3 shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="p-1.5 rounded-lg bg-[#C5A059]/15 text-[#C5A059] border border-[#C5A059]/30">
-                  <PenLine className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
-                      Quick Scripture Insight
-                    </h3>
-                  </div>
-                  <p className="text-[10px] text-[#C5A059] font-mono truncate flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 shrink-0" />
-                    <span>In: {context.contextName}</span>
-                  </p>
-                </div>
-              </div>
+            {/* Dark Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.6 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsOpen(false)}
+              className="absolute inset-0 bg-black/75 backdrop-blur-xs"
+            />
 
-              {/* Window Controls */}
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsMinimized(true)}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                  title="Minimize window"
-                  aria-label="Minimize"
-                >
-                  <Minimize2 className="w-3.5 h-3.5" />
-                </button>
+            {/* Slide-Out Dark Side Panel */}
+            <motion.aside
+              id="discipleship-vault-side-panel"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 26, stiffness: 230 }}
+              style={{ fontFamily: "'Lato', sans-serif" }}
+              className="relative w-full max-w-xl h-full bg-[#0B111E] border-l border-[#C9973A]/40 shadow-2xl flex flex-col justify-between text-stone-100 font-['Lato',sans-serif] not-italic z-10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* PANEL HEADER */}
+              <div className="p-5 bg-[#0F172A] border-b border-[#C9973A]/30 flex items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-3 min-w-0 text-left">
+                  <div className="p-2.5 rounded-xl bg-[#C9973A]/15 text-[#F3CF65] border border-[#C9973A]/40 shrink-0">
+                    <PenLine className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3
+                      style={{ fontFamily: "'Lato', sans-serif" }}
+                      className="text-base font-bold text-white not-italic tracking-wide truncate"
+                    >
+                      Discipleship Vault • Sacred Outline Mapper
+                    </h3>
+                    <p
+                      style={{ fontFamily: "'Lato', sans-serif" }}
+                      className="text-xs text-[#C9973A] not-italic truncate flex items-center gap-1.5 mt-0.5"
+                    >
+                      <Sparkles className="w-3 h-3 shrink-0" />
+                      <span>Active Section: {context.contextName}</span>
+                    </p>
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-red-500/20 transition-colors cursor-pointer"
-                  title="Close window (Esc)"
-                  aria-label="Close"
+                  className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-white/10 border border-stone-800 transition-colors cursor-pointer"
+                  title="Close Discipleship Vault (Esc)"
+                  aria-label="Close Discipleship Vault"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-            </div>
 
-            {/* TAB SELECTOR: WRITE VS RECENT */}
-            <div className="flex border-b border-stone-800 bg-[#0c182b] px-4 pt-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => setActiveTab("write")}
-                className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === "write"
-                    ? "border-[#C5A059] text-[#C5A059]"
-                    : "border-transparent text-stone-400 hover:text-stone-200"
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>New Insight</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("recent")}
-                className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === "recent"
-                    ? "border-[#C5A059] text-[#C5A059]"
-                    : "border-transparent text-stone-400 hover:text-stone-200"
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5" />
-                <span>Session Notes ({recentSessionNotes.length})</span>
-              </button>
-            </div>
+              {/* TAB SELECTOR: WRITE VS RECENT */}
+              <div className="flex border-b border-stone-800 bg-[#0D1526] px-5 pt-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("write")}
+                  style={{ fontFamily: "'Lato', sans-serif" }}
+                  className={`pb-2.5 px-3.5 text-xs font-bold not-italic border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === "write"
+                      ? "border-[#C9973A] text-[#F3CF65]"
+                      : "border-transparent text-stone-400 hover:text-stone-200"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Record Study Note</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("recent")}
+                  style={{ fontFamily: "'Lato', sans-serif" }}
+                  className={`pb-2.5 px-3.5 text-xs font-bold not-italic border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === "recent"
+                      ? "border-[#C9973A] text-[#F3CF65]"
+                      : "border-transparent text-stone-400 hover:text-stone-200"
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Vault Session Notes ({recentSessionNotes.length})</span>
+                </button>
+              </div>
 
-            {/* TAB 1: WRITE NEW NOTE */}
-            {activeTab === "write" && (
-              <div className="flex-1 overflow-y-auto p-4 space-y-3.5 min-h-0 text-left">
-                {/* Note Title */}
-                <div>
-                  <label className="block text-[10px] font-mono uppercase tracking-wider text-stone-400 mb-1">
-                    Note Title (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={noteTitle}
-                    onChange={(e) => setNoteTitle(e.target.value)}
-                    placeholder={`e.g., Insight on ${context.contextName}`}
-                    className="w-full bg-[#142338] border border-stone-700 focus:border-[#C5A059] text-stone-100 text-xs px-3 py-2 rounded-lg outline-none placeholder:text-stone-500 font-sans"
-                  />
-                </div>
-
-                {/* Category Pills */}
-                <div>
-                  <label className="block text-[10px] font-mono uppercase tracking-wider text-stone-400 mb-1.5">
-                    Category Subject
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(
-                      [
-                        { id: "theology", label: "Theology" },
-                        { id: "biblical-studies", label: "Biblical Studies" },
-                        { id: "personal-growth", label: "Personal Growth" },
-                        { id: "history", label: "History" }
-                      ] as const
-                    ).map((cat) => {
-                      const isSelected = selectedCategory === cat.id;
-                      return (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => setSelectedCategory(cat.id)}
-                          className={`text-[10px] px-2.5 py-1 rounded-md font-sans transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-[#C5A059] text-stone-950 font-bold shadow"
-                              : "bg-[#142338] text-stone-300 border border-stone-700 hover:border-stone-500"
-                          }`}
-                        >
-                          {cat.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Selected Quote Banner Helper */}
-                {selectedQuoteText && (
-                  <div className="p-2.5 rounded-lg bg-[#C5A059]/10 border border-[#C5A059]/30 text-stone-200 text-xs flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <span className="text-[10px] font-mono uppercase font-bold text-[#C5A059] block">
-                        Selected Text Detected:
-                      </span>
-                      <p className="text-[11px] text-stone-300 line-clamp-2 italic mt-0.5">
-                        &ldquo;{selectedQuoteText}&rdquo;
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleInsertQuote}
-                      className="px-2 py-1 bg-[#C5A059] hover:bg-[#d8a544] text-stone-950 text-[10px] font-bold rounded shrink-0 transition-colors cursor-pointer"
+              {/* TAB 1: WRITE NEW VAULT NOTE */}
+              {activeTab === "write" && (
+                <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0 text-left">
+                  {/* Note Title */}
+                  <div>
+                    <label
+                      style={{ fontFamily: "'Lato', sans-serif" }}
+                      className="block text-xs font-bold uppercase tracking-wider text-stone-300 not-italic mb-1.5"
                     >
-                      + Quote
-                    </button>
-                  </div>
-                )}
-
-                {/* Content Textarea */}
-                <div className="relative">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] font-mono uppercase tracking-wider text-stone-400">
-                      Scripture Insight / Reflection
+                      Note Title & Sacred Pillar
                     </label>
-                    {/* Quick Formatting Tools */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleInsertSnippet("bullet")}
-                        className="px-1.5 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 text-[10px] flex items-center gap-1 cursor-pointer"
-                        title="Add bullet item"
-                      >
-                        <List className="w-3 h-3" /> List
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleInsertSnippet("quote")}
-                        className="px-1.5 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 text-[10px] flex items-center gap-1 cursor-pointer"
-                        title="Add quotation block"
-                      >
-                        <Quote className="w-3 h-3" /> Quote
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleInsertSnippet("scripture")}
-                        className="px-1.5 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 text-[10px] flex items-center gap-1 cursor-pointer"
-                        title="Add scripture note marker"
-                      >
-                        <BookOpen className="w-3 h-3" /> Scripture
-                      </button>
-                    </div>
-                  </div>
-
-                  <textarea
-                    ref={textareaRef}
-                    value={noteContent}
-                    onChange={(e) => setNoteContent(e.target.value)}
-                    onKeyDown={(e) => {
-                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                        e.preventDefault();
-                        handleSaveNote();
-                      }
-                    }}
-                    placeholder="Jot down biblical insights, cross-references, doctrinal ties, or personal applications..."
-                    className="w-full h-36 bg-[#142338] border border-stone-700 focus:border-[#C5A059] text-stone-100 text-xs p-3 rounded-lg outline-none placeholder:text-stone-500 font-sans leading-relaxed resize-none"
-                  />
-                  <div className="text-[9px] text-stone-500 font-mono text-right mt-0.5">
-                    Press <kbd className="px-1 py-0.5 bg-stone-800 rounded text-stone-300">Ctrl+Enter</kbd> to save
-                  </div>
-                </div>
-
-                {/* Tags & Scripture References */}
-                <div>
-                  <label className="block text-[10px] font-mono uppercase tracking-wider text-stone-400 mb-1">
-                    Tags & Scriptures
-                  </label>
-                  <div className="flex items-center gap-1.5 mb-2">
                     <input
                       type="text"
-                      value={tagInput}
-                      onChange={(e) => setTagInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddTag();
-                        }
-                      }}
-                      placeholder="Add tag (e.g. Dan 8:14, Sanctuary) + Enter"
-                      className="flex-1 bg-[#142338] border border-stone-700 focus:border-[#C5A059] text-stone-100 text-xs px-2.5 py-1.5 rounded-lg outline-none placeholder:text-stone-500 font-sans"
+                      value={noteTitle}
+                      onChange={(e) => setNoteTitle(e.target.value)}
+                      placeholder={`e.g., Insight on ${context.contextName}`}
+                      style={{ fontFamily: "'Lato', sans-serif" }}
+                      className="w-full bg-[#141E33] border border-[#2E3E5C] focus:border-[#C9973A] text-white text-sm px-3.5 py-2.5 rounded-xl outline-none placeholder:text-stone-500 not-italic"
                     />
-                    <button
-                      type="button"
-                      onClick={handleAddTag}
-                      className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                    >
-                      + Add
-                    </button>
                   </div>
 
-                  {/* Render Tags */}
-                  {scriptureTags.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {scriptureTags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#C5A059]/15 border border-[#C5A059]/30 text-[#C5A059] text-[10px] font-mono"
-                        >
-                          <Tag className="w-2.5 h-2.5" />
-                          <span>{tag}</span>
+                  {/* Category Pills */}
+                  <div>
+                    <label
+                      style={{ fontFamily: "'Lato', sans-serif" }}
+                      className="block text-xs font-bold uppercase tracking-wider text-stone-300 not-italic mb-1.5"
+                    >
+                      Theological Category
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {(
+                        [
+                          { id: "theology", label: "Theology & Doctrine" },
+                          { id: "biblical-studies", label: "Biblical Studies" },
+                          { id: "personal-growth", label: "Personal Growth" },
+                          { id: "history", label: "Prophetic History" }
+                        ] as const
+                      ).map((cat) => {
+                        const isSelected = selectedCategory === cat.id;
+                        return (
                           <button
+                            key={cat.id}
                             type="button"
-                            onClick={() => handleRemoveTag(tag)}
-                            className="hover:text-red-400 focus:outline-none"
+                            onClick={() => setSelectedCategory(cat.id)}
+                            style={{ fontFamily: "'Lato', sans-serif" }}
+                            className={`text-xs px-3 py-1.5 rounded-lg not-italic transition-all cursor-pointer ${
+                              isSelected
+                                ? "bg-[#C9973A] text-stone-950 font-bold shadow"
+                                : "bg-[#141E33] text-stone-300 border border-[#2E3E5C] hover:border-[#C9973A]/50"
+                            }`}
                           >
-                            ×
+                            {cat.label}
                           </button>
-                        </span>
-                      ))}
+                        );
+                      })}
                     </div>
+                  </div>
+
+                  {/* Selected Quote Banner Helper */}
+                  {selectedQuoteText && (
+                    <div className="p-3 rounded-xl bg-[#C9973A]/10 border border-[#C9973A]/35 text-stone-200 text-xs flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-[11px] uppercase font-bold text-[#F3CF65] block not-italic">
+                          Selected Scripture / Lesson Text Detected:
+                        </span>
+                        <p className="text-xs text-stone-300 line-clamp-2 not-italic mt-1">
+                          &ldquo;{selectedQuoteText}&rdquo;
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleInsertQuote}
+                        className="px-2.5 py-1.5 bg-[#C9973A] hover:bg-[#d8a544] text-stone-950 text-xs font-bold rounded-lg shrink-0 transition-colors cursor-pointer"
+                      >
+                        + Insert Quote
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Content Textarea */}
+                  <div className="relative flex-1 flex flex-col">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label
+                        style={{ fontFamily: "'Lato', sans-serif" }}
+                        className="text-xs font-bold uppercase tracking-wider text-stone-300 not-italic"
+                      >
+                        Scripture Insight / Exegesis Outline
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleInsertSnippet("bullet")}
+                          className="px-2 py-1 rounded-lg bg-[#141E33] hover:bg-[#1C2A46] border border-[#2E3E5C] text-stone-200 text-xs flex items-center gap-1 cursor-pointer"
+                          title="Add bullet item"
+                        >
+                          <List className="w-3 h-3 text-[#C9973A]" /> List
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleInsertSnippet("quote")}
+                          className="px-2 py-1 rounded-lg bg-[#141E33] hover:bg-[#1C2A46] border border-[#2E3E5C] text-stone-200 text-xs flex items-center gap-1 cursor-pointer"
+                          title="Add quotation block"
+                        >
+                          <Quote className="w-3 h-3 text-[#C9973A]" /> Quote
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleInsertSnippet("scripture")}
+                          className="px-2 py-1 rounded-lg bg-[#141E33] hover:bg-[#1C2A46] border border-[#2E3E5C] text-stone-200 text-xs flex items-center gap-1 cursor-pointer"
+                          title="Add scripture note marker"
+                        >
+                          <BookOpen className="w-3 h-3 text-[#C9973A]" /> Scripture
+                        </button>
+                      </div>
+                    </div>
+
+                    <textarea
+                      ref={textareaRef}
+                      value={noteContent}
+                      onChange={(e) => setNoteContent(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                          e.preventDefault();
+                          handleSaveNote();
+                        }
+                      }}
+                      placeholder="Record your biblical insights, cross-references, doctrinal ties, and personal applications in the Discipleship Vault..."
+                      style={{ fontFamily: "'Lato', sans-serif" }}
+                      className="w-full min-h-[240px] bg-[#141E33] border border-[#2E3E5C] focus:border-[#C9973A] text-white text-sm p-4 rounded-xl outline-none placeholder:text-stone-500 not-italic leading-relaxed resize-none"
+                    />
+                    <div className="text-[11px] text-stone-400 text-right mt-1 not-italic">
+                      Press <kbd className="px-1.5 py-0.5 bg-stone-800 rounded text-stone-200">Ctrl+Enter</kbd> to save to Vault
+                    </div>
+                  </div>
+
+                  {/* Tags & Scripture References */}
+                  <div>
+                    <label
+                      style={{ fontFamily: "'Lato', sans-serif" }}
+                      className="block text-xs font-bold uppercase tracking-wider text-stone-300 not-italic mb-1.5"
+                    >
+                      Scriptural Foundation Tags
+                    </label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddTag();
+                          }
+                        }}
+                        placeholder="Add tag (e.g. Dan 8:14, Sanctuary) + Enter"
+                        style={{ fontFamily: "'Lato', sans-serif" }}
+                        className="flex-1 bg-[#141E33] border border-[#2E3E5C] focus:border-[#C9973A] text-white text-xs px-3 py-2 rounded-xl outline-none placeholder:text-stone-500 not-italic"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddTag}
+                        className="px-3 py-2 bg-[#141E33] hover:bg-[#1C2A46] border border-[#2E3E5C] text-stone-200 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                      >
+                        + Add Tag
+                      </button>
+                    </div>
+
+                    {scriptureTags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {scriptureTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#C9973A]/15 border border-[#C9973A]/35 text-[#F3CF65] text-xs font-bold not-italic"
+                          >
+                            <Tag className="w-3 h-3" />
+                            <span>{tag}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTag(tag)}
+                              className="hover:text-red-400 focus:outline-none ml-0.5 cursor-pointer"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: RECENT SESSION NOTES */}
+              {activeTab === "recent" && (
+                <div className="flex-1 overflow-y-auto p-5 space-y-3 min-h-0 text-left">
+                  {recentSessionNotes.length === 0 ? (
+                    <div className="py-12 text-center text-stone-400 space-y-2">
+                      <FileText className="w-10 h-10 mx-auto text-stone-600 opacity-60" />
+                      <p className="text-sm not-italic">No notes recorded yet during this study session.</p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("write")}
+                        className="text-xs text-[#F3CF65] hover:underline font-bold cursor-pointer"
+                      >
+                        Record your first Discipleship Vault note →
+                      </button>
+                    </div>
+                  ) : (
+                    recentSessionNotes.map((note) => (
+                      <div
+                        key={note.id}
+                        className="p-4 rounded-xl bg-[#141E33] border border-[#2E3E5C] hover:border-[#C9973A]/50 transition-colors space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="text-sm font-bold text-white leading-snug truncate not-italic">
+                            {note.title}
+                          </h4>
+                          <span className="text-xs text-stone-400 shrink-0 not-italic">
+                            {new Date(note.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        <p className="text-xs text-stone-300 line-clamp-3 leading-relaxed whitespace-pre-wrap not-italic">
+                          {note.summary || note.content}
+                        </p>
+                        {note.scriptureTags.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {note.scriptureTags.map((t) => (
+                              <span
+                                key={t}
+                                className="text-[11px] font-bold text-[#F3CF65] bg-[#C9973A]/15 px-2 py-0.5 rounded not-italic"
+                              >
+                                #{t}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* FOOTER ACTIONS */}
+              <div className="p-4 bg-[#0F172A] border-t border-[#C9973A]/30 flex items-center justify-between gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    navigate("/notebook");
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-[#141E33] hover:bg-[#1C2A46] border border-[#2E3E5C] text-xs font-bold text-stone-200 hover:text-[#F3CF65] flex items-center gap-1.5 transition-colors cursor-pointer not-italic"
+                  title="Open Full Discipleship Vault"
+                >
+                  <span>Open Full Vault</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+
+                <div className="flex items-center gap-2">
+                  {saveSuccess ? (
+                    <div className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold animate-in fade-in not-italic">
+                      <Check className="w-4 h-4" />
+                      <span>Saved to Discipleship Vault!</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isSaving || (!noteContent.trim() && !noteTitle.trim())}
+                      onClick={handleSaveNote}
+                      className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#C9973A] hover:bg-[#D9A74A] text-stone-950 font-bold text-xs shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer not-italic"
+                    >
+                      <PenLine className="w-3.5 h-3.5" />
+                      <span>{isSaving ? "Synchronizing to Vault..." : "Save to Discipleship Vault"}</span>
+                    </button>
                   )}
                 </div>
               </div>
-            )}
-
-            {/* TAB 2: RECENT SESSION NOTES */}
-            {activeTab === "recent" && (
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 text-left">
-                {recentSessionNotes.length === 0 ? (
-                  <div className="py-8 text-center text-stone-400 space-y-2">
-                    <FileText className="w-8 h-8 mx-auto text-stone-600 opacity-60" />
-                    <p className="text-xs">No insights jotted down yet during this study session.</p>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("write")}
-                      className="text-xs text-[#C5A059] hover:underline font-semibold"
-                    >
-                      Create your first quick note →
-                    </button>
-                  </div>
-                ) : (
-                  recentSessionNotes.map((note) => (
-                    <div
-                      key={note.id}
-                      className="p-3 rounded-xl bg-[#142338] border border-stone-700/80 hover:border-[#C5A059]/40 transition-colors space-y-1.5"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <h4 className="text-xs font-bold text-white leading-snug truncate">
-                          {note.title}
-                        </h4>
-                        <span className="text-[9px] font-mono text-stone-400 shrink-0">
-                          {new Date(note.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-stone-300 line-clamp-3 leading-relaxed whitespace-pre-wrap">
-                        {note.summary || note.content}
-                      </p>
-                      {note.scriptureTags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 pt-1">
-                          {note.scriptureTags.map((t) => (
-                            <span
-                              key={t}
-                              className="text-[9px] font-mono text-[#C5A059] bg-[#C5A059]/10 px-1.5 py-0.2 rounded"
-                            >
-                              #{t}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* FOOTER ACTIONS */}
-            <div className="p-3 bg-[#11223b] border-t border-[#C5A059]/25 flex items-center justify-between gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  navigate("/notebook");
-                }}
-                className="text-[11px] text-stone-400 hover:text-[#C5A059] flex items-center gap-1 font-sans transition-colors cursor-pointer"
-                title="Go to full Scripture Master Notebook"
-              >
-                <span>Full Notebook</span>
-                <ExternalLink className="w-3 h-3" />
-              </button>
-
-              <div className="flex items-center gap-2">
-                {saveSuccess ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs font-semibold animate-in fade-in">
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Saved to Notebook!</span>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={isSaving || (!noteContent.trim() && !noteTitle.trim())}
-                    onClick={handleSaveNote}
-                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-[#C5A059] to-[#B38A38] hover:from-[#d8a544] hover:to-[#C5A059] text-stone-950 font-sans font-bold text-xs shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    <PenLine className="w-3.5 h-3.5" />
-                    <span>{isSaving ? "Saving..." : "Save Insight"}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </motion.div>
+            </motion.aside>
+          </div>
         )}
       </AnimatePresence>
     </>

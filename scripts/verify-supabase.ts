@@ -62,26 +62,35 @@ async function runVerification() {
   
   const rawUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://ygsatsfcvodstgjhmths.supabase.co';
   const cleanedUrl = rawUrl.replace(/\/rest\/v1\/?$/, '').trim();
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlnc2F0c2Zjdm9kc3RnamhtdGhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0ODQxNzUsImV4cCI6MjA5NzA2MDE3NX0.Tc4-IvWSmqADtYd2E5_ja3s3V4-lQ9NU51mjST1sbEU';
+  const publishableKey =
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlnc2F0c2Zjdm9kc3RnamhtdGhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0ODQxNzUsImV4cCI6MjA5NzA2MDE3NX0.Tc4-IvWSmqADtYd2E5_ja3s3V4-lQ9NU51mjST1sbEU';
 
   logInfo(`Target Supabase URL: ${cleanedUrl}`);
   
   let keyValid = false;
   let decodedPayload: any = null;
   try {
-    const parts = anonKey.split('.');
+    const parts = publishableKey.split('.');
     if (parts.length === 3) {
       decodedPayload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
       keyValid = true;
-      logSuccess(`Anon key format valid (Project ref: "${decodedPayload.ref}", role: "${decodedPayload.role}")`);
-      testResults.push({ step: 'Config: Anon Key Validation', status: 'PASSED', message: `Role: ${decodedPayload.role}, Ref: ${decodedPayload.ref}` });
+      logSuccess(`Publishable key format valid (Project ref: "${decodedPayload.ref}", role: "${decodedPayload.role}")`);
+      testResults.push({ step: 'Config: Publishable Key Validation', status: 'PASSED', message: `Role: ${decodedPayload.role}, Ref: ${decodedPayload.ref}` });
+    } else if (publishableKey.startsWith('sb_publishable_')) {
+      keyValid = true;
+      logSuccess('Supabase publishable key (sb_publishable_*) format valid');
+      testResults.push({ step: 'Config: Publishable Key Validation', status: 'PASSED', message: 'Valid sb_publishable_* key' });
     } else {
-      logFailure('Anon key is not a valid 3-part JWT token');
-      testResults.push({ step: 'Config: Anon Key Validation', status: 'FAILED', message: 'Not a valid JWT' });
+      logFailure('Publishable key is not a valid JWT or sb_publishable_* token');
+      testResults.push({ step: 'Config: Publishable Key Validation', status: 'FAILED', message: 'Not a valid publishable key' });
     }
   } catch (err: any) {
-    logFailure('Failed to decode anon key JWT', err.message);
-    testResults.push({ step: 'Config: Anon Key Validation', status: 'FAILED', message: err.message });
+    logFailure('Failed to decode publishable key', err.message);
+    testResults.push({ step: 'Config: Publishable Key Validation', status: 'FAILED', message: err.message });
   }
 
   // -------------------------------------------------------------------------
@@ -93,8 +102,8 @@ async function runVerification() {
     const pingRes = await fetch(`${cleanedUrl}/rest/v1/`, {
       method: 'GET',
       headers: {
-        'apikey': anonKey,
-        'Authorization': `Bearer ${anonKey}`
+        'apikey': publishableKey,
+        'Authorization': `Bearer ${publishableKey}`
       }
     });
     const latency = Date.now() - startTime;
@@ -110,7 +119,7 @@ async function runVerification() {
   // STEP 3: Client Initialization & Auth Service Health
   // -------------------------------------------------------------------------
   console.log(`\n${colors.bright}3. Supabase Client & Auth Service Health${colors.reset}`);
-  const supabase = createClient(cleanedUrl, anonKey, {
+  const supabase = createClient(cleanedUrl, publishableKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

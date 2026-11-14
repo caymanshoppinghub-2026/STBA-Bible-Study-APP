@@ -1,3 +1,5 @@
+import { apiFetch } from "./apiFetch";
+
 /**
  * Minimal test harness to verify the Elder Stephen discipleship endpoint.
  */
@@ -10,7 +12,7 @@ export async function testElderStephenEndpoint() {
   console.log("Sending payload to Elder Stephen endpoint:", payload);
 
   try {
-    const response = await fetch('/api/elder-stephen', {
+    const response = await apiFetch('/api/elder-stephen', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

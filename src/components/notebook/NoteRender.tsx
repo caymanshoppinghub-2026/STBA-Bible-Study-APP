@@ -19,6 +19,7 @@ import {
   BookOpen
 } from 'lucide-react'
 import { TieredHighlightDropdown, ToolHighlightableWrapper } from '../stba/HighlightDropdownMenu'
+import { stitchDictatedFragments, recombineFragmentedTranscript } from '../../utils/dictationBuffer'
 
 // Custom Indent and Outdent icons
 const IndentIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -343,18 +344,36 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
       rec.lang = 'en-US';
 
       rec.onresult = (event: any) => {
-        const transcript = event.results[event.resultIndex][0].transcript;
+        let finalSegment = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalSegment = stitchDictatedFragments(finalSegment, event.results[i][0].transcript);
+          }
+        }
+        const transcript = (finalSegment || event.results[event.resultIndex][0].transcript || '').trim();
+        if (!transcript) return;
+
         const textarea = textareaRef.current;
         if (textarea) {
           const start = textarea.selectionStart;
           const end = textarea.selectionEnd;
           const currentText = contentRef.current;
+          const beforeText = currentText.substring(0, start);
+          const afterText = currentText.substring(end);
 
-          const spacerBefore = start > 0 && currentText[start - 1] !== ' ' && currentText[start - 1] !== '\n' ? ' ' : '';
-          const spacerAfter = end < currentText.length && currentText[end] !== ' ' && currentText[end] !== '\n' ? ' ' : '';
-          const insertedText = spacerBefore + transcript.trim() + spacerAfter;
+          // Stitch dictated fragment onto preceding line context to repair sudden pauses
+          const lastNewlineIdx = beforeText.lastIndexOf('\n');
+          const precedingPrefix = lastNewlineIdx >= 0 ? beforeText.substring(0, lastNewlineIdx + 1) : '';
+          const precedingLine = lastNewlineIdx >= 0 ? beforeText.substring(lastNewlineIdx + 1) : beforeText;
 
-          const nextContent = currentText.substring(0, start) + insertedText + currentText.substring(end);
+          const stitchedLine = precedingLine.trim()
+            ? stitchDictatedFragments(precedingLine, transcript)
+            : recombineFragmentedTranscript(transcript);
+
+          const spacerAfter = afterText.length > 0 && afterText[0] !== ' ' && afterText[0] !== '\n' ? ' ' : '';
+          const updatedBeforeAndInserted = precedingPrefix + stitchedLine + spacerAfter;
+          const nextContent = updatedBeforeAndInserted + afterText;
+
           pushToUndo(currentText);
           contentRef.current = nextContent;
           textarea.value = nextContent;
@@ -362,12 +381,13 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
 
           setTimeout(() => {
             textarea.focus();
-            textarea.setSelectionRange(start + insertedText.length, start + insertedText.length);
+            textarea.setSelectionRange(updatedBeforeAndInserted.length, updatedBeforeAndInserted.length);
           }, 10);
         }
       };
 
       rec.onerror = (e: any) => {
+        if (e.error === 'no-speech') return;
         console.error('Speech recognition error', e);
         setIsDictating(false);
       };

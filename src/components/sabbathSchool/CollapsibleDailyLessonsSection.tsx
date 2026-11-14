@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { BookOpen, CheckCircle2, Clock, Circle, Sparkles, ChevronDown, ChevronUp, CheckSquare, RefreshCw, Quote, Volume2, Pause, Play, Square } from "lucide-react";
 import { CollapsibleContainer } from "./CollapsibleContainer";
 import { useSabbathSchoolStore } from "../../store/useSabbathSchoolStore";
@@ -13,10 +14,12 @@ import { separateLessonAndEgwNotes, reformatParagraphText, getScriptureRegex, fo
 import { useLessonNarrator } from "../../hooks/useLessonNarrator";
 
 export const CollapsibleDailyLessonsSection: React.FC = () => {
+  const navigate = useNavigate();
   const {
     dailyLessons,
     selectedDayIndex,
     setSelectedDayIndex,
+    memoryVerse,
     updateDailyLessonStatus,
     chatWithElderStephen,
     isElderLoading,
@@ -115,7 +118,10 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
     }
   }, [openDays, selectedDayIndex, dailyLessons]);
 
-  const handleOpenVerseModal = (ref: string) => {
+  const handleOpenVerseModal = (ref: string, dayIdx?: number) => {
+    if (typeof dayIdx === "number" && dayIdx >= 0 && dayIdx < 7) {
+      setSelectedDayIndex(dayIdx);
+    }
     const normalized = ref
       .replace(/\u00A0/g, " ")
       .replace(/[–—\u2013\u2014\u2212]/g, "-")
@@ -125,7 +131,22 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
     setIsVerseModalOpen(true);
   };
 
-  const renderContentWithVerseTriggers = (content: any) => {
+  const handleStudyDeeperDay = (dayIdx: number) => {
+    setSelectedDayIndex(dayIdx);
+    localStorage.setItem("stba_pending_day_index", String(dayIdx));
+
+    const day = dailyLessons[dayIdx];
+    const textToScan = `${day?.title || ""} ${Array.isArray(day?.content) ? day.content.join(" ") : (day?.content || "")} ${memoryVerse || ""}`;
+    const regex = getScriptureRegex();
+    const match = regex.exec(textToScan);
+    const targetRef = match ? formatStandardReference(match[0]) : "2 Corinthians 2:4";
+
+    localStorage.setItem("stba_pending_search_ref", targetRef);
+    localStorage.setItem("stba_pending_search_tool", "syllabus");
+    navigate(`/stba?ref=${encodeURIComponent(targetRef)}&tool=syllabus&day=${dayIdx}`);
+  };
+
+  const renderContentWithVerseTriggers = (content: any, dayIdx: number) => {
     // 1. Relocate all Ellen G. White quotes out of the daily lesson into Ellen White Notes
     const { mainParagraphs } = separateLessonAndEgwNotes(content);
 
@@ -196,7 +217,7 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              handleOpenVerseModal(fullMatch);
+              handleOpenVerseModal(fullMatch, dayIdx);
             }}
             className="rounded-full inline-flex items-center gap-1 font-mono font-bold text-xs px-2.5 py-0.5 bg-[#FEF9C3] text-[#78350F] border border-[#FACC15] shadow-2xs hover:bg-[#FEF08A] hover:border-[#EAB308] cursor-pointer transition-all no-underline hover:no-underline tracking-normal"
             title={`Click to read ${formatStandardReference(fullMatch)} passage`}
@@ -462,7 +483,7 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
                       return (
                         <div className="my-3 max-w-4xl max-h-[480px] overflow-y-auto pr-2 custom-scrollbar space-y-3 font-lato font-['Lato',sans-serif]">
                           {mainParagraphs.length > 0 ? (
-                            renderContentWithVerseTriggers(mainParagraphs)
+                            renderContentWithVerseTriggers(mainParagraphs, index)
                           ) : (
                             <p className={isLight ? "text-stone-500 italic" : "text-neutral-450 italic"}>
                               No detailed content loaded for this day.
@@ -474,6 +495,17 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
 
                     {/* Interactive Action Row */}
                     <div className={`flex flex-wrap items-center gap-2 pt-4 border-t ${isLight ? "border-stone-200" : "border-neutral-850"}`}>
+                      <button
+                        type="button"
+                        id={`btn-study-deeper-day-${index}`}
+                        onClick={() => handleStudyDeeperDay(index)}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 border rounded-lg text-xs font-bold transition cursor-pointer bg-[#C9973A] hover:bg-[#D9A74A] border-[#F3CF65] text-stone-950 shadow-xs"
+                        title="Open the Bible Reader to locate today's verse alongside the Sabbath School Daily Syllabus"
+                      >
+                        <BookOpen size={12} className="text-stone-950" />
+                        <span>Study Deeper</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleAskElderStephenAboutDay(index)}
@@ -494,7 +526,10 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => setIsNotebookOpen(true)}
+                        onClick={() => {
+                          setSelectedDayIndex(index);
+                          setIsNotebookOpen(true);
+                        }}
                         className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition cursor-pointer ${
                           isLight
                             ? "bg-white hover:bg-stone-100 border-stone-300 text-stone-800"
@@ -502,7 +537,7 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
                         }`}
                       >
                         <CheckSquare size={12} className="text-amber-500" />
-                        <span>Open Study Notebook</span>
+                        <span>Discipleship Vault</span>
                       </button>
 
                       {/* Manual Mark as Complete Button inside expanded view */}
@@ -607,6 +642,7 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
       <VerseModal
         isOpen={isVerseModalOpen}
         reference={selectedVerseRef}
+        dayIndex={selectedDayIndex}
         theme={isLight ? "light" : "dark"}
         onClose={() => setIsVerseModalOpen(false)}
       />

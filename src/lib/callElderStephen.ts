@@ -2,6 +2,8 @@ import { StudyNote } from '../types/notebook'
 import { ensureSupabaseAuth } from './notebookSync'
 import { supabase } from './supabase'
 import { formatProperElderSpacing, ensureElderStephenOutlineCompletion, isSpecificScopedRequest } from '../utils/elderSpacing'
+import { coalesceFragmentedChatHistory, recombineFragmentedTranscript } from '../utils/dictationBuffer'
+import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from './apiFetch'
 
 export interface ChatMessagePayload {
   role: 'user' | 'elder' | 'model'
@@ -223,6 +225,9 @@ export function buildUnifiedPayload(partial: Partial<ElderStephenPayload>): Elde
   const resolvedTitle = partial.noteTitle || sessionMemory?.currentDocTitle || sessionMemory?.currentTopic || '';
   const resolvedPassage = partial.passage || sessionMemory?.currentPassage || '';
 
+  const coalescedHistory = coalesceFragmentedChatHistory(partial.historyLog || []);
+  const precedingUserTurn = [...coalescedHistory].reverse().find(m => m.role === 'user')?.text;
+
   return {
     userId,
     userName,
@@ -231,16 +236,16 @@ export function buildUnifiedPayload(partial: Partial<ElderStephenPayload>): Elde
     noteTitle: resolvedTitle,
     noteContent: partial.noteContent || '',
     masteryState: partial.masteryState || defaultMastery,
-    historyLog: partial.historyLog || [],
-    userAction: partial.userAction || '',
+    historyLog: coalescedHistory,
+    userAction: partial.userAction ? recombineFragmentedTranscript(partial.userAction, precedingUserTurn) : '',
     week_number: partial.week_number,
-    reflections: partial.reflections,
+    reflections: partial.reflections ? recombineFragmentedTranscript(partial.reflections, precedingUserTurn) : partial.reflections,
     progress: partial.progress,
     passage: resolvedPassage,
     outline: partial.outline,
     audience: partial.audience,
     verse: partial.verse || resolvedPassage,
-    user_explanation: partial.user_explanation,
+    user_explanation: partial.user_explanation ? recombineFragmentedTranscript(partial.user_explanation, precedingUserTurn) : partial.user_explanation,
     metric_data: partial.metric_data,
     base_verse: partial.base_verse || resolvedPassage,
     related_verses: partial.related_verses,
@@ -327,12 +332,12 @@ export async function callElderStephen(partialPayload: Partial<ElderStephenPaylo
     }
   }
 
-  // Call the production full-stack endpoint with 6500ms AbortController guard & resilient offline fallback
+  // Call the production full-stack endpoint with 25000ms AbortController guard & resilient offline fallback
   try {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 6500)
+    const timeoutId = setTimeout(() => controller.abort(), 25000)
 
-    const response = await fetch('/api/elder-stephen', {
+    const response = await apiFetch('/api/elder-stephen', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -342,8 +347,8 @@ export async function callElderStephen(partialPayload: Partial<ElderStephenPaylo
     })
     clearTimeout(timeoutId)
 
-    if (response.ok) {
-      const data = await response.json()
+    if (response.ok && !isAuthRedirectResponse(response)) {
+      const data = await safeParseResponseJson<any>(response)
       if (data && data.text) {
         const isSpecific = isSpecificScopedRequest(payload.userAction || payload.user_explanation || payload.passage);
         if (!isSpecific) {
@@ -358,7 +363,7 @@ export async function callElderStephen(partialPayload: Partial<ElderStephenPaylo
       }
     }
   } catch (netErr) {
-    console.warn("[ElderStephen] Network connection or timeout fallback engaged:", netErr)
+    console.info("[ElderStephen] Network connection or timeout fallback engaged:", netErr)
   }
 
   // Graceful offline pastoral fallback response (SDA doctrinally aligned)

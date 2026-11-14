@@ -1490,7 +1490,7 @@ export const TracksPageRedesigned: React.FC = () => {
                   <h3 className="font-serif font-black text-lg text-[#1C2333] group-hover:text-[#C9973A] transition-colors leading-tight line-clamp-1">
                     {track.title}
                   </h3>
-                  <p className="text-xs text-stone-500 font-sans leading-relaxed line-clamp-3">
+                  <p className="text-[16px] text-stone-500 font-sans leading-relaxed line-clamp-3">
                     {track.desc}
                   </p>
                 </div>

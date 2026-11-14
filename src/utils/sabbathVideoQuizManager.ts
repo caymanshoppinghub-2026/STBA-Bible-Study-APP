@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { apiFetch } from "../lib/apiFetch";
+
 export interface VideoQuizOption {
   id: "A" | "B" | "C" | "D";
   text: string;
@@ -995,7 +997,7 @@ export async function fetchVideoQuizQuestions(params: {
   const fallbackList = getCuratedQuestionsForChannel(channelKey, params.egwDayIndex);
 
   try {
-    const res = await fetch("/api/sabbath/video-quiz", {
+    const res = await apiFetch("/api/sabbath/video-quiz", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

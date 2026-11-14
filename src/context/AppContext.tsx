@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { UserAccount, Track, Scripture, SubscriptionTier } from "../types";
 import { saveProfileToSupabase, fetchProfileFromSupabase } from "../lib/notebookSync";
 import { supabase } from "../lib/supabase";
+import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
 
 export interface UpgradeModalState {
   isOpen: boolean;
@@ -245,6 +246,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const authUser = sessionUser || session?.user;
 
         if (!authUser) {
+          // Preserve a newly verified sign-up user profile if Supabase session confirmation is still pending
+          try {
+            const savedProfileRaw = localStorage.getItem("stba_user_profile");
+            if (savedProfileRaw) {
+              const savedProfile = JSON.parse(savedProfileRaw);
+              if (savedProfile?.email && savedProfile?.emailVerified && !savedProfile?.isGuest) {
+                if (isMounted) {
+                  setUserState(savedProfile);
+                  setUserTierState(normalizeTier(savedProfile.tier));
+                }
+                return;
+              }
+            }
+          } catch {}
+
           if (isMounted) {
             setUserState(null);
             setUserTierState("Beginner");
@@ -322,7 +338,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .from("stba_study_notes")
           .select("*")
           .eq("user_id", authUser.id)
-          .order("sort_order", { ascending: true });
+          .order("order", { ascending: true });
 
         localStorage.removeItem("stba_notebook_notes");
         localStorage.removeItem("stba_study_notes");
@@ -340,8 +356,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             createdAt: row.created_at || new Date().toISOString(),
             updatedAt: row.updated_at || new Date().toISOString(),
             isFavorite: !!row.is_favorite,
-            children: [],
-            order: typeof row.sort_order === "number" ? row.sort_order : idx,
+            children: Array.isArray(row.children) ? row.children : [],
+            order: typeof row.order === "number" ? row.order : idx,
             expanded: false
           }));
           localStorage.setItem("stba_notebook_notes_v2", JSON.stringify(syncedNotes));
@@ -362,10 +378,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    initializeFromSupabase();
+    let hasInitializedMount = false;
+    initializeFromSupabase().finally(() => {
+      hasInitializedMount = true;
+    });
 
     // Listen for live Supabase Auth state transitions
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "INITIAL_SESSION") return;
+      if (event === "SIGNED_IN" && !hasInitializedMount) return;
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
         await initializeFromSupabase(session?.user);
       } else if (event === "SIGNED_OUT") {
@@ -401,13 +422,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const verifyUserEmail = async (code?: string): Promise<boolean> => {
     if (!user) return false;
     try {
-      const response = await fetch("/api/auth/verify-email", {
+      const response = await apiFetch("/api/auth/verify-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: user.email, code })
       });
       if (response.ok) {
-        await response.json();
+        const data = await safeParseResponseJson<any>(response);
+        if (!data || data.success === false) {
+          return false;
+        }
         const updatedUser = { ...user, emailVerified: true };
         setUser(updatedUser);
         
@@ -419,7 +443,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return true;
       } else {
-        const errData = await response.json().catch(() => ({}));
+        const errData = (await safeParseResponseJson<any>(response)) || {};
         console.warn("[STBA AUTH] Verification failed:", errData.error || "Invalid response");
         return false;
       }

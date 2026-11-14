@@ -5,6 +5,7 @@
 
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { apiFetch } from "../../lib/apiFetch";
 import {
   ArrowLeft,
   Mail,
@@ -57,7 +58,7 @@ export const ResetPasswordPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/auth/send-code", {
+      const res = await apiFetch("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanEmail, name: cleanEmail.split("@")[0] })
@@ -116,7 +117,7 @@ export const ResetPasswordPage: React.FC = () => {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      const res = await fetch("/api/auth/reset-password", {
+      const res = await apiFetch("/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -161,7 +162,7 @@ export const ResetPasswordPage: React.FC = () => {
     setErrorMsg(null);
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/auth/send-code", {
+      const res = await apiFetch("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim().toLowerCase() })

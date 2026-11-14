@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
 import {
   LayoutDashboard,
   BookOpen,
@@ -133,14 +134,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     if (!user || user.isGuest || user.emailVerified) return;
     if (!quiet) setResending(true);
     try {
-      const response = await fetch("/api/auth/send-code", {
+      const response = await apiFetch("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: user.email, name: user.name })
       });
       if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
+        const data = await safeParseResponseJson<any>(response);
+        if (data?.success) {
           if (!quiet) {
             setResendStatusMsg(data.message || "Code sent successfully!");
             setTimeout(() => setResendStatusMsg(""), 4000);
@@ -176,13 +177,17 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     try {
       const success = await verifyUserEmail(verificationCode);
       if (success) {
-        setSuccessMsg("Your email has been verified! Stats tracking is now unlocked.");
+        setSuccessMsg("Your email has been verified! Launching your guided dashboard tour...");
         setSandboxCode("");
+        localStorage.removeItem("stba_onboarding_v3_completed");
+        localStorage.setItem("stba_onboarding_stage", "welcome_modal");
+        localStorage.setItem("stba_is_new_user", "true");
         setTimeout(() => {
           setShowCodeModal(false);
           setSuccessMsg("");
           setVerificationCode("");
-        }, 2500);
+          window.dispatchEvent(new CustomEvent("start-stba-onboarding-flow"));
+        }, 900);
       } else {
         alert("Invalid or expired verification code. Please check your spelling or request a new code.");
       }

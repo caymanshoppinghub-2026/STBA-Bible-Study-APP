@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch } from "../lib/apiFetch";
 import {
   HelpCircle,
   Headphones,
@@ -42,10 +43,12 @@ import {
   PhoneCall
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import helpCenterHeroImg from "../assets/images/help_center_hero_1793424455597.jpg";
+import helpSpecialistAvatarImg from "../assets/images/help_support_specialist_1793424456399.jpg";
 
-// Image asset paths
-const HERO_IMAGE_URL = "/src/assets/images/help_center_hero_1793424455597.jpg";
-const SPECIALIST_AVATAR_URL = "/src/assets/images/help_support_specialist_1793424456399.jpg";
+// Bundled image asset URLs
+const HERO_IMAGE_URL = helpCenterHeroImg;
+const SPECIALIST_AVATAR_URL = helpSpecialistAvatarImg;
 
 interface FAQItem {
   id: string;
@@ -372,7 +375,7 @@ export const HelpCenterPage: React.FC = () => {
     setTicketError(null);
 
     try {
-      const response = await fetch("/api/support/ticket", {
+      const response = await apiFetch("/api/support/ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -474,7 +477,7 @@ export const HelpCenterPage: React.FC = () => {
     };
 
     try {
-      const response = await fetch("/api/support/escalate", {
+      const response = await apiFetch("/api/support/escalate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(escalationData)

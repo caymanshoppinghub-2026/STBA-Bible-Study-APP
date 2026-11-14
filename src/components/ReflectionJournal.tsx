@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch } from "../lib/apiFetch";
 import {
   BookOpen,
   Calendar,
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { recordActivity } from "../utils/activityTracker";
+import { stitchDictatedFragments, recombineFragmentedTranscript } from "../utils/dictationBuffer";
 
 export interface DevotionalReflection {
   id: string;
@@ -167,14 +169,11 @@ export const ReflectionJournal: React.FC<JournalPageProps> = ({ sabbathMode = fa
           let finalTranscript = "";
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript + " ";
+              finalTranscript = stitchDictatedFragments(finalTranscript, event.results[i][0].transcript);
             }
           }
           if (finalTranscript) {
-            setVoiceTranscript((prev) => {
-              const next = (prev + " " + finalTranscript).trim().replace(/\s+/g, " ");
-              return next;
-            });
+            setVoiceTranscript((prev) => stitchDictatedFragments(prev, finalTranscript));
           }
         };
 
@@ -259,7 +258,7 @@ export const ReflectionJournal: React.FC<JournalPageProps> = ({ sabbathMode = fa
     }
 
     setVoiceTranscript((prev) => {
-      const trimmed = prev.trim();
+      const trimmed = recombineFragmentedTranscript(prev);
       if (!trimmed) {
         return `We studied Scripture regarding the patience of the saints, the commandments of God, and keeping the faith of Jesus. I learned that keeping His commands is not legalism but the beautiful fruit of love and Jesus' faith that anchors us through trials.`;
       }
@@ -273,7 +272,7 @@ export const ReflectionJournal: React.FC<JournalPageProps> = ({ sabbathMode = fa
     setVoiceError(null);
 
     try {
-      const resp = await fetch("/api/study/voice-summarize", {
+      const resp = await apiFetch("/api/study/voice-summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transcript: voiceTranscript })

@@ -1,6 +1,16 @@
 import { supabase } from './supabase'
+import { apiFetch, safeParseResponseJson } from './apiFetch'
 import { StudyNote, HighlightItem } from '../types/notebook'
 import { ensureInitialUserTrackProgress } from './trackSync'
+import {
+  uploadUserAvatar,
+  dataUrlToFile,
+  persistAvatarUrlToProfilesTable,
+  AvatarUploadResult
+} from './uploadAvatar'
+
+export { uploadUserAvatar, dataUrlToFile, persistAvatarUrlToProfilesTable }
+export type { AvatarUploadResult }
 
 /**
  * Ensures any string ID is mapped deterministically to a valid standard UUID format,
@@ -143,7 +153,7 @@ export async function checkSupabaseConnection(): Promise<{ ok: boolean; error?: 
     }
 
     // If Supabase table exists or server cloud is reachable
-    const res = await fetch("/api/notebook/status");
+    const res = await apiFetch("/api/notebook/status");
     if (res.ok) {
       return { ok: true };
     }
@@ -157,7 +167,7 @@ export async function checkSupabaseConnection(): Promise<{ ok: boolean; error?: 
   } catch (err: any) {
     // Fallback check to server API
     try {
-      const res = await fetch("/api/notebook/status");
+      const res = await apiFetch("/api/notebook/status");
       if (res.ok) {
         return { ok: true };
       }
@@ -191,10 +201,10 @@ export async function fetchNotesFromSupabase(): Promise<StudyNote[]> {
     // 2. Server API fallback only if Supabase returns error/unreachable
     if (userId) {
       try {
-        const res = await fetch(`/api/notebook/notes?userId=${encodeURIComponent(userId)}`);
+        const res = await apiFetch(`/api/notebook/notes?userId=${encodeURIComponent(userId)}`);
         if (res.ok) {
-          const json = await res.json();
-          if (json.ok && Array.isArray(json.notes)) {
+          const json = await safeParseResponseJson<any>(res);
+          if (json && json.ok && Array.isArray(json.notes)) {
             return json.notes.map((n: any) => ({
               id: getDeterministicUUID(n.id),
               title: n.title || 'Untitled Note',
@@ -245,7 +255,7 @@ export async function saveNoteToSupabase(note: StudyNote): Promise<string> {
 
   // 1. Save to server backend
   try {
-    await fetch("/api/notebook/save-note", {
+    await apiFetch("/api/notebook/save-note", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, note: payload })
@@ -284,7 +294,7 @@ export async function deleteNoteFromSupabase(noteId: string): Promise<void> {
 
   // 1. Delete on server backend
   try {
-    await fetch("/api/notebook/delete-note", {
+    await apiFetch("/api/notebook/delete-note", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, noteId: targetId })
@@ -317,14 +327,14 @@ export async function syncAllLocalNotesToSupabase(notes: StudyNote[]): Promise<S
 
   // 1. Bulk sync to server backend
   try {
-    const res = await fetch("/api/notebook/sync-all", {
+    const res = await apiFetch("/api/notebook/sync-all", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, notes: sanitizedNotes })
     });
     if (res.ok) {
-      const json = await res.json();
-      if (json.ok && Array.isArray(json.notes)) {
+      const json = await safeParseResponseJson<any>(res);
+      if (json && json.ok && Array.isArray(json.notes)) {
         return json.notes;
       }
     }
@@ -368,10 +378,10 @@ export async function checkCategoriesTable(): Promise<boolean> {
 export async function fetchCategoriesFromSupabase(): Promise<Record<string, { label: string; code: string; color: string }> | null> {
   // 1. Try server backend first
   try {
-    const res = await fetch("/api/notebook/categories");
+    const res = await apiFetch("/api/notebook/categories");
     if (res.ok) {
-      const json = await res.json();
-      if (json.ok && json.categories) {
+      const json = await safeParseResponseJson<any>(res);
+      if (json && json.ok && json.categories) {
         return json.categories;
       }
     }
@@ -405,7 +415,7 @@ export async function fetchCategoriesFromSupabase(): Promise<Record<string, { la
  */
 export async function saveCategoryToSupabase(key: string, cat: { label: string; code: string; color: string }, order: number = 0): Promise<void> {
   try {
-    await fetch("/api/notebook/categories", {
+    await apiFetch("/api/notebook/categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ categories: { [key]: cat } })
@@ -442,7 +452,7 @@ export async function deleteCategoryFromSupabase(key: string): Promise<void> {
  */
 export async function syncAllLocalCategoriesToSupabase(categories: Record<string, { label: string; code: string; color: string }>): Promise<void> {
   try {
-    await fetch("/api/notebook/categories", {
+    await apiFetch("/api/notebook/categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ categories })
@@ -482,10 +492,10 @@ export async function fetchHighlightsFromSupabase(): Promise<HighlightItem[]> {
 
     // 1. Try server backend
     try {
-      const res = await fetch(`/api/notebook/highlights?userId=${encodeURIComponent(userId)}`);
+      const res = await apiFetch(`/api/notebook/highlights?userId=${encodeURIComponent(userId)}`);
       if (res.ok) {
-        const json = await res.json();
-        if (json.ok && Array.isArray(json.highlights) && json.highlights.length > 0) {
+        const json = await safeParseResponseJson<any>(res);
+        if (json && json.ok && Array.isArray(json.highlights) && json.highlights.length > 0) {
           const mergedMap = new Map<string, HighlightItem>();
           localItems.forEach(item => mergedMap.set(item.id, item));
           json.highlights.forEach((item: any) => mergedMap.set(item.id, item));
@@ -556,7 +566,7 @@ export async function saveHighlightToSupabase(item: HighlightItem): Promise<stri
 
   // 1. Save to server backend
   try {
-    await fetch("/api/notebook/highlights", {
+    await apiFetch("/api/notebook/highlights", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, highlight: updatedItem })
@@ -597,7 +607,7 @@ export async function deleteHighlightFromSupabase(highlightId: string): Promise<
   const userId = user?.id || "stba_default_user";
 
   try {
-    await fetch("/api/notebook/delete-highlight", {
+    await apiFetch("/api/notebook/delete-highlight", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, highlightId })
@@ -610,10 +620,33 @@ export async function deleteHighlightFromSupabase(highlightId: string): Promise<
 }
 
 /**
- * Saves user profile and settings/preferences to storage.
+ * Uploads a profile image to Supabase Storage using the logged-in user's ID
+ * in the file path (`${userId}/avatar-${timestamp}.${ext}`), retrieves the
+ * resulting public URL, upserts it into `public.profiles`, and syncs it with
+ * the user's Auth metadata.
  */
-export async function saveProfileToSupabase(profile: any): Promise<void> {
+export async function uploadProfileAvatarToSupabase(file: File): Promise<string | null> {
   try {
+    await ensureSupabaseAuth();
+    const { publicUrl } = await uploadUserAvatar(file);
+    return publicUrl;
+  } catch (err) {
+    console.warn("Unexpected error uploading profile avatar:", err);
+    return null;
+  }
+}
+
+/**
+ * Saves user profile and settings/preferences to storage and database.
+ * If the profile contains a base64 `data:image/...` avatar, it automatically
+ * uploads the image to a user-scoped path (`${userId}/avatar-...`) in Supabase
+ * Storage, persists the resulting public URL into `public.profiles`, and syncs
+ * the public URL with Supabase Auth metadata so it persists across logouts.
+ */
+export async function saveProfileToSupabase(profile: any): Promise<string | null> {
+  try {
+    await ensureSupabaseAuth();
+
     const aiVoice = localStorage.getItem("stba_ai_voice") || "Puck";
     const dailyVerseLimit = localStorage.getItem("stba_daily_verse_limit") || "5";
     const recallQueueFrequency = localStorage.getItem("stba_recall_queue_frequency") || "5";
@@ -623,17 +656,54 @@ export async function saveProfileToSupabase(profile: any): Promise<void> {
     const userTier = localStorage.getItem("stba_user_tier") || "Beginner";
     const egwIntegration = localStorage.getItem("stba_egw_integration") || "true";
 
+    let avatarUrl: string = profile.profilePic || profile.avatar_url || "";
+
+    // If avatarUrl is a base64 data URL, upload it to a user-scoped path first
+    if (avatarUrl && avatarUrl.startsWith("data:image/")) {
+      const convertedFile = dataUrlToFile(avatarUrl, "avatar");
+      if (convertedFile) {
+        try {
+          const { publicUrl } = await uploadUserAvatar(convertedFile);
+          if (publicUrl) {
+            avatarUrl = publicUrl;
+            profile.profilePic = publicUrl;
+            profile.avatar_url = publicUrl;
+            try {
+              const savedLocal = localStorage.getItem("stba_user_profile");
+              if (savedLocal) {
+                const parsed = JSON.parse(savedLocal);
+                parsed.profilePic = publicUrl;
+                parsed.avatar_url = publicUrl;
+                localStorage.setItem("stba_user_profile", JSON.stringify(parsed));
+              }
+            } catch (e) {}
+          }
+        } catch (uploadErr) {
+          console.warn("Error uploading base64 avatar during profile save:", uploadErr);
+        }
+      }
+    }
+
+    // Only store clean HTTP(S) URLs in Auth user_metadata to avoid payload size rejections
+    const safeMetadataAvatarUrl =
+      avatarUrl && !avatarUrl.startsWith("data:") ? avatarUrl : "";
+
     const { data: updatedAuth } = await supabase.auth.updateUser({
       data: {
         name: profile.name,
-        profilePic: profile.profilePic || "",
+        ...(safeMetadataAvatarUrl
+          ? {
+              profilePic: safeMetadataAvatarUrl,
+              avatar_url: safeMetadataAvatarUrl
+            }
+          : {}),
         role: profile.role,
         isSda: profile.isSda !== false,
         firstTrack: profile.firstTrack || "fundamental-beliefs",
         emailVerified: profile.emailVerified !== false,
         isGuest: false,
         ...(profile.createdAt ? { createdAt: profile.createdAt } : {}),
-        
+
         // Preferences
         stba_ai_voice: aiVoice,
         stba_daily_verse_limit: dailyVerseLimit,
@@ -646,19 +716,41 @@ export async function saveProfileToSupabase(profile: any): Promise<void> {
       }
     });
 
-    if (updatedAuth?.user?.id) {
+    let userId = updatedAuth?.user?.id || null;
+    if (!userId) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      userId = sessionData?.session?.user?.id || null;
+    }
+    if (!userId) {
+      const { data: userData } = await supabase.auth.getUser();
+      userId = userData?.user?.id || null;
+    }
+
+    if (userId) {
+      // Persist the public avatar URL into `public.profiles` so it survives logouts
+      if (safeMetadataAvatarUrl) {
+        try {
+          await persistAvatarUrlToProfilesTable(userId, safeMetadataAvatarUrl);
+        } catch (profileDbError) {
+          console.warn("Error saving profile avatar_url to database:", profileDbError);
+        }
+      }
+
       await ensureInitialUserTrackProgress(
-        updatedAuth.user.id,
+        userId,
         profile.firstTrack || "fundamental-beliefs"
       );
     }
+
+    return safeMetadataAvatarUrl || null;
   } catch (err) {
     console.warn("Error saving profile to Supabase:", err);
+    return null;
   }
 }
 
 /**
- * Loads user profile and settings/preferences from storage.
+ * Loads user profile and settings/preferences from database and auth storage.
  */
 export async function fetchProfileFromSupabase(): Promise<any | null> {
   try {
@@ -675,19 +767,39 @@ export async function fetchProfileFromSupabase(): Promise<any | null> {
       authUser.created_at ||
       undefined;
 
-    if (!metadata.name && !metadata.stba_ai_voice && !authUser.created_at) {
+    // Fetch persisted avatar_url from the public.profiles database table
+    let dbAvatarUrl = "";
+    try {
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("id, avatar_url")
+        .eq("id", authUser.id)
+        .maybeSingle();
+
+      if (profileRow?.avatar_url) {
+        dbAvatarUrl = profileRow.avatar_url;
+      }
+    } catch (dbErr) {
+      // Fall back to auth user metadata if query fails
+    }
+
+    if (!metadata.name && !metadata.stba_ai_voice && !dbAvatarUrl && !authUser.created_at) {
       return null;
     }
     
+    const resolvedAvatarUrl = dbAvatarUrl || metadata.avatar_url || metadata.profilePic || "";
+
     const profile = {
       name: metadata.name || authUser.email?.split("@")[0] || "Scholar",
       email: authUser.email || "",
       isSda: metadata.isSda !== false,
       firstTrack: metadata.firstTrack || "fundamental-beliefs",
       role: metadata.role || "STBAScholar",
+      tier: metadata.stba_user_tier || metadata.tier || "Beginner",
       isGuest: false,
       emailVerified: metadata.emailVerified !== false,
-      profilePic: metadata.profilePic || "",
+      profilePic: resolvedAvatarUrl,
+      avatar_url: resolvedAvatarUrl,
       createdAt: registrationTimestamp
     };
 

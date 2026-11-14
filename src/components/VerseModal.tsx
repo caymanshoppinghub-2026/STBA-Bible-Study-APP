@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiFetch } from "../lib/apiFetch";
 import { 
   X, 
   BookOpen, 
@@ -36,6 +38,7 @@ export interface VerseModalProps {
   reference: string | null;
   initialVersion?: TranslationVersion;
   theme?: "light" | "dark";
+  dayIndex?: number;
   onClose: () => void;
   onStudyDeeper?: (reference: string, version: TranslationVersion) => void;
 }
@@ -52,9 +55,12 @@ export const VerseModal: React.FC<VerseModalProps> = ({
   reference,
   initialVersion = "KJV",
   theme,
+  dayIndex,
   onClose,
+  onStudyDeeper,
 }) => {
-  const { readingTheme } = useSabbathSchoolStore();
+  const navigate = useNavigate();
+  const { readingTheme, selectedDayIndex, setSelectedDayIndex } = useSabbathSchoolStore();
   const themeContext = useTheme();
 
   // Dynamically adapt visual theme matching application active state
@@ -151,7 +157,7 @@ export const VerseModal: React.FC<VerseModalProps> = ({
     const fetchVerse = async () => {
       try {
         const url = `/api/bible?ref=${encodeURIComponent(cleanRef)}&version=${queryVersion}`;
-        const res = await fetch(url);
+        const res = await apiFetch(url);
         if (!res.ok) {
           throw new Error(`Failed to load verse (${res.status})`);
         }
@@ -262,17 +268,41 @@ export const VerseModal: React.FC<VerseModalProps> = ({
     setTimeout(() => setMemorySuccessMsg(null), 2800);
   };
 
-  // Strictly isolated Study Deeper action (toggles rich in-modal theological exegesis)
+  // Interactive Study Deeper action: simultaneously opens the Bible, locates the verse, and opens the Sabbath School Daily Syllabus for the active day
   const handleToggleStudyDeeper = () => {
-    setIsDeepStudyOpen(!isDeepStudyOpen);
-    if (!isDeepStudyOpen) {
-      setTimeout(() => {
-        const deeperPanel = document.getElementById("in-modal-deeper-study");
-        if (deeperPanel && scrollContainerRef.current) {
-          deeperPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      }, 80);
+    const rawTargetRef = passage?.reference || displayReference;
+    const cleanRef = formatStandardReference(rawTargetRef) || rawTargetRef;
+    const activeVerseObj = verses[activeVerseIndex] || verses[0];
+    const parsedVerseNum = activeVerseObj?.verse ? parseInt(String(activeVerseObj.verse), 10) : NaN;
+    const targetDayIdx = typeof dayIndex === "number" ? dayIndex : selectedDayIndex;
+
+    if (typeof targetDayIdx === "number" && targetDayIdx >= 0 && targetDayIdx < 7) {
+      setSelectedDayIndex(targetDayIdx);
+      localStorage.setItem("stba_pending_day_index", String(targetDayIdx));
     }
+
+    localStorage.setItem("stba_pending_search_ref", cleanRef);
+    localStorage.setItem("stba_pending_search_tool", "syllabus");
+    if (!Number.isNaN(parsedVerseNum) && parsedVerseNum > 0) {
+      localStorage.setItem("stba_pending_verse_number", String(parsedVerseNum));
+    }
+
+    if (onStudyDeeper) {
+      onStudyDeeper(cleanRef, version);
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("stba-open-study-deeper", {
+        detail: {
+          reference: cleanRef,
+          verseNumber: !Number.isNaN(parsedVerseNum) ? parsedVerseNum : undefined,
+          dayIndex: targetDayIdx
+        }
+      })
+    );
+
+    onClose();
+    navigate(`/stba?ref=${encodeURIComponent(cleanRef)}&tool=syllabus&day=${targetDayIdx}`);
   };
 
   return (
@@ -643,25 +673,22 @@ export const VerseModal: React.FC<VerseModalProps> = ({
           }`}
         >
           <div className="flex items-center gap-2">
-            {/* 'Study Deeper' Button: Strictly isolated within module */}
+            {/* 'Study Deeper' Button: Simultaneously opens Bible & locates verse + opens Daily Syllabus */}
             <button
+              id="btn-verse-modal-study-deeper"
               type="button"
               onClick={handleToggleStudyDeeper}
-              disabled={loading || !passage?.text}
+              disabled={loading}
               className={`flex items-center gap-2 px-4.5 py-2.5 rounded-[32px] text-xs font-bold border transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs active:scale-95 tracking-normal no-underline ${
-                isDeepStudyOpen
-                  ? isLight
-                    ? "bg-amber-100 border-amber-400 text-amber-950 font-black"
-                    : "bg-[#1E3A5F] border-[#E5B842]/60 text-[#F3CF65] font-black"
-                  : isLight
-                  ? "bg-white hover:bg-stone-50 border-stone-300 text-stone-800 hover:border-amber-500 hover:text-amber-900"
-                  : "bg-[#0E2036] hover:bg-[#142A46] border-[#E5B842]/30 text-stone-200 hover:text-[#F3CF65] hover:border-[#E5B842]/60"
+                isLight
+                  ? "bg-amber-500 hover:bg-amber-400 border-amber-600 text-stone-950 font-black"
+                  : "bg-[#E5B842] hover:bg-[#F3CF65] border-[#F3CF65] text-[#06162c] font-black"
               }`}
-              title="Explore deeper doctrinal insights inside this reference"
+              title="Open the Bible Reader to locate this verse alongside today's Sabbath School Daily Syllabus"
             >
-              <BookOpen size={15} className={isLight ? "text-amber-700" : "text-[#F3CF65]"} />
+              <BookOpen size={15} className="text-[#06162c]" />
               <span className="tracking-normal no-underline">
-                {isDeepStudyOpen ? "Hide Study" : "Study Deeper"}
+                Study Deeper
               </span>
             </button>
 

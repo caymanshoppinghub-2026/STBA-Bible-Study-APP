@@ -486,26 +486,57 @@ export function parseScriptureLookup(query: string): ScriptureLookupResult | nul
   const clean = query.trim();
   if (!clean) return null;
 
+  // Support comma or semicolon separated multiple references (e.g. "John 3:16, Romans 8:28")
+  if (/[,;]/.test(clean)) {
+    const parts = clean.split(/[,;]/).map(p => p.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      const parsedParts = parts.map(p => parseScriptureLookup(p)).filter((r): r is ScriptureLookupResult => r !== null);
+      if (parsedParts.length > 0) {
+        return {
+          ...parsedParts[0],
+          canonicalRef: parsedParts.map(p => p.canonicalRef).join(", "),
+          isSingleVerse: parsedParts.length === 1 && parsedParts[0].isSingleVerse,
+          isRange: parsedParts.length > 1 || parsedParts[0].isRange
+        };
+      }
+    }
+  }
+
+  // Normalize leading Roman numerals (e.g. "I John" -> "1 John", "II Tim" -> "2 Tim", "III John" -> "3 John")
+  const normalizedClean = clean
+    .replace(/^III\s+/i, "3 ")
+    .replace(/^II\s+/i, "2 ")
+    .replace(/^I\s+/i, "1 ")
+    .replace(/^3rd\s+/i, "3 ")
+    .replace(/^2nd\s+/i, "2 ")
+    .replace(/^1st\s+/i, "1 ");
+
   // Regex to match:
   // Group 1: Book name with optional numeral prefix (e.g. "Genesis", "1 John", "2 Tim", "Song of Solomon")
   // Group 2: Chapter number (optional)
   // Group 3: Start verse (optional)
   // Group 4: End verse (optional)
-  const refRegex = /^([1-3|I|II|III]?\s*[A-Za-z\s.]+?)(?:\s+(\d+)(?:[\s:.]+(\d+)?(?:\s*[-–—]\s*(\d+))?)?)?$/i;
-  const match = clean.match(refRegex);
+  const refRegex = /^([1-3]?\s*[A-Za-z\s.]+?)(?:\s*(\d+)(?:[\s:.]+(\d+)?(?:\s*[-–—]\s*(\d+))?)?)?$/i;
+  const match = normalizedClean.match(refRegex);
 
   if (!match) return null;
 
-  const rawBook = match[1].trim().toLowerCase().replace(/\./g, "");
+  const rawBook = match[1].trim().toLowerCase().replace(/\./g, "").replace(/\s+/g, " ");
+  const rawBookCompact = rawBook.replace(/\s+/g, "");
   const rawChapter = match[2];
   const rawStartVerse = match[3];
   const rawEndVerse = match[4];
 
   // Match against BIBLE_METADATA
-  const bookMeta = BIBLE_METADATA.find(b => 
-    b.name.toLowerCase() === rawBook || 
-    b.aliases.some(a => a.toLowerCase().replace(/\./g, "") === rawBook)
-  );
+  const bookMeta = BIBLE_METADATA.find(b => {
+    const bName = b.name.toLowerCase();
+    const bNameCompact = bName.replace(/\s+/g, "");
+    if (bName === rawBook || bNameCompact === rawBookCompact) return true;
+    return b.aliases.some(a => {
+      const normA = a.toLowerCase().replace(/\./g, "").trim();
+      return normA === rawBook || normA.replace(/\s+/g, "") === rawBookCompact;
+    });
+  });
 
   if (!bookMeta) return null;
 
@@ -547,7 +578,7 @@ export function parseScriptureLookup(query: string): ScriptureLookupResult | nul
     };
   }
 
-  const startVerseNum = Math.max(1, parseInt(rawStartVerse, 10));
+  const startVerseNum = Math.min(maxVerseInChapter, Math.max(1, parseInt(rawStartVerse, 10)));
 
   // 3. Specific reference (e.g. 'John 1:3') -> exact single verse
   if (!rawEndVerse) {
@@ -565,7 +596,7 @@ export function parseScriptureLookup(query: string): ScriptureLookupResult | nul
   }
 
   // 4. Range (e.g. 'John 3:16-20') -> all verses within that range
-  const endVerseNum = Math.max(startVerseNum, parseInt(rawEndVerse, 10));
+  const endVerseNum = Math.min(maxVerseInChapter, Math.max(startVerseNum, parseInt(rawEndVerse, 10)));
   return {
     isScripture: true,
     canonicalRef: `${bookMeta.name} ${validChapter}:${startVerseNum}-${endVerseNum}`,

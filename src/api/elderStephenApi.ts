@@ -1,4 +1,5 @@
 import { isSpecificScopedRequest } from "../utils/elderSpacing";
+import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -41,7 +42,7 @@ export interface ElderStephenResponse {
  */
 export async function askElderStephen(params: ElderStephenParams): Promise<ElderStephenResponse> {
   try {
-    const response = await fetch("/api/elder-stephen", {
+    const response = await apiFetch("/api/elder-stephen", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -50,7 +51,10 @@ export async function askElderStephen(params: ElderStephenParams): Promise<Elder
     });
 
     if (response.ok) {
-      return await response.json();
+      const parsed = await safeParseResponseJson<ElderStephenResponse>(response);
+      if (parsed && typeof parsed.text === "string" && parsed.text.trim().length > 0) {
+        return parsed;
+      }
     }
   } catch (err) {
     console.warn("[Elder Stephen API] Network or server communication fallback active:", err);

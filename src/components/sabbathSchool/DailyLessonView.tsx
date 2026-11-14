@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { BookOpen, CheckSquare, Sparkles, RefreshCw, Quote, Volume2, Pause, Play, Square, CheckCircle2 } from "lucide-react";
 import { useSabbathSchoolStore } from "../../store/useSabbathSchoolStore";
 import { WeeklyNotebookDrawer } from "./WeeklyNotebookDrawer";
@@ -12,9 +13,11 @@ import { separateLessonAndEgwNotes, reformatParagraphText, getScriptureRegex, fo
 import { useLessonNarrator } from "../../hooks/useLessonNarrator";
 
 export const DailyLessonView: React.FC = () => {
+  const navigate = useNavigate();
   const {
     dailyLessons,
     selectedDayIndex,
+    memoryVerse,
     updateDailyLessonStatus,
     chatWithElderStephen,
     isElderLoading,
@@ -179,14 +182,34 @@ export const DailyLessonView: React.FC = () => {
             <span>{activeDay.label} Exposition</span>
           </div>
 
-          <button
-            id="btn-open-notebook-floating"
-            onClick={() => setIsNotebookOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-750 border border-neutral-700 text-neutral-250 hover:text-white rounded-lg text-xs font-semibold transition shadow-sm w-fit cursor-pointer"
-          >
-            <CheckSquare size={13} className="text-amber-500" />
-            <span>Open Study Notebook</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              id="btn-daily-view-study-deeper"
+              onClick={() => {
+                localStorage.setItem("stba_pending_day_index", String(selectedDayIndex));
+                const textToScan = `${activeDay?.title || ""} ${Array.isArray(activeDay?.content) ? activeDay.content.join(" ") : (activeDay?.content || "")} ${memoryVerse || ""}`;
+                const regex = getScriptureRegex();
+                const match = regex.exec(textToScan);
+                const targetRef = match ? formatStandardReference(match[0]) : "2 Corinthians 2:4";
+                localStorage.setItem("stba_pending_search_ref", targetRef);
+                localStorage.setItem("stba_pending_search_tool", "syllabus");
+                navigate(`/stba?ref=${encodeURIComponent(targetRef)}&tool=syllabus&day=${selectedDayIndex}`);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#C9973A] hover:bg-[#D9A74A] border border-[#F3CF65] text-stone-950 rounded-lg text-xs font-bold transition shadow-sm w-fit cursor-pointer"
+            >
+              <BookOpen size={13} className="text-stone-950" />
+              <span>Study Deeper</span>
+            </button>
+
+            <button
+              id="btn-open-notebook-floating"
+              onClick={() => setIsNotebookOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-750 border border-neutral-700 text-neutral-250 hover:text-white rounded-lg text-xs font-semibold transition shadow-sm w-fit cursor-pointer"
+            >
+              <CheckSquare size={13} className="text-amber-500" />
+              <span>Discipleship Vault</span>
+            </button>
+          </div>
         </div>
 
         <h3 className="text-xl md:text-2xl font-serif font-bold text-white mb-5 tracking-tight relative z-10">
@@ -318,6 +341,7 @@ export const DailyLessonView: React.FC = () => {
       <VerseModal
         isOpen={isVerseModalOpen}
         reference={selectedVerseRef}
+        dayIndex={selectedDayIndex}
         theme={isLight ? "light" : "dark"}
         onClose={() => setIsVerseModalOpen(false)}
       />

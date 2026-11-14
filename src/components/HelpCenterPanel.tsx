@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
 import {
   Headset,
   X,
@@ -119,7 +120,7 @@ export const HelpCenterPanel: React.FC<HelpCenterPanelProps> = ({
     setErrorMessage(null);
 
     try {
-      const response = await fetch("/api/support/ticket", {
+      const response = await apiFetch("/api/support/ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -132,13 +133,13 @@ export const HelpCenterPanel: React.FC<HelpCenterPanelProps> = ({
         })
       });
 
-      const data = await response.json();
+      const data = await safeParseResponseJson<any>(response);
 
-      if (response.ok && data.success) {
+      if (response.ok && data?.success) {
         setSubmittedTicketId(data.ticketId || `TCK-${Date.now().toString().slice(-6)}`);
         setView("success");
       } else {
-        setErrorMessage(data.error || "Unable to send ticket. Please try again.");
+        setErrorMessage(data?.error || "Unable to send ticket. Please try again.");
       }
     } catch (err: any) {
       // Offline fallback: log and confirm

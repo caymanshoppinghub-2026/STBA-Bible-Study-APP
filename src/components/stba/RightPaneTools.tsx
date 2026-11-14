@@ -5,17 +5,28 @@ import {
   CheckCircle2, Download, Play, Pause, RotateCcw, 
   Send, Mic, MicOff, Volume2, VolumeX, Award, Lock, BookMarked, BookmarkPlus, Layers,
   Search, Loader2, History, Sparkles, FolderOpen, FileText, ChevronDown,
-  Calendar, Check, Database, AlertCircle, X, Sliders, Radio, Headphones, Zap, Activity, Copy, BookmarkCheck
+  Calendar, Check, Database, AlertCircle, X, Sliders, Radio, Headphones, Zap, Activity, Copy, BookmarkCheck,
+  ChevronLeft, ExternalLink, PenLine
 } from "lucide-react";
 import { BIBLICAL_NAMES_DICTIONARY, BiblicalName } from "./biblicalNames";
-import { StudyNote, NoteCategory, HighlightItem } from "../../types/notebook";
+import { StudyNote, NoteCategory } from "../../types/notebook";
 import { loadNotes, saveNotes, saveResponseAsNewNote, CATEGORY_META, loadCategories, saveCategories } from "../../data/notebookData";
 import { callElderStephen } from "../../lib/callElderStephen";
 import { formatProperElderSpacing, ensureElderStephenOutlineCompletion } from "../../utils/elderSpacing";
 import { getParallelVerses, getFullChapterVerses, fetchChapterVersesAsync, ParallelVerse } from "./bibleData";
-import { BIBLE_METADATA } from "./bibleMetadata";
-import { supabase } from "../../lib/supabase";
-import { saveNoteToSupabase, deleteNoteFromSupabase, fetchCategoriesFromSupabase, checkCategoriesTable, fetchNotesFromSupabase, checkSupabaseConnection, fetchHighlightsFromSupabase, saveHighlightToSupabase, deleteHighlightFromSupabase } from "../../lib/notebookSync";
+import { BIBLE_METADATA, parseScriptureLookup } from "./bibleMetadata";
+import {
+  supabase,
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  SUPABASE_EDGE_FUNCTION_URL,
+  buildSupabaseLiveWebSocketUrl,
+  getSupabaseEdgeFunctionWsUrl,
+  getUntruncatedSessionToken,
+  type StudyContextQueryParams
+} from "../../lib/supabase";
+import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from "../../lib/apiFetch";
+import { saveNoteToSupabase, deleteNoteFromSupabase, fetchCategoriesFromSupabase, checkCategoriesTable, fetchNotesFromSupabase, checkSupabaseConnection } from "../../lib/notebookSync";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { useElderStephen } from "../../context/ElderStephenContext";
@@ -23,7 +34,8 @@ import { SDABibleCommentary } from "./SDABibleCommentary";
 export { SDABibleCommentary } from "./SDABibleCommentary";
 import { stbaStorage } from "../../lib/storage/indexedDbClient";
 import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
-import { TieredHighlightDropdown, ToolHighlightableWrapper, renderTextWithHighlights } from "./HighlightDropdownMenu";
+import { useSabbathSchoolStore } from "../../store/useSabbathSchoolStore";
+import { getScriptureRegex, formatStandardReference, separateLessonAndEgwNotes } from "../../utils/sabbathUtils";
 
 // Prop definitions
 export interface ToolProps {
@@ -54,6 +66,8 @@ export interface ToolProps {
   currentPassageRef?: string;
   onNavigateTab?: (tab: string) => void;
   setStepChats?: React.Dispatch<React.SetStateAction<{ sender: "user" | "ai"; text: string }[][]>>;
+  autoStartLive?: boolean;
+  onLiveStarted?: () => void;
 }
 
 // Helper to check if a reference belongs to the New Testament
@@ -107,33 +121,48 @@ export interface AutoRetractToolbarProps {
   children: React.ReactNode;
   theme?: "light" | "dark";
   className?: string;
+  forceVisible?: boolean;
+  collapseTrigger?: any;
+  initialDelay?: number;
 }
 
 export const AutoRetractToolbar: React.FC<AutoRetractToolbarProps> = ({
   children,
   theme = "light",
-  className = ""
+  className = "",
+  forceVisible = false,
+  collapseTrigger,
+  initialDelay = 4000
 }) => {
   const [isVisible, setIsVisible] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const resetTimer = (delay = 4000) => {
+  const resetTimer = (delay = initialDelay) => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    if (forceVisible) {
+      setIsVisible(true);
+      return;
+    }
     timerRef.current = setTimeout(() => {
-      if (!isHovered) {
+      if (!isHovered && !forceVisible) {
         setIsVisible(false);
       }
     }, delay);
   };
 
   useEffect(() => {
-    // Show initially so user discovers it, then auto-retract after 4s of inactivity
-    resetTimer(4000);
+    if (forceVisible) {
+      setIsVisible(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      return;
+    }
+    // Show initially so user discovers it, then auto-retract after initialDelay of inactivity
+    resetTimer(initialDelay);
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [forceVisible, collapseTrigger, initialDelay]);
 
   const handleMouseEnter = () => {
     setIsHovered(true);
@@ -487,7 +516,7 @@ async function syncElderStephenNotesToNotebook(userKey: string, scriptureRef: st
       .map(n => `### ${n.sender === "elder" ? "Elder Stephen Guidance" : "Berean Inquiry"}${n.badge ? ` (${n.badge})` : ""}\n\n${n.text}`)
       .join("\n\n---\n\n");
 
-    await fetch("/api/user/study-notebook", {
+    const response = await apiFetch("/api/user/study-notebook", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -498,9 +527,17 @@ async function syncElderStephenNotesToNotebook(userKey: string, scriptureRef: st
         notes: notes.map(n => ({ sender: n.sender, text: n.text, badge: n.badge, id: n.id }))
       })
     });
+    if (isAuthRedirectResponse(response)) {
+      console.info(`[Elder Stephen] Auth bridge redirect intercepted for ${scriptureRef}; notes remain preserved locally.`);
+      return;
+    }
+    if (!response.ok) {
+      console.info(`[Elder Stephen] Notebook sync skipped (status ${response.status}) for ${scriptureRef}; notes preserved locally.`);
+      return;
+    }
     console.log(`[Elder Stephen] Successfully synced notes for ${scriptureRef} to server study notebook.`);
-  } catch (err) {
-    console.warn(`[Elder Stephen] Notebook sync notice:`, err);
+  } catch {
+    // Background notebook sync is non-blocking; notes remain persisted locally in localStorage & memory
   }
 }
 
@@ -513,7 +550,9 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   clearStephenPendingPrompt,
   currentPassageRef,
   onReferenceChange,
-  onNavigateTab
+  onNavigateTab,
+  autoStartLive,
+  onLiveStarted
 }) => {
   const activeRef = (report?.reference || currentPassageRef || "Revelation 14:6-12").trim();
   const { isBottomBarVisible } = useApp();
@@ -569,14 +608,32 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastActiveRefRef = useRef<string>(activeRef);
 
-  // 🌟 Dynamic Gemini Live Interactive Mode States
+  // 🌟 Dynamic Gemini Live Interactive Mode States (gemini-3.8-live)
   const [isDynamicLiveActive, setIsDynamicLiveActive] = useState<boolean>(false);
   const [liveState, setLiveState] = useState<"idle" | "connecting" | "ready" | "recording" | "playing" | "error">("idle");
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [liveModelName, setLiveModelName] = useState<string>("gemini-3.8-live");
   const [isMicMuted, setIsMicMuted] = useState<boolean>(false);
   const [waveHeights, setWaveHeights] = useState<number[]>([8, 14, 20, 12, 18, 10, 16, 10]);
   const [showPassageSwitcher, setShowPassageSwitcher] = useState<boolean>(false);
   const [switcherInput, setSwitcherInput] = useState<string>("");
+
+  // Refs for audio callbacks to avoid stale closures
+  const isMicMutedRef = useRef<boolean>(false);
+  const liveStateRef = useRef<"idle" | "connecting" | "ready" | "recording" | "playing" | "error">("idle");
+  const isDynamicLiveActiveRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    isMicMutedRef.current = isMicMuted;
+  }, [isMicMuted]);
+
+  useEffect(() => {
+    liveStateRef.current = liveState;
+  }, [liveState]);
+
+  useEffect(() => {
+    isDynamicLiveActiveRef.current = isDynamicLiveActive;
+  }, [isDynamicLiveActive]);
 
   // Saved note tracking and live interactive response box state
   const [savedNoteIds, setSavedNoteIds] = useState<Set<string>>(new Set());
@@ -592,8 +649,13 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   ).trim();
 
   const liveWsRef = useRef<WebSocket | null>(null);
+  const liveSessionRunIdRef = useRef<number>(0);
+  const isMountedRef = useRef<boolean>(true);
+  const liveRetryTimerRef = useRef<any>(null);
   const clientHeartbeatTimerRef = useRef<any>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  // Separate 16kHz input and 24kHz output AudioContexts per Gemini Live API guidelines
+  const inputAudioCtxRef = useRef<AudioContext | null>(null);
+  const outputAudioCtxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const activeNodesRef = useRef<AudioBufferSourceNode[]>([]);
@@ -670,18 +732,18 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     });
     activeNodesRef.current = [];
     isElderSpeakingRef.current = false;
-    if (audioCtxRef.current) {
-      nextStartTimeRef.current = audioCtxRef.current.currentTime;
+    if (outputAudioCtxRef.current) {
+      nextStartTimeRef.current = outputAudioCtxRef.current.currentTime;
     }
   };
 
   const playPCMChunk = (base64Audio: string) => {
     try {
-      if (!audioCtxRef.current) {
+      if (!outputAudioCtxRef.current) {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        audioCtxRef.current = new AudioContextClass({ sampleRate: 24000 });
+        outputAudioCtxRef.current = new AudioContextClass({ sampleRate: 24000 });
       }
-      const ctx = audioCtxRef.current;
+      const ctx = outputAudioCtxRef.current;
       if (ctx.state === "suspended") {
         ctx.resume();
       }
@@ -713,18 +775,20 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       activeNodesRef.current.push(source);
       setLiveState("playing");
       isElderSpeakingRef.current = true;
+      setWaveHeights(Array.from({ length: 8 }, () => Math.floor(Math.random() * 14) + 8));
 
       source.onended = () => {
         activeNodesRef.current = activeNodesRef.current.filter(n => n !== source);
-        if (activeNodesRef.current.length === 0 && (!audioCtxRef.current || audioCtxRef.current.currentTime >= nextStartTimeRef.current - 0.05)) {
+        if (activeNodesRef.current.length === 0 && (!outputAudioCtxRef.current || outputAudioCtxRef.current.currentTime >= nextStartTimeRef.current - 0.05)) {
           setLiveState("ready");
+          setWaveHeights([8, 12, 16, 10, 14, 8, 12, 8]);
           lastElderSpeechEndTimeRef.current = Date.now();
-          // 500ms echo decay buffer before allowing user microphone input
+          // 400ms echo decay buffer before allowing user microphone input
           setTimeout(() => {
             if (activeNodesRef.current.length === 0) {
               isElderSpeakingRef.current = false;
             }
-          }, 500);
+          }, 400);
         }
       };
     } catch (err) {
@@ -766,7 +830,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
           sender: "elder",
           text: fullText,
           timestamp: Date.now(),
-          badge: "Live Interactive Session"
+          badge: "Gemini Live Session"
         };
         return [...prev, newMsg];
       }
@@ -781,11 +845,11 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
 
   const startMicCapture = async () => {
     try {
-      if (!audioCtxRef.current) {
+      if (!inputAudioCtxRef.current) {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        audioCtxRef.current = new AudioCtx({ sampleRate: 16000 });
+        inputAudioCtxRef.current = new AudioCtx({ sampleRate: 16000 });
       }
-      const ctx = audioCtxRef.current;
+      const ctx = inputAudioCtxRef.current;
       if (ctx.state === "suspended") {
         await ctx.resume();
       }
@@ -795,7 +859,8 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
           channelCount: 1,
           sampleRate: 16000,
           echoCancellation: true,
-          noiseSuppression: true
+          noiseSuppression: true,
+          autoGainControl: true
         }
       });
       micStreamRef.current = stream;
@@ -805,7 +870,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
-        if (isMicMuted || isElderSpeakingRef.current) {
+        if (isMicMutedRef.current || isElderSpeakingRef.current) {
           // Half-duplex echo barrier: do not send audio while Elder Stephen is playing
           return;
         }
@@ -823,15 +888,15 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
         });
         setWaveHeights(heights);
 
-        if (rms > 0.02) {
-          if (liveState !== "recording" && liveState !== "playing") {
+        if (rms > 0.018) {
+          if (liveStateRef.current !== "recording" && liveStateRef.current !== "playing") {
             setLiveState("recording");
           }
-        } else if (liveState === "recording") {
+        } else if (liveStateRef.current === "recording") {
           setLiveState("ready");
         }
 
-        // Send 16-bit PCM chunk over WebSocket only when user is speaking
+        // Send 16-bit 16kHz PCM chunk over WebSocket to gemini-3.8-live
         if (liveWsRef.current && liveWsRef.current.readyState === WebSocket.OPEN) {
           const pcmBuffer = floatTo16BitPCM(inputData);
           const base64Audio = arrayBufferToBase64(pcmBuffer);
@@ -841,59 +906,9 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
 
       source.connect(processor);
       processor.connect(ctx.destination);
-
-      // Local SpeechRecognition fallback (for text display in response area)
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition && !fallbackSpeechRecRef.current) {
-        try {
-          const rec = new SpeechRecognition();
-          rec.continuous = true;
-          rec.interimResults = true;
-          rec.lang = "en-US";
-          rec.onresult = (event: any) => {
-            if (isElderSpeakingRef.current) return;
-            let finalTranscript = "";
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-              if (event.results[i].isFinal) {
-                finalTranscript += event.results[i][0].transcript;
-              }
-            }
-            if (finalTranscript.trim()) {
-              const text = finalTranscript.trim();
-              if (isEchoOfElderStephen(text)) {
-                console.log("[STBA Echo Suppressed in startMicCapture]:", text);
-                return;
-              }
-              // Only record in response area, NEVER in prompt text box:
-              endLiveReplyAccumulation();
-              setMessages(prev => {
-                const last = prev[prev.length - 1];
-                if (last && last.sender === "user" && (last.text.toLowerCase() === text.toLowerCase() || last.text.toLowerCase().includes(text.toLowerCase().slice(0, 15)))) {
-                  return prev;
-                }
-                return [
-                  ...prev,
-                  {
-                    id: `user-speech-${Date.now()}`,
-                    sender: "user",
-                    text,
-                    timestamp: Date.now(),
-                    badge: "Spoken Response"
-                  }
-                ];
-              });
-            }
-          };
-          rec.onerror = () => {};
-          rec.start();
-          fallbackSpeechRecRef.current = rec;
-        } catch (e) {
-          console.warn("Local speech recognition notice:", e);
-        }
-      }
     } catch (err: any) {
       console.warn("Microphone access error in Dynamic Live Mode:", err);
-      setLiveError("Microphone access denied or unavailable.");
+      setLiveError("Microphone permission denied or unavailable. You can still interact in real-time by typing below.");
     }
   };
 
@@ -1173,135 +1188,372 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       });
   };
 
-  const startDynamicLiveSession = () => {
+  /**
+   * Converts the Supabase HTTP/HTTPS Edge Function endpoint into a valid `wss://`
+   * WebSocket address with fully URL-encoded study context query parameters.
+   * Always resolves against the absolute SUPABASE_URL (VITE_SUPABASE_URL) and never makes a relative request.
+   */
+  const buildRightPaneWebSocketUrl = (
+    contextParams: StudyContextQueryParams,
+    httpEndpoint: string = SUPABASE_EDGE_FUNCTION_URL || `${SUPABASE_URL}/functions/v1/gemini-live-relay`
+  ): string => {
+    return buildSupabaseLiveWebSocketUrl(
+      contextParams,
+      httpEndpoint || `${SUPABASE_URL}/functions/v1/gemini-live-relay`
+    );
+  };
+
+  const startDynamicLiveSession = async () => {
+    // Tear down any previous socket/timers quietly before launching a new session
+    if (liveRetryTimerRef.current) {
+      clearTimeout(liveRetryTimerRef.current);
+      liveRetryTimerRef.current = null;
+    }
+    if (clientHeartbeatTimerRef.current) {
+      clearInterval(clientHeartbeatTimerRef.current);
+      clientHeartbeatTimerRef.current = null;
+    }
+    if (liveWsRef.current) {
+      const prevWs = liveWsRef.current;
+      liveWsRef.current = null;
+      prevWs.onopen = null;
+      prevWs.onmessage = null;
+      prevWs.onerror = null;
+      prevWs.onclose = null;
+      try {
+        if (prevWs.readyState === WebSocket.OPEN || prevWs.readyState === WebSocket.CONNECTING) {
+          prevWs.close(1000, "Replacing session");
+        }
+      } catch (e) {}
+    }
+
+    const sessionRunId = ++liveSessionRunIdRef.current;
     setLiveError(null);
     setLiveState("connecting");
     setIsDynamicLiveActive(true);
     
     const userName = userProfile?.name || "Disciple";
+    const fullPassageText = (report?.text || "").trim();
+    const boundedQueryPassage = fullPassageText.length > 400 ? fullPassageText.slice(0, 400) : fullPassageText;
+    const boundedTopic = ((report?.topic || activeRef) || "").trim().slice(0, 180);
+
+    const elderStephenSystemInstruction = [
+      `You are Elder Stephen, an exegetical, Seventh-day Adventist historical method mentor for live interactive Bible study in the "Study To Be Approved" (STBA) ecosystem.`,
+      `Your persona is a warm, wise, patient, and reverent Seventh-day Adventist pastor and biblical scholar who guides ${userName} using the historic Seventh-day Adventist historical-grammatical and historicist method of biblical interpretation.`,
+      `Core Hermeneutical & Exegetical Commitments:`,
+      `1. Sola Scriptura & Tota Scriptura: The Bible is its own expositor ("Scripture interprets Scripture", Isaiah 28:9-10; 2 Timothy 2:15).`,
+      `2. Historical-Grammatical Exegesis: Uncover the original historical setting, literary context, authorial intent, and key Hebrew/Aramaic/Greek lexical meanings before drawing doctrinal or devotional conclusions.`,
+      `3. Historicist Prophetic & Sanctuary Framework: Anchor prophetic and theological passages in the Seventh-day Adventist historicist hermeneutic, the Sanctuary message, the Three Angels' Messages (Revelation 14:6-12), the seventh-day Sabbath, and the Great Controversy theme centering on Jesus Christ.`,
+      `4. Live Interactive Mentorship: Guide ${userName} through active recall, careful textual observation, and Socratic dialogue on ${activeRef}${fullPassageText ? ` ("${fullPassageText}")` : ""}${report?.topic ? ` — Topic: ${report.topic}` : ""}. Keep each spoken turn warm, conversational, and concise (1-3 focused sentences) and invite ${userName} to respond.`
+    ].join("\n");
+
+    const studyContext: StudyContextQueryParams = {
+      mode: "study",
+      model: "gemini-3.8-live",
+      persona: "Elder Stephen",
+      reference: activeRef,
+      passageText: boundedQueryPassage,
+      topic: boundedTopic,
+      userName
+    };
+
+    const wsUrl = buildRightPaneWebSocketUrl(
+      studyContext,
+      SUPABASE_EDGE_FUNCTION_URL || `${SUPABASE_URL}/functions/v1/gemini-live-relay`
+    );
+    console.log("[STBA Live] VITE_SUPABASE_URL:", SUPABASE_URL, "| gemini-live-relay WS URL:", wsUrl);
+    const hasCustomEdgeFunction = Boolean(wsUrl && /^wss?:\/\//i.test(wsUrl));
+    const encodedLocalQuery = Object.entries(studyContext)
+      .filter(([, val]) => val !== undefined && val !== null && String(val).trim() !== "")
+      .map(([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(val).trim())}`)
+      .join("&");
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/api/study/live?mode=study&reference=${encodeURIComponent(activeRef)}&passageText=${encodeURIComponent(report?.text || "")}&topic=${encodeURIComponent(report?.topic || activeRef)}&userName=${encodeURIComponent(userName)}`;
+    const localLiveWsUrl = `${protocol}//${host}/api/study/live${encodedLocalQuery ? `?${encodedLocalQuery}` : ""}`;
 
-    try {
-      const ws = new WebSocket(wsUrl);
-      liveWsRef.current = ws;
+    // Retrieve the user's session access token for Edge Function auth (or setup metadata on local gateway)
+    let accessToken = await getUntruncatedSessionToken();
+    if (!accessToken) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        accessToken = session?.access_token
+          ? String(session.access_token).trim()
+          : SUPABASE_PUBLISHABLE_KEY;
+      } catch {
+        accessToken = SUPABASE_PUBLISHABLE_KEY;
+      }
+    }
 
-      ws.onopen = () => {
-        console.log("[STBA Live] WebSocket connected for Dynamic Interactive Mode on", activeRef);
-        
-        // Client-side keepalive ping to maintain active connection indefinitely
-        if (clientHeartbeatTimerRef.current) clearInterval(clientHeartbeatTimerRef.current);
-        clientHeartbeatTimerRef.current = setInterval(() => {
-          if (liveWsRef.current && liveWsRef.current.readyState === WebSocket.OPEN) {
-            try {
-              liveWsRef.current.send(JSON.stringify({ ping: true }));
-            } catch (e) {}
-          }
-        }, 20000);
-      };
+    if (!isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
+      return;
+    }
 
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-
-          if (msg.heartbeat) {
-            // Server heartbeat acknowledged; keeps connection indefinitely active
-            return;
-          }
-          
-          if (msg.ready) {
-            setLiveState("ready");
-            startMicCapture();
-            
-            // Directly start conversational engagement without displaying any pop-up or user speech bubble
-            const directStartText = `Hello Elder Stephen. I am ready for our interactive Bible study on ${activeRef}. Please begin our conversation directly as a gentle, wise teacher.`;
-            ws.send(JSON.stringify({ text: directStartText }));
-            currentLiveReplyIdRef.current = `elder-live-${Date.now()}`;
-          }
-
-          if (msg.userTranscript) {
-            const userSpeech = msg.userTranscript.trim();
-            if (userSpeech) {
-              if (isElderSpeakingRef.current || isEchoOfElderStephen(userSpeech)) {
-                console.log("[STBA Echo Suppressed on WS userTranscript]:", userSpeech);
-                return;
+    const geminiLiveSessionPayload = {
+      type: "setup",
+      model: "models/gemini-3.8-live",
+      persona: "Elder Stephen",
+      reference: activeRef,
+      passageText: fullPassageText,
+      topic: report?.topic || activeRef,
+      accessToken: accessToken || undefined,
+      systemInstruction: elderStephenSystemInstruction,
+      setup: {
+        model: "models/gemini-3.8-live",
+        systemInstruction: {
+          role: "system",
+          parts: [{ text: elderStephenSystemInstruction }]
+        },
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: "Charon"
               }
-              // Do NOT call setInputText! Text belongs ONLY in response area:
-              endLiveReplyAccumulation();
-              setMessages(prev => {
-                const last = prev[prev.length - 1];
-                if (last && last.sender === "user" && (last.text.toLowerCase() === userSpeech.toLowerCase() || last.text.toLowerCase().includes(userSpeech.toLowerCase().slice(0, 15)))) {
-                  return prev;
-                }
-                return [
-                  ...prev,
-                  {
-                    id: `user-speech-${Date.now()}`,
-                    sender: "user",
-                    text: userSpeech,
-                    timestamp: Date.now(),
-                    badge: "Spoken Response"
-                  }
-                ];
-              });
             }
           }
-
-          if (msg.audio) {
-            playPCMChunk(msg.audio);
-          }
-
-          if (msg.text) {
-            appendLiveReplyChunk(msg.text);
-          }
-
-          if (msg.transcription) {
-            appendLiveReplyChunk(msg.transcription);
-          }
-
-          if (msg.turnComplete) {
-            endLiveReplyAccumulation();
-            setLiveState("ready");
-          }
-
-          if (msg.interrupted) {
-            clearPlaybackQueue();
-            endLiveReplyAccumulation();
-            setLiveState("ready");
-          }
-
-          if (msg.closed) {
-            cleanupLiveSession(false);
-          }
-
-          if (msg.error) {
-            console.warn("[STBA Live Notice]", msg.error);
-            startBrowserVoiceSimulation();
-          }
-        } catch (e) {
-          console.warn("WebSocket parse error:", e);
         }
-      };
+      },
+      config: {
+        model: "gemini-3.8-live",
+        responseModalities: ["AUDIO"],
+        systemInstruction: elderStephenSystemInstruction
+      }
+    };
 
-      ws.onerror = (e) => {
-        console.warn("Live WebSocket connection error, transitioning to browser voice studio simulation:", e);
+    const connectLiveSocket = (targetUrl: string, allowLocalFallback: boolean, retryAttempt: number = 0) => {
+      if (!isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
+        return;
+      }
+      const isSameOriginLocal = targetUrl === localLiveWsUrl;
+      let isDisposed = false;
+
+      try {
+        // Only send Sec-WebSocket-Protocol to external Supabase Edge Functions; same-origin /api/study/live uses cookies + JSON setup
+        const ws = !isSameOriginLocal && accessToken
+          ? new WebSocket(targetUrl, [accessToken])
+          : new WebSocket(targetUrl);
+        liveWsRef.current = ws;
+        let hasOpened = false;
+        let errorHandled = false;
+
+        const disposeSocketHandlers = () => {
+          isDisposed = true;
+          ws.onopen = null;
+          ws.onmessage = null;
+          ws.onerror = null;
+          ws.onclose = null;
+        };
+
+        const transitionToFallbackOrSimulation = (reasonEvent?: any) => {
+          if (errorHandled || isDisposed || !isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
+            return;
+          }
+          errorHandled = true;
+          disposeSocketHandlers();
+          if (liveWsRef.current === ws) {
+            liveWsRef.current = null;
+          }
+          try {
+            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+              ws.close();
+            }
+          } catch (_) {}
+
+          if (!hasOpened && allowLocalFallback && targetUrl !== localLiveWsUrl) {
+            connectLiveSocket(localLiveWsUrl, false, 0);
+            return;
+          }
+
+          if (!hasOpened && isSameOriginLocal && retryAttempt < 1) {
+            liveRetryTimerRef.current = setTimeout(() => {
+              liveRetryTimerRef.current = null;
+              if (isMountedRef.current && sessionRunId === liveSessionRunIdRef.current) {
+                connectLiveSocket(localLiveWsUrl, false, retryAttempt + 1);
+              }
+            }, 350);
+            return;
+          }
+
+          console.info("[STBA Live] Live WebSocket unavailable; transitioning to browser voice studio simulation.");
+          startBrowserVoiceSimulation();
+        };
+
+        ws.onopen = () => {
+          if (isDisposed || !isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
+            disposeSocketHandlers();
+            try { ws.close(); } catch (_) {}
+            return;
+          }
+          hasOpened = true;
+          console.log("[STBA Live] WebSocket connected for Dynamic Interactive Mode on", activeRef);
+
+          // Send Gemini Live API session setup payload with Elder Stephen's exegetical SDA historical method mentor persona
+          try {
+            ws.send(JSON.stringify(geminiLiveSessionPayload));
+          } catch (setupErr) {
+            console.warn("[STBA Live] Failed to dispatch initial session setup payload:", setupErr);
+          }
+          
+          // Client-side keepalive ping to maintain active connection indefinitely
+          if (clientHeartbeatTimerRef.current) clearInterval(clientHeartbeatTimerRef.current);
+          clientHeartbeatTimerRef.current = setInterval(() => {
+            if (liveWsRef.current && liveWsRef.current.readyState === WebSocket.OPEN) {
+              try {
+                liveWsRef.current.send(JSON.stringify({ ping: true }));
+              } catch (e) {}
+            }
+          }, 20000);
+        };
+
+        ws.onmessage = (event) => {
+          if (isDisposed || !isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) return;
+          try {
+            const msg = JSON.parse(event.data);
+
+            if (msg.heartbeat || msg.setupAck) {
+              return;
+            }
+            
+            if (msg.ready) {
+              if (msg.model) setLiveModelName(msg.model);
+              setLiveState("ready");
+              // Pre-initialize output 24kHz AudioContext on user gesture / session ready
+              if (!outputAudioCtxRef.current) {
+                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                outputAudioCtxRef.current = new AudioContextClass({ sampleRate: 24000 });
+              }
+              if (outputAudioCtxRef.current.state === "suspended") {
+                outputAudioCtxRef.current.resume().catch(() => {});
+              }
+              startMicCapture();
+              
+              // Directly start conversational engagement without displaying any pop-up or user speech bubble
+              const directStartText = `Hello Elder Stephen. I am ready for our interactive Bible study on ${activeRef}. Please begin our conversation directly as a gentle, wise teacher.`;
+              ws.send(JSON.stringify({ text: directStartText }));
+              currentLiveReplyIdRef.current = `elder-live-${Date.now()}`;
+            }
+
+            if (msg.userTranscript) {
+              const userSpeech = msg.userTranscript.trim();
+              if (userSpeech) {
+                if (isElderSpeakingRef.current || isEchoOfElderStephen(userSpeech)) {
+                  console.log("[STBA Echo Suppressed on WS userTranscript]:", userSpeech);
+                  return;
+                }
+                endLiveReplyAccumulation();
+                setMessages(prev => {
+                  const last = prev[prev.length - 1];
+                  if (last && last.sender === "user") {
+                    if (Date.now() - last.timestamp < 5000) {
+                      const combined = last.text.endsWith(" ") || userSpeech.startsWith(" ")
+                        ? `${last.text}${userSpeech}`
+                        : `${last.text} ${userSpeech}`;
+                      const copy = [...prev];
+                      copy[copy.length - 1] = {
+                        ...last,
+                        text: combined.trim(),
+                        timestamp: Date.now()
+                      };
+                      return copy;
+                    }
+                  }
+                  return [
+                    ...prev,
+                    {
+                      id: `user-speech-${Date.now()}`,
+                      sender: "user",
+                      text: userSpeech,
+                      timestamp: Date.now(),
+                      badge: "Spoken Response"
+                    }
+                  ];
+                });
+                scrollToBottom();
+              }
+            }
+
+            if (msg.audio) {
+              playPCMChunk(msg.audio);
+            }
+
+            if (msg.text) {
+              appendLiveReplyChunk(msg.text);
+            }
+
+            if (msg.transcription) {
+              appendLiveReplyChunk(msg.transcription);
+            }
+
+            if (msg.turnComplete) {
+              endLiveReplyAccumulation();
+              if (activeNodesRef.current.length === 0) {
+                setLiveState("ready");
+              }
+            }
+
+            if (msg.interrupted) {
+              clearPlaybackQueue();
+              endLiveReplyAccumulation();
+              setLiveState("ready");
+            }
+
+            if (msg.closed) {
+              cleanupLiveSession(false);
+            }
+
+            if (msg.error) {
+              console.warn("[STBA Live Notice]", msg.error);
+              transitionToFallbackOrSimulation(msg.error);
+            }
+          } catch (e) {
+            console.warn("WebSocket parse error:", e);
+          }
+        };
+
+        ws.onerror = (e) => {
+          transitionToFallbackOrSimulation(e);
+        };
+
+        ws.onclose = (ev) => {
+          if (isDisposed || !isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
+            return;
+          }
+          if (!hasOpened && !errorHandled) {
+            transitionToFallbackOrSimulation(ev);
+            return;
+          }
+          console.log("[STBA Live] Live WebSocket closed.");
+        };
+
+      } catch (err: any) {
+        if (!isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) return;
+        if (allowLocalFallback && targetUrl !== localLiveWsUrl) {
+          connectLiveSocket(localLiveWsUrl, false, 0);
+          return;
+        }
+        console.warn("Failed initializing Live WebSocket:", err);
         startBrowserVoiceSimulation();
-      };
+      }
+    };
 
-      ws.onclose = () => {
-        console.log("[STBA Live] Live WebSocket closed.");
-      };
-
-    } catch (err: any) {
-      console.warn("Failed initializing Live WebSocket:", err);
-      startBrowserVoiceSimulation();
+    if (hasCustomEdgeFunction && wsUrl) {
+      connectLiveSocket(wsUrl, true, 0);
+    } else {
+      connectLiveSocket(localLiveWsUrl, false, 0);
     }
   };
 
   const cleanupLiveSession = (notifyToast: boolean = true) => {
+    liveSessionRunIdRef.current += 1;
     setIsDynamicLiveActive(false);
     setLiveState("idle");
+    setLiveError(null);
+
+    if (liveRetryTimerRef.current) {
+      clearTimeout(liveRetryTimerRef.current);
+      liveRetryTimerRef.current = null;
+    }
     
     if (clientHeartbeatTimerRef.current) {
       clearInterval(clientHeartbeatTimerRef.current);
@@ -1309,10 +1561,17 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     }
 
     if (liveWsRef.current) {
-      try {
-        liveWsRef.current.close();
-      } catch (e) {}
+      const ws = liveWsRef.current;
       liveWsRef.current = null;
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      try {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close(1000, "Session ended");
+        }
+      } catch (e) {}
     }
 
     if (processorRef.current) {
@@ -1354,9 +1613,23 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     }
   };
 
+  // Auto-start Live Interactive session when triggered from Bible Study Workspace header button
+  useEffect(() => {
+    if (autoStartLive) {
+      if (!isDynamicLiveActive) {
+        startDynamicLiveSession();
+      }
+      if (onLiveStarted) {
+        onLiveStarted();
+      }
+    }
+  }, [autoStartLive]);
+
   // Clean up on component unmount
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       cleanupLiveSession(false);
     };
   }, []);
@@ -1597,7 +1870,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       sender: "user",
       text: textToSubmit,
       timestamp: Date.now(),
-      badge: customBadge || "User Question"
+      badge: customBadge || (isDynamicLiveActive ? "Live Dialog Input" : "User Question")
     };
 
     setMessages(prev => [...prev, userItem]);
@@ -1607,9 +1880,24 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       passage: activeRef,
       topic: report?.topic || `Study: ${activeRef}`
     });
-    setLoading(true);
     handleStopSpeech();
     scrollToBottom();
+
+    // If Gemini Live WebSocket is active and open, route directly through gemini-3.8-live for real-time voice & text response
+    if (isDynamicLiveActive && liveWsRef.current && liveWsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        clearPlaybackQueue();
+        endLiveReplyAccumulation();
+        currentLiveReplyIdRef.current = `elder-live-${Date.now()}`;
+        setLiveState("playing");
+        liveWsRef.current.send(JSON.stringify({ text: textToSubmit }));
+        return;
+      } catch (wsErr) {
+        console.warn("Live WebSocket send fallback:", wsErr);
+      }
+    }
+
+    setLoading(true);
 
     try {
       const payload = {
@@ -2000,7 +2288,7 @@ ${formattedNotes}
       className="flex flex-col h-full overflow-hidden"
     >
       {/* Top Persistent Session Context Header with Auto-Retract */}
-      <AutoRetractToolbar theme={theme}>
+      <AutoRetractToolbar theme={theme} forceVisible={isDynamicLiveActive}>
         <div className={`px-3 sm:px-4 py-2 border-b flex items-center justify-between gap-2 shrink-0 ${
           theme === "dark" ? "bg-[#161B22] border-[#2C3545]" : "bg-[#F9F7F3] border-[#E8E2D8]"
         }`}>
@@ -2036,6 +2324,7 @@ ${formattedNotes}
           <div className="flex items-center gap-1.5 shrink-0">
             {/* Interactive Mode Toggle Button */}
             <button
+              id="btn-elder-stephen-interactive-header"
               onClick={handleToggleDynamicInteractiveMode}
               className={`min-h-[40px] px-2.5 py-1.5 text-[11px] font-mono rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 touch-manipulation active:scale-95 ${
                 isDynamicLiveActive
@@ -2044,17 +2333,17 @@ ${formattedNotes}
                     ? "bg-[#1E2530] border-amber-500/40 text-amber-400 hover:bg-[#252E3C]"
                     : "bg-amber-50 border-[#C9973A] text-[#8C6219] hover:bg-amber-100/80 shadow-2xs"
               }`}
-              title={isDynamicLiveActive ? "Exit Live Interactive Session" : "Start Live Interactive Session with Elder Stephen"}
+              title={isDynamicLiveActive ? "Exit Live Interactive Session" : "Start Live Interactive Session with Elder Stephen (gemini-3.8-live)"}
             >
               {isDynamicLiveActive ? (
                 <>
                   <Radio className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-                  <span className="hidden sm:inline font-bold">Live Session</span>
+                  <span className="font-bold">Live Session</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                  <span className="hidden sm:inline">Interactive</span>
+                  <span>Interactive</span>
                 </>
               )}
             </button>
@@ -2094,10 +2383,7 @@ ${formattedNotes}
               <span className="hidden sm:inline">.md</span>
             </button>
 
-            {/* Mobile-Responsive Erase Button:
-                - Easily tappable on mobile devices (min 44x44px touch target)
-                - Each tap removes the last note in sequence, just as it does on desktop
-            */}
+            {/* Mobile-Responsive Erase Button */}
             <button
               onClick={handleEraseLastNote}
               disabled={messages.length === 0}
@@ -2216,57 +2502,158 @@ ${formattedNotes}
         </div>
       )}
 
-      {/* Sleek, Non-Intrusive Live Interactive Session Bar */}
+      {/* Gemini Live Interactive Session Studio Card (gemini-3.8-live) */}
       {isDynamicLiveActive && (
-        <div className={`px-3 py-1.5 border-b flex items-center justify-between text-xs font-mono shrink-0 select-none ${
-          theme === "dark" ? "bg-[#101826] border-[#1E2D44] text-amber-400" : "bg-amber-50/80 border-amber-200 text-amber-800"
-        }`}>
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="flex h-2 w-2 relative shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span className="font-bold uppercase tracking-wider text-[10px] text-emerald-500 shrink-0">Live Oral Session</span>
-            <span className="text-[10px] opacity-75 truncate hidden sm:inline">• {activeRef}</span>
-            <span className="text-[10px] font-sans italic opacity-85 truncate">
-              {liveState === "playing" || isSpeaking
-                ? "— Elder Stephen is speaking..."
-                : liveState === "recording"
-                  ? "— Listening to you speak..."
-                  : "— Speak into mic or type below"}
-            </span>
+        <div
+          id="elder-stephen-gemini-live-studio"
+          className={`mx-3 mt-2.5 p-3 sm:p-3.5 rounded-xl border transition-all shrink-0 select-none shadow-md ${
+            theme === "dark"
+              ? "bg-gradient-to-br from-[#0F172A] via-[#131D31] to-[#0D1322] border-emerald-500/40 text-stone-100"
+              : "bg-gradient-to-br from-[#FAF6EE] via-[#FFFDF9] to-[#F3EDE0] border-[#C9973A] text-stone-900"
+          }`}
+        >
+          {/* Top row: Live status & waveform & model badge */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-current/10">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="flex h-2.5 w-2.5 relative shrink-0">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  liveState === "playing" || isSpeaking
+                    ? "bg-amber-400"
+                    : liveState === "recording"
+                      ? "bg-rose-400"
+                      : "bg-emerald-400"
+                }`}></span>
+                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                  liveState === "playing" || isSpeaking
+                    ? "bg-amber-500"
+                    : liveState === "recording"
+                      ? "bg-rose-500"
+                      : "bg-emerald-500"
+                }`}></span>
+              </span>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-extrabold uppercase tracking-wider text-[10px] text-emerald-500">
+                    Elder Stephen Live Dialog
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-[#C9973A]/20 text-[#C9973A] border border-[#C9973A]/40">
+                    {liveModelName}
+                  </span>
+                </div>
+                <span className="text-[10px] font-sans opacity-80 truncate">
+                  {liveState === "connecting"
+                    ? "Initializing Gemini Live bidirectional voice stream..."
+                    : liveState === "playing" || isSpeaking
+                      ? `Elder Stephen is speaking on ${activeRef}...`
+                      : liveState === "recording"
+                        ? "Listening to your voice (16kHz PCM stream)..."
+                        : `Ready for real-time voice or text dialogue on ${activeRef}`}
+                </span>
+              </div>
+            </div>
+
+            {/* Real-time Audio Waveform Visualizer */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-end gap-0.5 h-5 px-2 py-0.5 rounded bg-black/20 border border-white/10" title="Real-Time Audio Stream">
+                {waveHeights.map((h, i) => (
+                  <div
+                    key={i}
+                    className={`w-1 rounded-full transition-all duration-75 ${
+                      liveState === "playing" || isSpeaking
+                        ? "bg-amber-400"
+                        : liveState === "recording"
+                          ? "bg-emerald-400"
+                          : "bg-stone-500/60"
+                    }`}
+                    style={{ height: `${Math.max(4, Math.min(18, h))}px` }}
+                  />
+                ))}
+              </div>
+
+              <button
+                onClick={() => setIsMicMuted(!isMicMuted)}
+                type="button"
+                className={`px-2 py-1 rounded-lg border transition-colors cursor-pointer text-[10px] font-mono font-bold flex items-center gap-1 ${
+                  isMicMuted
+                    ? "bg-rose-500/20 border-rose-500/50 text-rose-400"
+                    : "bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25"
+                }`}
+                title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
+              >
+                {isMicMuted ? <MicOff className="w-3 h-3 text-rose-400" /> : <Mic className="w-3 h-3 text-emerald-400" />}
+                <span>{isMicMuted ? "Muted" : "Mic On"}</span>
+              </button>
+
+              {(liveState === "playing" || isSpeaking) && (
+                <button
+                  onClick={() => {
+                    clearPlaybackQueue();
+                    handleStopSpeech();
+                    setLiveState("ready");
+                  }}
+                  type="button"
+                  className="px-2 py-1 rounded-lg border border-amber-500/40 bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition-colors cursor-pointer text-[10px] font-mono font-bold flex items-center gap-1"
+                  title="Interrupt Elder Stephen's speech"
+                >
+                  <VolumeX className="w-3 h-3" />
+                  <span className="hidden sm:inline">Interrupt</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => cleanupLiveSession(true)}
+                type="button"
+                className="px-2 py-1 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer text-[10px] font-mono font-bold flex items-center gap-1"
+                title="End Live Interactive Session"
+              >
+                <X className="w-3 h-3" />
+                <span>End</span>
+              </button>
+            </div>
           </div>
-          
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => setIsMicMuted(!isMicMuted)}
-              type="button"
-              className={`p-1 rounded border transition-colors cursor-pointer text-[10px] flex items-center gap-1 ${
-                isMicMuted
-                  ? "bg-rose-500/20 border-rose-500/50 text-rose-400"
-                  : theme === "dark"
-                    ? "bg-[#1E2530] border-[#2C3545] text-stone-300 hover:text-amber-400"
-                    : "bg-white border-stone-300 text-stone-700 hover:text-amber-600"
-              }`}
-              title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
-            >
-              {isMicMuted ? <MicOff className="w-3 h-3 text-rose-400" /> : <Mic className="w-3 h-3 text-emerald-400" />}
-              <span className="hidden md:inline">{isMicMuted ? "Muted" : "Live"}</span>
-            </button>
-            <button
-              onClick={() => cleanupLiveSession(true)}
-              type="button"
-              className={`p-1 rounded border transition-colors cursor-pointer text-[10px] flex items-center gap-1 ${
-                theme === "dark"
-                  ? "bg-[#1E2530] border-[#2C3545] text-stone-400 hover:text-rose-400"
-                  : "bg-white border-stone-300 text-stone-500 hover:text-rose-600"
-              }`}
-              title="Exit Interactive Mode"
-            >
-              <X className="w-3 h-3" />
-              <span className="hidden md:inline">Exit</span>
-            </button>
-          </div>
+
+          {/* Active Live Transcript / Response Preview & Actions */}
+          {activeDisplayResponse && (
+            <div className="pt-2.5 flex flex-col gap-2">
+              <div className={`p-2.5 rounded-lg text-xs leading-relaxed max-h-28 overflow-y-auto select-text font-serif ${
+                theme === "dark" ? "bg-black/25 text-stone-200 border border-white/5" : "bg-white/80 text-stone-800 border border-stone-200/80"
+              }`}>
+                <span className="font-mono text-[9px] uppercase tracking-wider text-[#C9973A] font-bold block mb-0.5">
+                  Live Elder Stephen Stream:
+                </span>
+                {activeDisplayResponse}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSpeakLiveResponse(activeDisplayResponse)}
+                    className="px-2 py-1 rounded border border-[#C9973A]/40 bg-[#C9973A]/10 text-[#C9973A] hover:bg-[#C9973A]/20 cursor-pointer flex items-center gap-1 font-semibold"
+                  >
+                    <Volume2 className="w-3 h-3" />
+                    <span>{isSpeaking && currentlySpeakingIdx === -999 ? "Mute Replay" : "Replay Audio"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveLiveResponseAsNote(activeDisplayResponse)}
+                    disabled={isLiveNoteSaved}
+                    className={`px-2 py-1 rounded border cursor-pointer flex items-center gap-1 font-semibold ${
+                      isLiveNoteSaved
+                        ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                        : "border-stone-500/30 hover:border-[#C9973A]/50 text-stone-400 hover:text-[#C9973A]"
+                    }`}
+                  >
+                    {isLiveNoteSaved ? <Check className="w-3 h-3 text-emerald-400" /> : <BookOpen className="w-3 h-3 text-[#C9973A]" />}
+                    <span>{isLiveNoteSaved ? "Saved to Notebook" : "Save Live Note"}</span>
+                  </button>
+                </div>
+                {liveError && (
+                  <span className="text-amber-400 text-[9px] truncate">{liveError}</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2634,102 +3021,6 @@ export const STBANotebook: React.FC<ToolProps> = ({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const skipNextSaveRef = useRef(false);
   const lastSelectedIdRef = useRef<string | null>(null);
-
-  // Notebook Text Highlighting & Underlining states
-  const [notebookHighlights, setNotebookHighlights] = useState<HighlightItem[]>([]);
-  const notebookTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const notebookBackdropRef = useRef<HTMLDivElement>(null);
-  const notebookEditorWrapperRef = useRef<HTMLDivElement>(null);
-  const [nbSelectionText, setNbSelectionText] = useState<string>("");
-  const [nbSelectionPopup, setNbSelectionPopup] = useState<{ x: number; y: number } | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    fetchHighlightsFromSupabase().then(items => {
-      if (mounted) {
-        setNotebookHighlights(items.filter(h => h.translation === "NOTEBOOK"));
-      }
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [selectedNote?.id]);
-
-  const activeNoteRefKey = `NOTEBOOK:${selectedNote?.id || "draft"}`;
-  const currentNoteHighlights = notebookHighlights.filter(
-    h => h.verse_reference === activeNoteRefKey || h.translation === "NOTEBOOK"
-  );
-
-  const handleNotebookSelectCapture = (e?: React.MouseEvent<HTMLTextAreaElement> | React.SyntheticEvent<HTMLTextAreaElement>) => {
-    const ta = notebookTextareaRef.current;
-    if (!ta) return;
-    const selected = ta.value.substring(ta.selectionStart, ta.selectionEnd).trim();
-    if (selected.length >= 2) {
-      setNbSelectionText(selected);
-      if (e && "clientX" in e && notebookEditorWrapperRef.current) {
-        const rect = notebookEditorWrapperRef.current.getBoundingClientRect();
-        setNbSelectionPopup({
-          x: (e as React.MouseEvent).clientX - rect.left,
-          y: Math.max(8, (e as React.MouseEvent).clientY - rect.top - 48)
-        });
-      }
-    } else {
-      setNbSelectionPopup(null);
-    }
-  };
-
-  const handleNotebookHighlight = async (colorValue: string) => {
-    const ta = notebookTextareaRef.current;
-    const rawSelected = ta ? ta.value.substring(ta.selectionStart, ta.selectionEnd).trim() : "";
-    const targetSnippet = rawSelected || nbSelectionText.trim();
-    if (!targetSnippet) return;
-
-    const newItem: HighlightItem = {
-      id: `hl-nb-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-      user_id: (user as any)?.id || user?.email || "guest-local",
-      translation: "NOTEBOOK",
-      verse_reference: activeNoteRefKey,
-      text_snippet: targetSnippet,
-      color: colorValue,
-      created_at: new Date().toISOString()
-    };
-
-    setNotebookHighlights(prev => [...prev, newItem]);
-    setNbSelectionPopup(null);
-
-    try {
-      await saveHighlightToSupabase(newItem);
-    } catch (err) {
-      console.warn("Failed saving notebook highlight:", err);
-    }
-  };
-
-  const handleNotebookClearHighlight = async () => {
-    const ta = notebookTextareaRef.current;
-    const rawSelected = ta ? ta.value.substring(ta.selectionStart, ta.selectionEnd).trim() : "";
-    const targetSnippet = (rawSelected || nbSelectionText).trim().toLowerCase();
-
-    const toDelete = targetSnippet
-      ? notebookHighlights.filter(
-          h =>
-            h.text_snippet &&
-            (h.text_snippet.toLowerCase().includes(targetSnippet) ||
-              targetSnippet.includes(h.text_snippet.toLowerCase()))
-        )
-      : notebookHighlights.filter(h => h.verse_reference === activeNoteRefKey);
-
-    const removeIds = new Set(toDelete.map(h => h.id));
-    setNotebookHighlights(prev => prev.filter(h => !removeIds.has(h.id)));
-    setNbSelectionPopup(null);
-
-    for (const item of toDelete) {
-      try {
-        await deleteHighlightFromSupabase(item.id);
-      } catch (err) {
-        console.warn("Failed deleting notebook highlight:", err);
-      }
-    }
-  };
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
@@ -3176,14 +3467,6 @@ export const STBANotebook: React.FC<ToolProps> = ({
 
           {/* Action Controls for Active Note */}
           <div className="flex items-center gap-1.5">
-            {/* Tiered Highlight & Underline Dropdown for Notebook */}
-            <TieredHighlightDropdown
-              onSelectColor={handleNotebookHighlight}
-              onClear={handleNotebookClearHighlight}
-              theme={theme}
-              buttonLabel="Mark"
-            />
-
             {selectedNote && !selectedNote.id.startsWith("note-draft") && selectedNote.id !== "draft" && (
               <button
                  onClick={() => handleDelete(selectedNote.id)}
@@ -3519,85 +3802,23 @@ export const STBANotebook: React.FC<ToolProps> = ({
           </div>
         </div>
 
-        {/* Large Text Editor Canvas with Synchronized Highlight & Underline Backdrop */}
-        <div
-          ref={notebookEditorWrapperRef}
-          className={`flex-1 flex flex-col min-h-0 relative rounded-xl border overflow-hidden transition-all ${
-            theme === "dark"
-              ? "bg-[#1A1F26] border-[#2A3342] focus-within:border-blue-550 focus-within:bg-[#1E2530]"
-              : "bg-[#FDFAF7] border-[#E8E4DA] focus-within:border-[#C9973A] focus-within:bg-[#FDFBFA]"
-          }`}
-        >
-          {/* Synchronized Highlight & Underline Visual Backdrop */}
-          <div
-            ref={notebookBackdropRef}
-            aria-hidden="true"
-            style={{
-              fontSize: `${fontSize}px`,
-              lineHeight: 1.7,
-              paddingBottom: "260px",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word"
-            }}
-            className={`absolute inset-0 w-full h-full p-6 sm:p-7 font-sans pointer-events-none select-none overflow-y-auto leading-relaxed ${
-              theme === "dark" ? "text-gray-100" : "text-gray-800"
-            }`}
-          >
-            {renderTextWithHighlights(content, currentNoteHighlights)}
-          </div>
-
+        {/* Large Text Editor Canvas - Takes up remaining screen area completely with comfortable padding and bottom scroll-past room */}
+        <div className="flex-1 flex flex-col min-h-0 bg-transparent">
           <textarea
-            ref={notebookTextareaRef}
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            onScroll={(e) => {
-              if (notebookBackdropRef.current) {
-                notebookBackdropRef.current.scrollTop = e.currentTarget.scrollTop;
-                notebookBackdropRef.current.scrollLeft = e.currentTarget.scrollLeft;
-              }
-            }}
-            onMouseUp={handleNotebookSelectCapture}
-            onKeyUp={handleNotebookSelectCapture}
-            placeholder="Scribe your commentary analysis, insights, or sermon materials here. Select any text to highlight or underline..."
+            placeholder="Scribe your commentary analysis, insights, or sermon materials here. Supports markdown syntax..."
             style={{
               fontSize: `${fontSize}px`,
               lineHeight: 1.7,
-              paddingBottom: "260px",
-              color: currentNoteHighlights.length > 0 ? "transparent" : undefined,
-              caretColor: theme === "dark" ? "#F59E0B" : "#C9973A"
+              paddingBottom: '260px'
             }}
-            className={`relative z-10 w-full h-full flex-1 p-6 sm:p-7 bg-transparent border-none outline-none font-sans resize-none overflow-y-auto leading-relaxed ${
-              theme === "dark" ? "text-gray-100 placeholder-gray-500" : "text-gray-800 placeholder-gray-400"
+            className={`w-full h-full flex-1 p-6 sm:p-7 rounded-xl border focus:ring-1 focus:ring-[#C9973A]/20 outline-none font-sans resize-none transition-all overflow-y-auto leading-relaxed ${
+              theme === "dark" 
+                ? "bg-[#1A1F26] border-[#2A3342] text-gray-100 focus:border-blue-550 focus:bg-[#1E2530]" 
+                : "bg-[#FDFAF7] border-[#E8E4DA] text-gray-800 focus:border-[#C9973A] focus:bg-[#FDFBFA]"
             }`}
           />
-
-          {/* Floating Selection Popup for Notebook */}
-          {nbSelectionPopup && (
-            <div
-              className="absolute z-50 flex items-center gap-1 p-1.5 shadow-2xl rounded-xl border text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
-              style={{
-                left: `${Math.max(12, Math.min((notebookEditorWrapperRef.current?.clientWidth || 320) - 220, nbSelectionPopup.x - 90))}px`,
-                top: `${Math.max(8, nbSelectionPopup.y)}px`
-              }}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              <div
-                className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border ${
-                  theme === "dark"
-                    ? "bg-[#18202C] text-gray-100 border-[#2E3B4E]"
-                    : "bg-white text-gray-800 border-[#E5DFD5]"
-                }`}
-              >
-                <TieredHighlightDropdown
-                  onSelectColor={handleNotebookHighlight}
-                  onClear={handleNotebookClearHighlight}
-                  theme={theme}
-                  defaultOpen={true}
-                  buttonLabel="Highlight"
-                />
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -4211,7 +4432,7 @@ ${stepsContent}
                 style={{ width: "100%", height: "100%", WebkitOverflowScrolling: "touch" }}
               >
                 {report ? (
-                  <div className="space-y-4 text-left select-text max-w-3xl mx-auto w-full">
+                  <div className="space-y-4 text-left select-text">
                     <div className={`p-4 rounded-lg border relative ${
                       theme === "dark" ? "bg-[#1E2530] border-[#2C3545]" : "bg-[#FDFAF5] border-[#E8E4DA]"
                     }`}>
@@ -4472,11 +4693,9 @@ ${stepsContent}
                     </div>
                   </div>
                 ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center m-auto max-w-md py-12 px-6 text-gray-400 text-xs sm:text-sm">
-                    <Feather className="w-8 h-8 opacity-40 mx-auto mb-3 text-[#C084FC]" />
-                    <p className="leading-relaxed">
-                      Specify a scriptural text first under study tracks or click any verse from your topic search results to compile active exegesis vectors.
-                    </p>
+                  <div className="text-center py-12 text-gray-400 text-xs sm:text-sm">
+                    <Feather className="w-8 h-8 opacity-40 mx-auto mb-2 text-[#C084FC]" />
+                    Specify a scriptural text first under study tracks or custom input parameters to compile active exegesis vectors.
                   </div>
                 )}
               </div>
@@ -4574,7 +4793,7 @@ export const WordStudy: React.FC<ToolProps> = ({
 
     // 2. Fetch from backend API if not locally cached
     try {
-      const response = await fetch("/api/study/word-study", {
+      const response = await apiFetch("/api/study/word-study", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -4588,7 +4807,10 @@ export const WordStudy: React.FC<ToolProps> = ({
         throw new Error("Linguistic ledger response failure.");
       }
 
-      const data = await response.json();
+      const data = await safeParseResponseJson<any>(response);
+      if (!data || data.ok === false) {
+        throw new Error(data?.error || "Linguistic ledger non-JSON response.");
+      }
       setStudyData(data);
       setSearchQuery(wordToLook.trim());
 
@@ -4665,14 +4887,14 @@ export const WordStudy: React.FC<ToolProps> = ({
 
       setExtracting(true);
       try {
-        const res = await fetch("/api/study/extract-keywords", {
+        const res = await apiFetch("/api/study/extract-keywords", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ verseText: vText, reference: refTitle })
         });
         if (res.ok) {
-          const data = await res.json();
-          if (data.keywords && data.keywords.length > 0) {
+          const data = await safeParseResponseJson<any>(res);
+          if (data && data.keywords && data.keywords.length > 0) {
             setVerseKeywords(data.keywords);
             // Automatically trigger the lookup study for the very first keyword detected!
             const firstWord = data.keywords[0];
@@ -5002,13 +5224,8 @@ export const WordStudy: React.FC<ToolProps> = ({
         </div>
       </AutoRetractToolbar>
 
-      {/* Main scrollable body study space (With Tiered Highlight & Underline Support) */}
-      <ToolHighlightableWrapper
-        toolId="WORD_STUDY"
-        referenceKey={studyData?.word || searchQuery || report?.reference || "word-study"}
-        theme={theme}
-        className="flex-1 overflow-y-auto scroll-smooth p-4 pb-32 md:pb-6 space-y-4 select-text"
-      >
+      {/* Main scrollable body study space */}
+      <div className="flex-1 overflow-y-auto scroll-smooth p-4 pb-32 md:pb-6 space-y-4" style={{ WebkitOverflowScrolling: "touch" }}>
         {/* Dynamic Interactive Active Verse Tags Cloud */}
         {activeVerseIndex && report && (
           <div className={`p-3 rounded-lg border flex flex-col gap-2 transition-all shrink-0 ${
@@ -5075,7 +5292,7 @@ export const WordStudy: React.FC<ToolProps> = ({
             {errorMsg}
           </div>
         ) : studyData ? (
-          <div className="space-y-4 select-text animate-fade-in max-w-3xl mx-auto w-full">
+          <div className="space-y-4 select-text animate-fade-in">
             {/* The primary linguistic metric card */}
             <div className={`p-4 rounded-xl border relative shadow-sm ${
               theme === "dark" ? "bg-[#1E2530] border-[#2C3545]" : "bg-[#FDFAF5] border-[#E8E4DA]"
@@ -5224,7 +5441,7 @@ export const WordStudy: React.FC<ToolProps> = ({
             </div>
           </div>
         )}
-      </ToolHighlightableWrapper>
+      </div>
     </div>
   );
 };
@@ -5395,7 +5612,10 @@ export const CrossReferenceEngine: React.FC<ToolProps> = ({
     ? precompiledMatch 
     : report && report.step3 && report.step3.scripture_compares 
       ? report.step3.scripture_compares 
-      : [];
+      : [
+          { ref: "Revelation 12:17", description: "And the dragon was wroth with the woman, and went to make war with the remnant... which keep the commandments of God." },
+          { ref: "Exodus 20:11", description: "For in six days the Lord made heaven and earth... and rested the seventh day, wherefore the Lord hallowed it." }
+        ];
 
   const handleAddManualWitness = (e: React.FormEvent) => {
     e.preventDefault();
@@ -5491,37 +5711,25 @@ export const CrossReferenceEngine: React.FC<ToolProps> = ({
           </span>
 
           <div className="space-y-2.5">
-            {currentWitnessesList.length === 0 && manualWitnesses.length === 0 ? (
-              <div className={`p-4 text-center rounded-lg border border-dashed ${
-                theme === "dark" ? "bg-[#1E2530]/40 border-stone-700 text-stone-400" : "bg-stone-50 border-stone-300 text-stone-600"
-              }`}>
-                <Layers className="w-5 h-5 mx-auto mb-1.5 text-[#C9973A]/60" />
-                <p className="text-xs font-semibold">No cross-reference witnesses active yet</p>
-                <p className="text-[11px] opacity-75 mt-0.5 max-w-xs mx-auto">
-                  Type any companion Scripture reference below to attach parallel witnesses, or sync to an active exegesis study.
+            {currentWitnessesList.map((comp: { ref: string; description: string }, idx: number) => (
+              <div 
+                key={idx} 
+                onClick={() => onReferenceChange(comp.ref)}
+                className={`p-3.5 rounded-lg border text-left cursor-pointer transition-all hover:bg-emerald-550/10 ${
+                  theme === "dark" 
+                    ? "bg-[#1E2530] border-[#2C3545] hover:border-blue-500/50" 
+                    : "bg-[#FDFAF5] border-[#EAE3D5] hover:border-emerald-600/55"
+                }`}
+              >
+                <div className="flex items-center justify-between pointer-events-none select-none">
+                  <span className="font-serif text-xs font-bold text-[#C9973A]">{comp.ref}</span>
+                  <span className="text-[9px] font-mono text-gray-500">View Reference &rarr;</span>
+                </div>
+                <p className={`text-xs mt-1.5 leading-relaxed font-sans ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                  {comp.description}
                 </p>
               </div>
-            ) : (
-              currentWitnessesList.map((comp: { ref: string; description: string }, idx: number) => (
-                <div 
-                  key={idx} 
-                  onClick={() => onReferenceChange(comp.ref)}
-                  className={`p-3.5 rounded-lg border text-left cursor-pointer transition-all hover:bg-emerald-550/10 ${
-                    theme === "dark" 
-                      ? "bg-[#1E2530] border-[#2C3545] hover:border-blue-500/50" 
-                      : "bg-[#FDFAF5] border-[#EAE3D5] hover:border-emerald-600/55"
-                  }`}
-                >
-                  <div className="flex items-center justify-between pointer-events-none select-none">
-                    <span className="font-serif text-xs font-bold text-[#C9973A]">{comp.ref}</span>
-                    <span className="text-[9px] font-mono text-gray-500">View Reference &rarr;</span>
-                  </div>
-                  <p className={`text-xs mt-1.5 leading-relaxed font-sans ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                    {comp.description}
-                  </p>
-                </div>
-              ))
-            )}
+            ))}
 
             {/* Custom Interactive Witnesses added by user */}
             {manualWitnesses.map((ref, idx) => (
@@ -5662,7 +5870,7 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
 
   // Helper to parse reference string into chapter and target verse
   const parseRef = (raw: string | undefined | null) => {
-    if (!raw || !raw.trim()) return { chapter: "", targetVerse: 1 };
+    if (!raw || !raw.trim()) return { chapter: "Hebrews 8", targetVerse: 1 };
     const clean = raw.trim();
     const colonIdx = clean.indexOf(":");
     if (colonIdx !== -1) {
@@ -5701,7 +5909,18 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
   const [customText, setCustomText] = useState<string>("");
 
   // Saved quick-access chapters (holds up to 12 chapters)
-  const DEFAULT_SAVED_CHAPTERS: string[] = [];
+  const DEFAULT_SAVED_CHAPTERS = [
+    "Hebrews 9",
+    "Hebrews 8",
+    "Revelation 14",
+    "Psalms 23",
+    "John 3",
+    "Genesis 1",
+    "Isaiah 53",
+    "Daniel 8",
+    "Romans 12",
+    "2 Timothy 3",
+  ];
 
   const [savedChapters, setSavedChapters] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
@@ -5709,7 +5928,7 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
         const stored = localStorage.getItem("stba_quick_access_chapters");
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) {
+          if (Array.isArray(parsed) && parsed.length > 0) {
             return parsed.slice(0, 12);
           }
         }
@@ -5717,7 +5936,7 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
         console.warn("Failed to load saved chapters from localStorage", e);
       }
     }
-    return [];
+    return DEFAULT_SAVED_CHAPTERS;
   });
 
   const [isJustSaved, setIsJustSaved] = useState(false);
@@ -6056,16 +6275,16 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
 
     try {
       const textToSay = `The pronunciation is ${nameObj.name}. ${nameObj.name}.`;
-      const response = await fetch("/api/study/narrate", {
+      const response = await apiFetch("/api/study/narrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: textToSay, voice: nameVoice })
       });
 
       if (!response.ok) throw new Error("API failed");
-      const data = await response.json();
+      const data = await safeParseResponseJson<any>(response);
 
-      if (data.success && data.audio) {
+      if (data && data.success && data.audio) {
         const binaryString = window.atob(data.audio);
         const len = binaryString.length;
         const bytes = new Uint8Array(len);
@@ -7089,342 +7308,706 @@ const getSyllabusLessonsForTrack = (reference: string, topic: string): SyllabusI
   ];
 };
 
-export const SyllabusModeView: React.FC<ToolProps> = ({ report, theme }) => {
-  const reference = report?.reference || "Revelation 14:6-12";
-  const topic = report?.topic || "The Three Angels' Messages";
+interface DailyScriptureBreakdownItem {
+  reference: string;
+  contextualExplanation: string;
+}
 
-  const lessons = getSyllabusLessonsForTrack(reference, topic);
+function parseMemoryVerseTextAndRef(rawMemoryVerse: string): { text: string; reference: string } {
+  const defaultRef = "2 Corinthians 2:4";
+  const defaultText =
+    "For out of much affliction and anguish of heart I wrote to you, with many tears, not that you should be grieved, but that you might know the love which I have so abundantly for you.";
 
-  // States
-  const [completedItems, setCompletedItems] = useState<Record<string, boolean>>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<"checking" | "connected" | "table_missing" | "error" | "offline">("checking");
-  const [showSqlSetup, setShowSqlSetup] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
+  if (!rawMemoryVerse || !rawMemoryVerse.trim()) {
+    return { text: defaultText, reference: defaultRef };
+  }
 
-  const SYLLABUS_SQL = `create table stba_syllabus_progress (
-  id text primary key,
-  track text not null,
-  item_id text not null,
-  completed boolean default false not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+  const clean = rawMemoryVerse.trim();
+  const parenMatch = clean.match(/^[“"']?(.*?)[”"']?\s*\(([^)]+)\)\.?$/);
+  if (parenMatch) {
+    const rawRef = parenMatch[2].replace(/,\s*(NKJV|KJV|ESV|NASB|NIV).*$/i, "").trim();
+    return {
+      text: parenMatch[1].replace(/^[“"']|[”"']$/g, "").trim(),
+      reference: formatStandardReference(rawRef) || rawRef
+    };
+  }
 
--- Enable RLS
-alter table stba_syllabus_progress enable row level security;
+  const dashParts = clean.split(/\s*[—–]\s*/);
+  if (dashParts.length >= 2) {
+    const lastPart = dashParts[dashParts.length - 1].replace(/,\s*(NKJV|KJV|ESV|NASB|NIV).*$/i, "").trim();
+    if (/\d+:\d+/.test(lastPart)) {
+      return {
+        text: dashParts.slice(0, -1).join(" — ").replace(/^[“"']|[”"']$/g, "").trim(),
+        reference: formatStandardReference(lastPart) || lastPart
+      };
+    }
+  }
 
--- Create Open Policy for Public access
-create policy "Allow all public access to syllabus progress"
-  on stba_syllabus_progress
-  for all
-  using (true)
-  with check (true);`;
-
-  // Local storage fallback loader
-  const loadLocalProgress = () => {
-    const progressMap: Record<string, boolean> = {};
-    lessons.forEach((l) => {
-      const stored = localStorage.getItem(`stba_syllabus_progress_${reference}_${l.id}`);
-      progressMap[l.id] = stored === "true";
-    });
-    setCompletedItems(progressMap);
+  return {
+    text: clean.replace(/^[“"']|[”"']$/g, "").trim(),
+    reference: defaultRef
   };
+}
 
-  // Sync / Load database table progress
-  useEffect(() => {
-    const fetchSyllabusProgress = async () => {
-      setIsLoading(true);
-      setSyncStatus("checking");
+function buildConciseDailyBullets(dayTitle: string, mainParagraphs: string[], lessonTitle: string): string[] {
+  const bullets: string[] = [];
 
-      try {
-        const { data, error } = await supabase
-          .from("stba_syllabus_progress")
-          .select("*")
-          .eq("track", reference);
+  for (const para of mainParagraphs) {
+    const cleaned = para
+      .replace(/^#+\s*/gm, "")
+      .replace(/\*\*/g, "")
+      .replace(/^>\s*/gm, "")
+      .replace(/\s+/g, " ")
+      .trim();
 
-        if (error) {
-          // Detect Postgres error for non-existent table relation
-          if (error.code === "PGRST116" || error.message?.includes("does not exist")) {
-            setSyncStatus("table_missing");
-          } else {
-            setSyncStatus("error");
-          }
-          loadLocalProgress();
+    if (!cleaned || cleaned.length < 25) continue;
+
+    // Split paragraph into sentences
+    const sentences = cleaned.match(/[^.!?]+[.!?]+/g) || [cleaned];
+    for (const s of sentences) {
+      const trimmedSentence = s.trim();
+      // Skip pure question prompts when building concise summary bullets
+      if (trimmedSentence.endsWith("?")) continue;
+      if (trimmedSentence.length >= 35 && trimmedSentence.length <= 210) {
+        bullets.push(trimmedSentence);
+        break;
+      } else if (trimmedSentence.length > 210) {
+        bullets.push(`${trimmedSentence.slice(0, 195).trim()}...`);
+        break;
+      }
+    }
+    if (bullets.length >= 4) break;
+  }
+
+  if (bullets.length === 0) {
+    bullets.push(
+      `Focuses on "${dayTitle}" within the weekly study theme of "${lessonTitle}".`,
+      `Examines how the prophetic and apostolic witness anchors believers in covenant faithfulness.`,
+      `Applies the principle that Scripture interprets Scripture ("line upon line") for practical daily discipleship.`
+    );
+  } else if (bullets.length === 1) {
+    bullets.push(
+      `Connects the core theme of "${dayTitle}" to Christ's mediatorial ministry and covenant promises.`,
+      `Calls believers to faithful heart obedience and practical witness in light of "${lessonTitle}".`
+    );
+  }
+
+  return bullets.slice(0, 4);
+}
+
+function extractDailyScriptureBreakdown(
+  dayTitle: string,
+  rawContent: any,
+  mainParagraphs: string[],
+  memoryVerseRef: string,
+  lessonTitle: string
+): DailyScriptureBreakdownItem[] {
+  const seen = new Set<string>();
+  const items: DailyScriptureBreakdownItem[] = [];
+
+  const fullTextBlocks = [dayTitle, ...mainParagraphs];
+  if (typeof rawContent === "string") {
+    fullTextBlocks.push(rawContent);
+  } else if (Array.isArray(rawContent)) {
+    fullTextBlocks.push(...rawContent.map((x) => String(x || "")));
+  }
+
+  for (const block of fullTextBlocks) {
+    const cleanBlock = String(block || "")
+      .replace(/\u00A0/g, " ")
+      .replace(/^#+\s*/gm, "")
+      .replace(/\*\*/g, "")
+      .trim();
+    if (!cleanBlock) continue;
+
+    const regex = getScriptureRegex();
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(cleanBlock)) !== null) {
+      const rawMatch = match[0];
+      const canonical = formatStandardReference(rawMatch)
+        .replace(/\u00A0/g, " ")
+        .replace(/[–—\u2013\u2014\u2212]/g, "-")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const key = canonical.toLowerCase();
+      if (!canonical || seen.has(key)) continue;
+      seen.add(key);
+
+      // Extract the surrounding sentence(s) in the lesson paragraph to build a clear contextual explanation
+      const sentences = cleanBlock.match(/[^.!?]+[.!?]+/g) || [cleanBlock];
+      const matchingSentence = sentences.find((s) => s.includes(rawMatch) || s.includes(canonical));
+
+      let contextualExplanation = "";
+      if (matchingSentence) {
+        const cleanedSentence = matchingSentence.replace(/\s+/g, " ").trim();
+        if (cleanedSentence.endsWith("?")) {
+          contextualExplanation = `In "${dayTitle}," the lesson directs us to ${canonical} to answer: "${cleanedSentence}"—illuminating how this passage anchors the daily summary's message on ${lessonTitle}.`;
         } else {
-          setSyncStatus("connected");
-          const progressMap: Record<string, boolean> = {};
-          
-          // Prepopulate local state fallback values
-          lessons.forEach((l) => {
-            const stored = localStorage.getItem(`stba_syllabus_progress_${reference}_${l.id}`);
-            if (stored === "true") progressMap[l.id] = true;
-          });
-
-          // Override local states with database states
-          if (data && data.length > 0) {
-            data.forEach((row: any) => {
-              progressMap[row.item_id] = !!row.completed;
-            });
-          }
-          setCompletedItems(progressMap);
+          contextualExplanation = `${cleanedSentence} This directly supports today's summary on "${dayTitle}" by grounding its doctrinal point in the biblical text.`;
         }
-      } catch (err) {
-        setSyncStatus("offline");
-        loadLocalProgress();
-      } finally {
-        setIsLoading(false);
+      } else {
+        contextualExplanation = `Referenced in "${dayTitle}" to establish the scriptural foundation for ${lessonTitle}, demonstrating how God's Word interprets and confirms today's lesson summary.`;
+      }
+
+      items.push({
+        reference: canonical,
+        contextualExplanation
+      });
+    }
+  }
+
+  // Ensure the weekly Memory Verse is included if no verses were found or as a foundational anchor
+  if (items.length === 0 && memoryVerseRef) {
+    const cleanMemRef = formatStandardReference(memoryVerseRef);
+    items.push({
+      reference: cleanMemRef,
+      contextualExplanation: `Serves as the foundational memory text for "${lessonTitle}," uniting the daily summary of "${dayTitle}" with the overarching covenant message of the week.`
+    });
+  }
+
+  return items;
+}
+
+export const SyllabusModeView: React.FC<ToolProps> = ({
+  report,
+  onReferenceChange,
+  theme,
+  currentPassageRef
+}) => {
+  const navigate = useNavigate();
+  const {
+    quarterlyTitle,
+    lessonTitle,
+    memoryVerse,
+    dailyLessons,
+    selectedDayIndex,
+    setSelectedDayIndex,
+    updateDailyLessonStatus
+  } = useSabbathSchoolStore();
+
+  const isLight = theme === "light";
+  const safeDayIndex =
+    selectedDayIndex >= 0 && selectedDayIndex < (dailyLessons?.length || 7)
+      ? selectedDayIndex
+      : 0;
+  const activeDay = dailyLessons?.[safeDayIndex] || dailyLessons?.[0];
+
+  const { text: memoryVerseText, reference: memoryVerseRef } = React.useMemo(
+    () => parseMemoryVerseTextAndRef(memoryVerse),
+    [memoryVerse]
+  );
+
+  const { mainParagraphs } = React.useMemo(
+    () =>
+      separateLessonAndEgwNotes(
+        activeDay?.content || "",
+        (activeDay as any)?.egwNotes
+      ),
+    [activeDay]
+  );
+
+  const dailySummaryBullets = React.useMemo(
+    () =>
+      buildConciseDailyBullets(
+        activeDay?.title || `Day ${safeDayIndex + 1} Study`,
+        mainParagraphs,
+        lessonTitle || "Sabbath School Study"
+      ),
+    [activeDay?.title, mainParagraphs, lessonTitle, safeDayIndex]
+  );
+
+  const scriptureBreakdown = React.useMemo(
+    () =>
+      extractDailyScriptureBreakdown(
+        activeDay?.title || `Day ${safeDayIndex + 1} Study`,
+        activeDay?.content || "",
+        mainParagraphs,
+        memoryVerseRef,
+        lessonTitle || "Sabbath School Study"
+      ),
+    [activeDay?.title, activeDay?.content, mainParagraphs, memoryVerseRef, lessonTitle, safeDayIndex]
+  );
+
+  // Cache of fetched verse texts for the Scripture Breakdown cards
+  const [verseTextsMap, setVerseTextsMap] = useState<Record<string, string>>({});
+  const [loadingVersesMap, setLoadingVersesMap] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTextsForBreakdown = async () => {
+      for (const item of scriptureBreakdown) {
+        const ref = item.reference;
+        if (verseTextsMap[ref]) continue;
+
+        setLoadingVersesMap((prev) => ({ ...prev, [ref]: true }));
+        try {
+          const response = await apiFetch("/api/study/fetch-passage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reference: ref })
+          });
+          if (response.ok) {
+            const data = await safeParseResponseJson<any>(response);
+            if (!cancelled && data?.valid && Array.isArray(data.verses) && data.verses.length > 0) {
+              const joined = data.verses
+                .map((v: any) => {
+                  const vText = v.text?.NKJV || v.text?.KJV || v.text?.ESV || "";
+                  return data.verses.length > 1 ? `[v.${v.verseNumber}] ${vText}` : vText;
+                })
+                .join(" ");
+              if (joined.trim()) {
+                setVerseTextsMap((prev) => ({ ...prev, [ref]: joined.trim() }));
+                setLoadingVersesMap((prev) => ({ ...prev, [ref]: false }));
+                continue;
+              }
+            }
+          }
+        } catch {}
+
+        // Fallback to local chapter presets if needed
+        try {
+          const lookup = parseScriptureLookup(ref);
+          if (lookup) {
+            const chapterKey = `${lookup.book} ${lookup.chapter}`;
+            const chapterVerses =
+              (await fetchChapterVersesAsync(chapterKey)) || getFullChapterVerses(chapterKey);
+            if (!cancelled && chapterVerses && chapterVerses.length > 0) {
+              const filtered = chapterVerses.filter(
+                (v) => v.verseNumber >= lookup.startVerse && v.verseNumber <= lookup.endVerse
+              );
+              const list = filtered.length > 0 ? filtered : chapterVerses.slice(0, 3);
+              const joined = list
+                .map((v) => {
+                  const vText = v.text?.NKJV || v.text?.KJV || "";
+                  return list.length > 1 ? `[v.${v.verseNumber}] ${vText}` : vText;
+                })
+                .join(" ");
+              if (joined.trim()) {
+                setVerseTextsMap((prev) => ({ ...prev, [ref]: joined.trim() }));
+              }
+            }
+          }
+        } catch {}
+
+        if (!cancelled) {
+          setLoadingVersesMap((prev) => ({ ...prev, [ref]: false }));
+        }
       }
     };
 
-    fetchSyllabusProgress();
-  }, [reference]);
+    loadTextsForBreakdown();
+    return () => {
+      cancelled = true;
+    };
+  }, [scriptureBreakdown]);
 
-  // Click handler to toggle items
-  const handleToggleItem = async (itemId: string) => {
-    const isCompletedNow = !completedItems[itemId];
-    const newCompleted = { ...completedItems, [itemId]: isCompletedNow };
-    setCompletedItems(newCompleted);
-
-    // Persist in localStorage
-    localStorage.setItem(`stba_syllabus_progress_${reference}_${itemId}`, isCompletedNow ? "true" : "false");
-
-    if (syncStatus === "connected") {
-      try {
-        // Formulate a robust combined primary key for upsert matching standard constraints
-        const sanitizedKey = `${reference}_${itemId}`.replace(/[\s:,-]/g, "_").toLowerCase();
-        
-        const { error } = await supabase
-          .from("stba_syllabus_progress")
-          .upsert({
-            id: sanitizedKey,
-            track: reference,
-            item_id: itemId,
-            completed: isCompletedNow,
-            updated_at: new Date().toISOString()
-          }, { onConflict: "id" });
-
-        if (error) {
-          console.warn("DB Background Upsert failed, keeping local storage copy intact:", error.message);
-        }
-      } catch (err) {
-        console.warn("Database sync network interruption. Local storage persisted.");
-      }
+  const handleLocateVerseInBible = (ref: string) => {
+    const cleanRef = formatStandardReference(ref);
+    const lookup = parseScriptureLookup(cleanRef);
+    if (lookup?.startVerse) {
+      localStorage.setItem("stba_pending_verse_number", String(lookup.startVerse));
+    }
+    onReferenceChange(cleanRef);
+    panelSyncBus.loadPassage(cleanRef, "DailySyllabus");
+    if (lookup?.startVerse) {
+      setTimeout(() => {
+        panelSyncBus.selectVerse(lookup.startVerse, cleanRef, "DailySyllabus");
+      }, 120);
     }
   };
 
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(SYLLABUS_SQL);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 3000);
+  const handleOpenDiscipleshipVault = () => {
+    window.dispatchEvent(
+      new CustomEvent("open-discipleship-vault", {
+        detail: {
+          title: `${activeDay?.label || `Day ${safeDayIndex + 1}`}: ${activeDay?.title || lessonTitle}`,
+          category: "theology",
+          tags: scriptureBreakdown.map((s) => s.reference).slice(0, 5)
+        }
+      })
+    );
   };
 
-  // Completion stats calculations
-  const totalItemsCount = lessons.length;
-  const completedCount = lessons.filter((l) => completedItems[l.id]).length;
-  const completionPercentage = totalItemsCount > 0 ? Math.round((completedCount / totalItemsCount) * 100) : 0;
+  const isDayCompleted =
+    (activeDay?.status || "").toLowerCase() === "complete" ||
+    (activeDay?.status || "").toLowerCase() === "completed";
 
   return (
-    <div className="p-4 space-y-4 h-full overflow-y-auto scroll-smooth text-left select-none pb-32 md:pb-6" style={{ WebkitOverflowScrolling: "touch" }}>
-      {/* HEADER SECTION */}
-      <div className="flex items-center justify-between border-b pb-2">
+    <div
+      id="daily-syllabus-panel"
+      style={{ fontFamily: "'Lato', sans-serif", WebkitOverflowScrolling: "touch" }}
+      className={`p-4 sm:p-6 space-y-6 h-full overflow-y-auto scroll-smooth text-left font-['Lato',sans-serif] not-italic pb-32 md:pb-10 ${
+        isLight ? "bg-[#FAF7F2] text-stone-900" : "bg-[#0D1117] text-[#E6EDF2]"
+      }`}
+    >
+      {/* 1. TOP BAR: BACK TO SABBATH SCHOOL BUTTON & DISCIPLESHIP VAULT TRIGGER */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-4 border-b border-[#C9973A]/30">
+        <button
+          id="btn-back-to-sabbath-school"
+          type="button"
+          onClick={() => navigate("/sabbath-school")}
+          style={{ fontFamily: "'Lato', sans-serif" }}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-xs sm:text-sm font-bold not-italic transition-all cursor-pointer shadow-xs ${
+            isLight
+              ? "bg-white hover:bg-amber-50 text-stone-900 border-[#C9973A]/50 hover:border-[#C9973A]"
+              : "bg-[#161F33] hover:bg-[#1E2A44] text-amber-300 border-[#C9973A]/45 hover:border-amber-400"
+          }`}
+        >
+          <ChevronLeft className="w-4 h-4 text-[#C9973A] shrink-0" />
+          <span>Back to Sabbath School</span>
+        </button>
+
         <div className="flex items-center gap-2">
-          <BookMarked className="w-4 h-4 text-amber-500" />
-          <h3 className="font-serif text-sm font-semibold tracking-wide uppercase font-bold">STBA Weekly Syllabus Plan</h3>
-        </div>
-        {/* Dynamic Track Badge */}
-        <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/10 text-[#C9973A] border border-amber-500/20 max-w-[150px] truncate">
-          {reference}
-        </span>
-      </div>
-
-      <p className="text-[10px] sm:text-xs text-gray-400 leading-relaxed max-w-md select-text">
-        Follow this curated Seventh-day Adventist study path to systematically analyze the scriptural structure, history, and doctrines of <b>{topic}</b>.
-      </p>
-
-      {/* SYNC STATUS BAR */}
-      <div className={`p-2.5 rounded-lg border flex items-center justify-between text-[10px] sm:text-xs leading-none select-none ${
-        theme === "dark" ? "bg-[#13171F] border-gray-800" : "bg-stone-50 border-stone-200"
-      }`}>
-        <div className="flex items-center gap-2">
-          <div className="relative flex h-2 w-2">
-            {syncStatus === "checking" && (
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-            )}
-            <span className={`relative inline-flex rounded-full h-2 w-2 ${
-              syncStatus === "connected" ? "bg-emerald-500" :
-                syncStatus === "table_missing" ? "bg-amber-500 animate-pulse" :
-                  syncStatus === "checking" ? "bg-amber-400" : "bg-rose-500"
-            }`}></span>
-          </div>
-          <span className="font-mono text-gray-400 uppercase tracking-wider font-semibold">
-            {syncStatus === "connected" && "Supabase Live Sync"}
-            {syncStatus === "checking" && "Connecting Cloud..."}
-            {syncStatus === "table_missing" && "Database Table Offline"}
-            {syncStatus === "error" && "Database Link Error"}
-            {syncStatus === "offline" && "Offline Sandbox"}
-          </span>
-        </div>
-
-        {syncStatus === "table_missing" && (
           <button
-            onClick={() => setShowSqlSetup(!showSqlSetup)}
-            className="text-[9px] px-1.5 py-0.5 font-mono bg-amber-500/10 text-[#C9973A] hover:bg-amber-500/20 border border-amber-500/20 rounded cursor-pointer transition-all"
+            id="btn-daily-syllabus-vault"
+            type="button"
+            onClick={handleOpenDiscipleshipVault}
+            style={{ fontFamily: "'Lato', sans-serif" }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#C9973A]/50 bg-[#0B111E] hover:bg-[#141E33] text-[#F3CF65] text-xs sm:text-sm font-bold not-italic transition-all cursor-pointer shadow-xs"
+            title="Open slide-out Discipleship Vault side panel"
           >
-            {showSqlSetup ? "Close SQL Help" : "Enable Cloud Sync"}
+            <PenLine className="w-3.5 h-3.5 text-[#C9973A] shrink-0" />
+            <span>Discipleship Vault</span>
           </button>
-        )}
+        </div>
       </div>
 
-      {/* INSTRUCTIONS SQL INTERACTIVE HELPER */}
-      {showSqlSetup && (
-        <div className={`p-3.5 rounded-xl border space-y-3 select-text animate-fade-in text-[11px] leading-relaxed ${
-          theme === "dark" ? "bg-[#1C2028] border-amber-500/10" : "bg-amber-50/15 border-amber-100"
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 font-sans font-bold text-amber-500">
-              <Database className="w-3.5 h-3.5" />
-              <span>Configure Syllabus Table in Supabase</span>
-            </div>
-            <button
-              onClick={() => setShowSqlSetup(false)}
-              className="text-gray-400 hover:text-gray-200 cursor-pointer"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-
-          <p className="text-gray-450">
-            Keep your lesson checklists synced across devices by pasting this script inside your Supabase <b>SQL Query Editor</b>:
-          </p>
-
-          <div className="border border-white/5 rounded-lg overflow-hidden bg-black/40">
-            <div className="flex justify-between items-center text-[9px] font-mono text-gray-500 px-3 py-1.5 border-b border-white/5">
-              <span>POSTGRESQL CODE</span>
-              <button
-                onClick={handleCopySql}
-                className="text-[#C9973A] hover:underline cursor-pointer bg-transparent border-none"
-              >
-                {copiedSql ? "Copied OK!" : "Copy Code"}
-              </button>
-            </div>
-            <pre className="p-3 text-[10px] font-mono text-gray-300 overflow-x-auto whitespace-pre leading-relaxed select-all">
-              {SYLLABUS_SQL}
-            </pre>
-          </div>
-        </div>
-      )}
-
-      {/* LEVEL PROGRESS BENCHMARK CARD */}
-      <div className={`p-4 rounded-xl border space-y-3 ${
-        theme === "dark" ? "bg-[#1C2028] border-gray-700/50" : "bg-[#FDFBF7] border-[#E8E4DA]"
-      }`}>
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[9px] font-mono text-amber-500 uppercase tracking-widest block font-extrabold">
-              CURRICULUM TRAINED STATUS
-            </span>
-            <span className={`text-[13px] font-serif font-bold ${theme === "dark" ? "text-gray-150" : "text-gray-800"}`}>
-              {completionPercentage === 100 
-                ? "Discipleship Covenant Completed! 🕊️" 
-                : completionPercentage >= 50 
-                  ? "Berean Mastery in Progress" 
-                  : "Daily Study Foundations"}
-            </span>
-          </div>
-          <span className="font-mono text-xs font-black text-amber-500">
-            {completedCount}/{totalItemsCount} Clear
+      {/* 2. ACTIVE DAY SELECTOR STRIP (Linked to Sabbath School Store) */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span
+            style={{ fontFamily: "'Lato', sans-serif" }}
+            className={`text-xs uppercase tracking-wider font-bold not-italic ${
+              isLight ? "text-amber-900" : "text-[#C9973A]"
+            }`}
+          >
+            {quarterlyTitle || "Sabbath School Daily Syllabus"} • {lessonTitle || "Current Lesson"}
           </span>
+          <button
+            type="button"
+            onClick={() =>
+              updateDailyLessonStatus(
+                safeDayIndex,
+                isDayCompleted ? "In Progress" : "Complete"
+              )
+            }
+            style={{ fontFamily: "'Lato', sans-serif" }}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold not-italic cursor-pointer transition-all ${
+              isDayCompleted
+                ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
+                : isLight
+                ? "bg-amber-100/80 border-amber-400 text-amber-950 hover:bg-amber-200/80"
+                : "bg-amber-500/15 border-amber-500/35 text-amber-300 hover:bg-amber-500/25"
+            }`}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            <span>{isDayCompleted ? "Day Completed" : "Mark Day Complete"}</span>
+          </button>
         </div>
 
-        {/* Progress percent slider bar */}
-        <div className="w-full h-2 rounded-full relative overflow-hidden bg-gray-500/10">
-          <div
-            style={{ width: `${completionPercentage}%` }}
-            className="h-full bg-gradient-to-r from-orange-500 to-[#C9973A] transition-all duration-300 rounded-full"
-          />
-        </div>
-      </div>
-
-      {/* SYLLABUS STEP CHECKLIST OUTLINE CONTAINER */}
-      <div className="space-y-2.5 pt-0.5 select-text">
-        {isLoading ? (
-          <div className="p-12 flex flex-col items-center justify-center text-center">
-            <Loader2 className="w-6 h-6 text-amber-500 animate-spin mb-2" />
-            <span className="text-xs font-mono text-gray-400">Consulting study registers...</span>
-          </div>
-        ) : (
-          lessons.map((item, index) => {
-            const isCompleted = !!completedItems[item.id];
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scroll">
+          {(dailyLessons || []).map((day, idx) => {
+            const isSelected = idx === safeDayIndex;
             return (
-              <div
-                key={item.id}
-                onClick={() => handleToggleItem(item.id)}
-                className={`p-3.5 rounded-xl border flex gap-3 cursor-pointer select-none transition-all duration-120 ${
-                  isCompleted
-                    ? theme === "dark"
-                      ? "bg-emerald-950/20 border-emerald-500/35 opacity-90"
-                      : "bg-emerald-50/20 border-emerald-200"
-                    : theme === "dark"
-                      ? "bg-[#1C2028] border-gray-700/50 hover:border-gray-600/70"
-                      : "bg-white border-stone-200 hover:border-stone-300"
+              <button
+                key={`syllabus-day-tab-${idx}`}
+                type="button"
+                onClick={() => setSelectedDayIndex(idx)}
+                style={{ fontFamily: "'Lato', sans-serif" }}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-bold not-italic shrink-0 transition-all cursor-pointer ${
+                  isSelected
+                    ? "bg-[#C9973A] text-stone-950 border-[#F3CF65] shadow-xs"
+                    : isLight
+                    ? "bg-white text-stone-700 border-stone-300 hover:border-[#C9973A]"
+                    : "bg-[#161B22] text-stone-300 border-stone-800 hover:border-[#C9973A]/50 hover:text-white"
                 }`}
               >
-                {/* Custom active circle toggle */}
-                <div className="pt-0.5 shrink-0">
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all ${
-                    isCompleted
-                      ? "bg-emerald-500 border-emerald-500 text-white"
-                      : theme === "dark"
-                        ? "border-gray-600 hover:border-gray-500"
-                        : "border-gray-300 hover:border-gray-400"
-                  }`}>
-                    {isCompleted ? (
-                      <Check className="w-3 h-3 stroke-[3px]" />
-                    ) : (
-                      <span className="text-[9px] font-mono text-gray-500 font-bold">{index + 1}</span>
-                    )}
+                Day {idx + 1}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3. MEMORY VERSE SECTION — MUST BE 20px, BOLD, NO ITALICS */}
+      <section
+        id="daily-syllabus-memory-verse"
+        onClick={() => handleLocateVerseInBible(memoryVerseRef)}
+        style={{ fontFamily: "'Lato', sans-serif" }}
+        className={`p-5 rounded-2xl border transition-all cursor-pointer ${
+          isLight
+            ? "bg-white border-[#C9973A]/50 shadow-sm hover:border-[#C9973A]"
+            : "bg-[#111927] border-[#C9973A]/45 shadow-md hover:border-[#F3CF65]"
+        }`}
+        title={`Click to locate ${memoryVerseRef} in the Bible Reader`}
+      >
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span
+            style={{ fontFamily: "'Lato', sans-serif" }}
+            className={`text-xs font-bold uppercase tracking-wider not-italic flex items-center gap-1.5 ${
+              isLight ? "text-[#8C5209]" : "text-[#F3CF65]"
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#C9973A] shrink-0" />
+            <span>Memory Verse</span>
+          </span>
+          <span
+            style={{ fontFamily: "'Lato', sans-serif" }}
+            className={`text-xs font-bold not-italic px-2.5 py-0.5 rounded-md border ${
+              isLight
+                ? "bg-amber-50 text-amber-950 border-amber-300"
+                : "bg-[#1B2840] text-amber-300 border-[#C9973A]/40"
+            }`}
+          >
+            {memoryVerseRef} • Locate in Bible
+          </span>
+        </div>
+
+        <p
+          id="daily-syllabus-memory-verse-text"
+          style={{
+            fontFamily: "'Lato', sans-serif",
+            fontSize: "20px",
+            fontWeight: 700,
+            fontStyle: "normal",
+            lineHeight: 1.5
+          }}
+          className={`text-[20px] font-bold not-italic leading-normal select-text ${
+            isLight ? "text-stone-950" : "text-white"
+          }`}
+        >
+          “{memoryVerseText}” — {memoryVerseRef}
+        </p>
+      </section>
+
+      {/* 4. LESSON TITLE SECTION — MUST BE 18px */}
+      <section
+        id="daily-syllabus-lesson-title-section"
+        style={{ fontFamily: "'Lato', sans-serif" }}
+        className={`p-4 sm:p-5 rounded-2xl border ${
+          isLight
+            ? "bg-white border-stone-200/90 shadow-2xs"
+            : "bg-[#141B26] border-stone-800"
+        }`}
+      >
+        <div className="text-xs font-bold uppercase tracking-wider text-[#C9973A] not-italic mb-1">
+          {activeDay?.label || `Day ${safeDayIndex + 1}`} • Active Sabbath School Lesson
+        </div>
+        <h2
+          id="daily-syllabus-lesson-title"
+          style={{
+            fontFamily: "'Lato', sans-serif",
+            fontSize: "18px",
+            fontWeight: 700,
+            fontStyle: "normal",
+            lineHeight: 1.4
+          }}
+          className={`text-[18px] font-bold not-italic ${
+            isLight ? "text-stone-950" : "text-white"
+          }`}
+        >
+          {activeDay?.title || lessonTitle || "Stewardship and Mission"}
+        </h2>
+      </section>
+
+      {/* 5. DAILY SUMMARY SECTION — MUST BE 16px, BULLETED AND CONCISE */}
+      <section
+        id="daily-syllabus-summary-section"
+        style={{ fontFamily: "'Lato', sans-serif" }}
+        className={`p-5 rounded-2xl border space-y-3 ${
+          isLight
+            ? "bg-white border-stone-200/90 shadow-2xs"
+            : "bg-[#141B26] border-stone-800"
+        }`}
+      >
+        <div className="flex items-center gap-2 border-b pb-2.5 border-[#C9973A]/25">
+          <BookOpen className="w-4 h-4 text-[#C9973A] shrink-0" />
+          <h3
+            style={{
+              fontFamily: "'Lato', sans-serif",
+              fontSize: "18px",
+              fontWeight: 700,
+              fontStyle: "normal"
+            }}
+            className={`text-[18px] font-bold not-italic ${
+              isLight ? "text-stone-900" : "text-amber-300"
+            }`}
+          >
+            Daily Summary
+          </h3>
+        </div>
+
+        <ul
+          id="daily-syllabus-summary-list"
+          style={{
+            fontFamily: "'Lato', sans-serif",
+            fontSize: "16px",
+            fontStyle: "normal",
+            lineHeight: 1.6
+          }}
+          className={`list-disc pl-5 space-y-2.5 text-[16px] not-italic select-text ${
+            isLight ? "text-stone-800" : "text-stone-200"
+          }`}
+        >
+          {dailySummaryBullets.map((bullet, bIdx) => (
+            <li
+              key={`daily-summary-bullet-${bIdx}`}
+              style={{
+                fontFamily: "'Lato', sans-serif",
+                fontSize: "16px",
+                fontStyle: "normal"
+              }}
+              className="text-[16px] not-italic leading-relaxed"
+            >
+              {bullet}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* 6. SCRIPTURE BREAKDOWN SECTION — MUST BE 16px, EVERY REFERENCED VERSE + CONTEXTUAL EXPLANATION */}
+      <section
+        id="daily-syllabus-scripture-breakdown"
+        style={{ fontFamily: "'Lato', sans-serif" }}
+        className={`p-5 rounded-2xl border space-y-4 ${
+          isLight
+            ? "bg-white border-stone-200/90 shadow-2xs"
+            : "bg-[#141B26] border-stone-800"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2 border-b pb-2.5 border-[#C9973A]/25">
+          <div className="flex items-center gap-2">
+            <BookMarked className="w-4 h-4 text-[#C9973A] shrink-0" />
+            <h3
+              style={{
+                fontFamily: "'Lato', sans-serif",
+                fontSize: "18px",
+                fontWeight: 700,
+                fontStyle: "normal"
+              }}
+              className={`text-[18px] font-bold not-italic ${
+                isLight ? "text-stone-900" : "text-amber-300"
+              }`}
+            >
+              Scripture Breakdown ({scriptureBreakdown.length} {scriptureBreakdown.length === 1 ? "Passage" : "Passages"})
+            </h3>
+          </div>
+          <span
+            style={{ fontFamily: "'Lato', sans-serif" }}
+            className="text-xs font-bold not-italic text-[#C9973A]"
+          >
+            Click any verse to locate in Bible
+          </span>
+        </div>
+
+        <div className="space-y-4">
+          {scriptureBreakdown.map((item, idx) => {
+            const isCurrentlyActive =
+              currentPassageRef &&
+              currentPassageRef.toLowerCase().includes(item.reference.toLowerCase());
+            const loadedText = verseTextsMap[item.reference];
+            const isLoadingVerse = loadingVersesMap[item.reference];
+
+            return (
+              <div
+                key={`breakdown-verse-${item.reference}-${idx}`}
+                onClick={() => handleLocateVerseInBible(item.reference)}
+                style={{
+                  fontFamily: "'Lato', sans-serif",
+                  fontSize: "16px",
+                  fontStyle: "normal"
+                }}
+                className={`p-4 rounded-xl border transition-all cursor-pointer space-y-2.5 text-[16px] not-italic ${
+                  isCurrentlyActive
+                    ? isLight
+                      ? "bg-amber-50/90 border-[#C9973A] ring-2 ring-[#C9973A]/30"
+                      : "bg-[#1B2840] border-[#F3CF65] ring-2 ring-[#F3CF65]/30"
+                    : isLight
+                    ? "bg-[#FAF7F2] hover:bg-amber-50/50 border-stone-200 hover:border-[#C9973A]/60"
+                    : "bg-[#0E1522] hover:bg-[#162033] border-stone-800 hover:border-[#C9973A]/50"
+                }`}
+              >
+                {/* Reference Header & Locate Trigger */}
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    style={{
+                      fontFamily: "'Lato', sans-serif",
+                      fontSize: "16px",
+                      fontWeight: 700,
+                      fontStyle: "normal"
+                    }}
+                    className={`inline-flex items-center gap-2 text-[16px] font-bold not-italic ${
+                      isLight ? "text-amber-950" : "text-[#F3CF65]"
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4 text-[#C9973A] shrink-0" />
+                    <span>{item.reference}</span>
                   </span>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLocateVerseInBible(item.reference);
+                    }}
+                    style={{ fontFamily: "'Lato', sans-serif" }}
+                    className={`px-3 py-1 rounded-lg border text-xs font-bold not-italic transition-all cursor-pointer ${
+                      isCurrentlyActive
+                        ? "bg-[#C9973A] text-stone-950 border-[#F3CF65]"
+                        : isLight
+                        ? "bg-white hover:bg-amber-100 text-amber-900 border-amber-300"
+                        : "bg-[#162238] hover:bg-[#1F3150] text-amber-300 border-[#C9973A]/40"
+                    }`}
+                  >
+                    {isCurrentlyActive ? "Located in Bible" : "Open & Locate in Bible"}
+                  </button>
                 </div>
 
-                {/* Main lesson copy */}
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-[9px] font-mono uppercase font-black px-1.5 py-0.5 rounded tracking-wide leading-none ${
-                      isCompleted
-                        ? theme === "dark"
-                          ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
-                          : "bg-emerald-50 text-emerald-800 border border-emerald-100"
-                        : theme === "dark"
-                          ? "bg-gray-800 text-gray-400 border border-transparent"
-                          : "bg-stone-100 text-stone-600 border border-stone-200"
-                    }`}>
-                      {item.dayLabel}
-                    </span>
-                    <h4 className={`text-xs font-bold font-sans transition-all leading-normal ${
-                      isCompleted
-                        ? "text-gray-450 line-through font-normal"
-                        : theme === "dark"
-                          ? "text-gray-200"
-                          : "text-gray-800"
-                    }`}>
-                      {item.title}
-                    </h4>
+                {/* Scripture Passage Text at 16px */}
+                {isLoadingVerse ? (
+                  <div className="flex items-center gap-2 text-xs text-stone-400 py-1">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C9973A]" />
+                    <span>Loading scripture text for {item.reference}...</span>
                   </div>
-                  <p className={`text-[11.5px] font-sans leading-relaxed transition-all ${
-                    isCompleted
-                      ? "text-gray-500 italic"
-                      : theme === "dark"
-                        ? "text-gray-350"
-                        : "text-stone-650"
-                  }`}>
-                    {item.description}
+                ) : loadedText ? (
+                  <p
+                    style={{
+                      fontFamily: "'Lato', sans-serif",
+                      fontSize: "16px",
+                      fontStyle: "normal",
+                      lineHeight: 1.6
+                    }}
+                    className={`text-[16px] font-semibold not-italic leading-relaxed pl-3 border-l-2 border-[#C9973A] select-text ${
+                      isLight ? "text-stone-900" : "text-white"
+                    }`}
+                  >
+                    “{loadedText}”
                   </p>
+                ) : null}
+
+                {/* Contextual Explanation connecting passage to the Daily Summary at 16px */}
+                <div
+                  style={{
+                    fontFamily: "'Lato', sans-serif",
+                    fontSize: "16px",
+                    fontStyle: "normal",
+                    lineHeight: 1.6
+                  }}
+                  className={`text-[16px] not-italic leading-relaxed select-text pt-1 ${
+                    isLight ? "text-stone-700" : "text-stone-300"
+                  }`}
+                >
+                  <span className="font-bold text-[#C9973A] mr-1.5">Connection to Daily Summary:</span>
+                  <span>{item.contextualExplanation}</span>
                 </div>
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      </section>
     </div>
   );
 };
+

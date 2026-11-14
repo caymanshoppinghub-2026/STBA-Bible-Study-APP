@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Scripture } from "../../types";
 import { useApp } from "../../context/AppContext";
+import { apiFetch, safeParseResponseJson } from "../../lib/apiFetch";
 
 interface GeminiRecallModuleProps {
   initialScripture?: Scripture;
@@ -97,7 +98,7 @@ export const GeminiRecallModule: React.FC<GeminiRecallModuleProps> = ({
     setShowHints(false);
 
     try {
-      const res = await fetch("/api/recall/ai-prompt", {
+      const res = await apiFetch("/api/recall/ai-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -107,8 +108,8 @@ export const GeminiRecallModule: React.FC<GeminiRecallModuleProps> = ({
         })
       });
       if (res.ok) {
-        const data = await res.json();
-        setActivePromptData(data);
+        const data = await safeParseResponseJson<any>(res);
+        if (data) setActivePromptData(data);
       }
     } catch (err) {
       console.error("[Gemini Recall Prompt Error]:", err);
@@ -123,7 +124,7 @@ export const GeminiRecallModule: React.FC<GeminiRecallModuleProps> = ({
     setIsEvaluating(true);
 
     try {
-      const res = await fetch("/api/recall/ai-evaluate", {
+      const res = await apiFetch("/api/recall/ai-evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -134,10 +135,12 @@ export const GeminiRecallModule: React.FC<GeminiRecallModuleProps> = ({
       });
 
       if (res.ok) {
-        const data = await res.json();
-        setEvaluationResult(data);
-        if (data.accuracyScore >= 85) {
-          showConfetti("recall");
+        const data = await safeParseResponseJson<any>(res);
+        if (data) {
+          setEvaluationResult(data);
+          if (data.accuracyScore >= 85) {
+            showConfetti("recall");
+          }
         }
       }
     } catch (err) {

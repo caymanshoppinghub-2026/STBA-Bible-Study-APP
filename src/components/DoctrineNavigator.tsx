@@ -273,7 +273,7 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
               title="An active, Holy Spirit-attuned biblical intelligence that reasons alongside your Berean study"
             >
               <Brain className="w-3.5 h-3.5 text-[#DFC57B] animate-pulse" />
-              <span>COGNITIVE SCRIPTURE COMPANION • INTELLIGENT BIBLICAL REASONING ENGINE</span>
+              <span>INTELLIGENT BIBLICAL REASONING ENGINE</span>
             </div>
           </div>
 
@@ -342,12 +342,12 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
         </div>
       </div>
 
-      {/* 2. SACRED DOCTRINAL PORTALS • CHOOSE ARCHITECTURAL BLUEPRINT */}
+      {/* 2. CHOOSE BLUEPRINT FOCUS */}
       <div className="space-y-3.5 text-left font-lato font-normal not-italic" id="track-selector-section">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-lato font-normal not-italic uppercase tracking-widest text-[#DFC57B] flex items-center gap-2">
             <Layers className="w-4 h-4 text-[#DFC57B]" />
-            <span>Sacred Doctrinal Portals • Choose Architectural Blueprint</span>
+            <span>Choose Blueprint Focus</span>
           </h2>
           <span className="text-[11px] text-stone-400 font-lato font-normal not-italic hidden sm:inline">
             Select a sacred portal to unveil its divine blueprint
@@ -907,14 +907,18 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
       {/* 5. INLINE NOTEBOOK SYNCHRONIZATION DRAWER (DISCIPLESHIP VAULT • SACRED OUTLINE MAPPER) */}
       <AnimatePresence>
         {isNotesOpen && (
-          <div className="fixed inset-0 z-50 overflow-hidden flex justify-end font-lato font-normal not-italic" id="notebook-drawer-overlay">
+          <div
+            className="fixed inset-0 z-50 overflow-hidden flex justify-end font-['Lato',sans-serif] font-normal not-italic"
+            style={{ fontFamily: "'Lato', sans-serif" }}
+            id="notebook-drawer-overlay"
+          >
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
+              animate={{ opacity: 0.6 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsNotesOpen(false)}
-              className="absolute inset-0 bg-stone-900 backdrop-blur-xs"
+              className="absolute inset-0 bg-black/75 backdrop-blur-xs"
             />
             
             {/* Drawer Sheet */}
@@ -923,56 +927,57 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 220 }}
-              className="relative w-full max-w-xl h-full bg-white shadow-2xl flex flex-col justify-between font-lato font-normal not-italic"
+              style={{ fontFamily: "'Lato', sans-serif" }}
+              className="relative w-full max-w-xl h-full bg-[#0B111E] border-l border-[#C9973A]/40 text-stone-100 shadow-2xl flex flex-col justify-between font-['Lato',sans-serif] font-normal not-italic z-10"
               id="notebook-drawer-sheet"
             >
               <div className="flex flex-col h-full overflow-y-auto">
                 {/* Header */}
-                <div className="p-5 border-b border-stone-200 flex justify-between items-center bg-[#FDFAF5]">
+                <div className="p-5 border-b border-[#C9973A]/30 flex justify-between items-center bg-[#0F172A]">
                   <div className="flex items-center gap-2.5 text-left">
-                    <div className="p-2 bg-white border border-[#E8DDC6] rounded-xl text-[#C9973A] shadow-xs">
+                    <div className="p-2 bg-[#C9973A]/15 border border-[#C9973A]/40 rounded-xl text-[#F3CF65] shadow-xs">
                       <FilePen className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="font-lato font-normal not-italic text-sm text-[#1C2333] leading-none">
+                      <h3 className="font-['Lato',sans-serif] font-bold not-italic text-base text-white leading-none">
                         Discipleship Vault • Sacred Outline Mapper
                       </h3>
-                      <span className="text-[9px] font-lato font-normal not-italic text-[#C9973A] uppercase tracking-wider mt-1 block">
+                      <span className="text-[10px] font-['Lato',sans-serif] font-normal not-italic text-[#C9973A] uppercase tracking-wider mt-1 block">
                         Intelligently connects scripture & syncs with study vault
                       </span>
                     </div>
                   </div>
                   <button
                     onClick={() => setIsNotesOpen(false)}
-                    className="p-1.5 rounded-lg hover:bg-stone-200 text-stone-600 transition-colors cursor-pointer"
+                    className="p-2 rounded-xl hover:bg-white/10 text-stone-400 hover:text-white border border-stone-800 transition-colors cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
                 {/* Editor Content */}
-                <div className="p-5 space-y-4 flex-1 text-left font-lato font-normal not-italic">
+                <div className="p-5 space-y-4 flex-1 text-left font-['Lato',sans-serif] font-normal not-italic">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-lato font-normal not-italic text-stone-600 uppercase">
+                    <label className="text-[11px] font-['Lato',sans-serif] font-bold not-italic text-stone-300 uppercase">
                       Note Title & Sacred Pillar
                     </label>
                     <input
                       type="text"
                       value={noteTitle}
                       onChange={(e) => setNoteTitle(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-[#141C2E] text-white border border-[#2E3E5C] rounded-xl text-xs font-lato font-normal not-italic focus:outline-none focus:border-[#C9973A] transition-all"
+                      className="w-full px-3.5 py-2.5 bg-[#141C2E] text-white border border-[#2E3E5C] rounded-xl text-xs font-['Lato',sans-serif] font-normal not-italic focus:outline-none focus:border-[#C9973A] transition-all"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3.5">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-lato font-normal not-italic text-stone-600 uppercase">
+                      <label className="text-[11px] font-['Lato',sans-serif] font-bold not-italic text-stone-300 uppercase">
                         Theological Category
                       </label>
                       <select
                         value={noteCategory}
                         onChange={(e) => setNoteCategory(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#141C2E] text-white border border-[#2E3E5C] rounded-xl text-xs font-lato font-normal not-italic focus:outline-none focus:border-[#C9973A] transition-all"
+                        className="w-full px-3 py-2 bg-[#141C2E] text-white border border-[#2E3E5C] rounded-xl text-xs font-['Lato',sans-serif] font-normal not-italic focus:outline-none focus:border-[#C9973A] transition-all"
                       >
                         <option value="theology">Theology & Doctrine</option>
                         <option value="prophecy">Prophecy & Daniel/Revelation</option>
@@ -983,10 +988,10 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-lato font-normal not-italic text-stone-600 uppercase">
+                      <label className="text-[11px] font-['Lato',sans-serif] font-bold not-italic text-stone-300 uppercase">
                         Scriptural Foundation Tags
                       </label>
-                      <div className="sacred-outline-tag-box px-3 py-2 bg-[#141C2E] text-white border border-[#2E3E5C] rounded-xl text-xs font-lato font-normal not-italic truncate">
+                      <div className="sacred-outline-tag-box px-3 py-2 bg-[#141C2E] text-white border border-[#2E3E5C] rounded-xl text-xs font-['Lato',sans-serif] font-normal not-italic truncate">
                         {activeTrack.outline.sections[selectedSectionIndex]?.key_references.join(", ") || "No tags"}
                       </div>
                     </div>
@@ -994,30 +999,30 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
 
                   <div className="space-y-1 flex-1 flex flex-col">
                     <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-lato font-normal not-italic text-stone-600 uppercase">
+                      <label className="text-[11px] font-['Lato',sans-serif] font-bold not-italic text-stone-300 uppercase">
                         Hierarchical Exegesis Outline
                       </label>
-                      <span className="text-[10px] font-lato font-normal not-italic text-[#C9973A]">
+                      <span className="text-[10px] font-['Lato',sans-serif] font-normal not-italic text-[#C9973A]">
                         Formatted in Berean Outline Structure
                       </span>
                     </div>
                     <textarea
                       value={noteContent}
                       onChange={(e) => setNoteContent(e.target.value)}
-                      className="w-full flex-1 min-h-[300px] p-4 bg-[#141C2E] text-white border border-[#2E3E5C] rounded-xl text-xs font-lato font-normal not-italic focus:outline-none focus:border-[#C9973A] transition-all resize-none leading-relaxed"
+                      className="w-full flex-1 min-h-[300px] p-4 bg-[#141C2E] text-white border border-[#2E3E5C] rounded-xl text-xs font-['Lato',sans-serif] font-normal not-italic focus:outline-none focus:border-[#C9973A] transition-all resize-none leading-relaxed"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Action Bar Footer inside Drawer */}
-              <div className="p-4 border-t border-stone-200 bg-[#FDFAF5]/60 flex justify-between items-center font-lato font-normal not-italic">
+              <div className="p-4 border-t border-[#C9973A]/30 bg-[#0F172A] flex justify-between items-center font-['Lato',sans-serif] font-normal not-italic">
                 <button
                   onClick={() => {
                     setIsNotesOpen(false);
                     navigate("/notebook");
                   }}
-                  className="px-3.5 py-2 bg-white border border-[#E8E4DA] hover:border-stone-400 text-stone-700 rounded-xl text-xs font-lato font-normal not-italic transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-2 bg-[#141E33] border border-[#2E3E5C] hover:border-[#C9973A]/60 text-stone-200 hover:text-[#F3CF65] rounded-xl text-xs font-['Lato',sans-serif] font-bold not-italic transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>Open Full Vault</span>
                   <ExternalLink className="w-3 h-3" />
@@ -1026,7 +1031,7 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
                 <button
                   onClick={handleSaveNote}
                   disabled={isSaving}
-                  className="px-5 py-2 bg-[#C9973A] hover:bg-[#B5852F] text-white rounded-xl text-xs font-lato font-normal not-italic transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-md active:scale-95"
+                  className="px-5 py-2 bg-[#C9973A] hover:bg-[#D9A74A] text-stone-950 rounded-xl text-xs font-['Lato',sans-serif] font-bold not-italic transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-md active:scale-95"
                 >
                   {isSaving ? (
                     <span>Synchronizing to Vault...</span>

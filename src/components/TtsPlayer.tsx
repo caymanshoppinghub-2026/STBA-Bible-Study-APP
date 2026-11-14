@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Play, Pause, RotateCcw, Volume2, Loader2, Sliders, Check, Globe, Sparkles } from "lucide-react";
 import { useMediaInitialization } from "./MediaInitializationProvider";
 import { getElderStephenVoice, filterEdgeNaturalVoices } from "./stba/RightPaneTools";
+import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from "../lib/apiFetch";
 
 // Global in-memory TTS cache declared on the global scope or window
 const globalTtsCache: Record<string, string> = {};
@@ -12,6 +13,7 @@ if (typeof window !== "undefined") {
 
 export const preCacheSpeechAudios = async (texts: string[], voice: string = "Puck") => {
   if (typeof window === "undefined") return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
   const cache = (window as any).__STBA_TTS_CACHE__ || globalTtsCache;
   for (const text of texts) {
     const cleaned = text
@@ -21,22 +23,29 @@ export const preCacheSpeechAudios = async (texts: string[], voice: string = "Puc
       .replace(/Elder Stephen:/g, "")
       .replace(/Dr. Adams/g, "Doctor Adams")
       .trim();
+    if (!cleaned) continue;
     const cacheKey = `${cleaned}_${voice}`;
     if (!cache[cacheKey]) {
       try {
-        const response = await fetch("/api/study/narrate", {
+        const response = await apiFetch("/api/study/narrate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: cleaned, voice })
+          body: JSON.stringify({
+            text: cleaned,
+            voice,
+            model: "gemini-3.8-live",
+            onboarding: true,
+            disableBrowserFallback: true
+          })
         });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.audio) {
+        if (response.ok && !isAuthRedirectResponse(response)) {
+          const data = await safeParseResponseJson<any>(response);
+          if (data?.success && data?.audio) {
             cache[cacheKey] = data.audio;
           }
         }
-      } catch (err) {
-        console.warn("Pre-cache failed for text:", text, err);
+      } catch {
+        // Optional opportunistic pre-cache: silently fall back to on-demand narration
       }
     }
   }
@@ -48,9 +57,28 @@ interface TtsPlayerProps {
   autoPlay?: boolean;
   label?: string;
   variant?: "default" | "card";
+  disableBrowserFallback?: boolean;
 }
 
-export const TtsPlayer: React.FC<TtsPlayerProps> = ({ text, messageId, autoPlay = true, label, variant = "default" }) => {
+export const TtsPlayer: React.FC<TtsPlayerProps> = ({
+  text,
+  messageId,
+  autoPlay = true,
+  label,
+  variant = "default",
+  disableBrowserFallback = false
+}) => {
+  const isOnboardingTourActive =
+    typeof window !== "undefined" &&
+    Boolean(
+      localStorage.getItem("stba_onboarding_stage") ||
+      localStorage.getItem("stba_onboarding_voice_engine") === "gemini-3.8-live"
+    );
+  const blockBrowserTts = Boolean(
+    disableBrowserFallback ||
+    messageId.startsWith("onboarding") ||
+    isOnboardingTourActive
+  );
   const { isMediaInitialized, initializeMedia } = useMediaInitialization();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -190,10 +218,11 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({ text, messageId, autoPlay 
     setIsLoading(true);
 
     const loadTts = async () => {
-      const activeEngine = (localStorage.getItem("stba_tts_engine") as "original" | "browser") || ttsEngine;
+      const savedEngine = (localStorage.getItem("stba_tts_engine") as "original" | "browser") || ttsEngine;
+      const activeEngine = blockBrowserTts ? "original" : savedEngine;
 
-      // MODE 1: BROWSER SYNTHESIZED VOICE (EDGE / WEB SPEECH API)
-      if (activeEngine === "browser") {
+      // MODE 1: BROWSER SYNTHESIZED VOICE (Explicitly blocked when blockBrowserTts is true)
+      if (activeEngine === "browser" && !blockBrowserTts) {
         if (!active) return;
         setIsFallback(true);
         setIsLoading(false);
@@ -223,33 +252,47 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({ text, messageId, autoPlay 
         return;
       }
 
-      // MODE 2: ORIGINAL ELDER STEPHEN VOICE (GEMINI AI API)
+      // MODE 2: GEMINI LIVE 3.8 / 3.8 SPEECH ENGINE
       try {
+        if (blockBrowserTts && typeof window !== "undefined" && "speechSynthesis" in window) {
+          try {
+            window.speechSynthesis.cancel();
+          } catch {}
+        }
+
         const cacheKey = `${cleanedText}_${currentVoice}`;
         const cachedBase64 = (window as any).__STBA_TTS_CACHE__?.[cacheKey];
         
         let base64Audio = cachedBase64;
         
         if (!base64Audio) {
-          const response = await fetch("/api/study/narrate", {
+          const response = await apiFetch("/api/study/narrate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: cleanedText, voice: currentVoice })
+            body: JSON.stringify({
+              text: cleanedText,
+              voice: currentVoice,
+              model: "gemini-3.8-live",
+              onboarding: blockBrowserTts,
+              disableBrowserFallback: blockBrowserTts
+            })
           });
           
-          if (!response.ok) throw new Error("Narrate request failed");
-          
-          const data = await response.json();
-          if (data.success && data.audio) {
+          if (!response.ok || isAuthRedirectResponse(response)) {
+            throw new Error("Narrate request unavailable");
+          }
+
+          const data = await safeParseResponseJson<any>(response);
+          if (data?.success && data?.audio) {
             base64Audio = data.audio;
             if ((window as any).__STBA_TTS_CACHE__) {
               (window as any).__STBA_TTS_CACHE__[cacheKey] = base64Audio;
             }
           } else {
-            if (data.quotaExceeded || data.unavailable) {
+            if (data?.quotaExceeded || data?.unavailable) {
               setIsQuotaExceeded(true);
             }
-            throw new Error(data.error || "No audio returned, using Browser fallback");
+            throw new Error(data?.error || "No audio returned");
           }
         }
 
@@ -354,10 +397,22 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({ text, messageId, autoPlay 
           }
         }
       } catch (err: any) {
-        console.warn("Using high-fidelity browser speech-synthesis fallback:", err);
         if (!active) return;
-        setIsFallback(true);
         setIsLoading(false);
+
+        // Explicitly block any browser-level speechSynthesis fallback when blockBrowserTts is active
+        if (blockBrowserTts) {
+          setIsFallback(false);
+          if (typeof window !== "undefined" && "speechSynthesis" in window) {
+            try {
+              window.speechSynthesis.cancel();
+            } catch {}
+          }
+          return;
+        }
+
+        console.warn("Using high-fidelity browser speech-synthesis fallback:", err);
+        setIsFallback(true);
         const errStr = String(err?.message || "");
         if (errStr.toLowerCase().includes("quota") || errStr.toLowerCase().includes("exhausted") || err?.status === 429) {
           setIsQuotaExceeded(true);
@@ -430,7 +485,7 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({ text, messageId, autoPlay 
     if (!isMediaInitialized) {
       initializeMedia();
     }
-    if (isFallback || ttsEngine === "browser") {
+    if (!blockBrowserTts && (isFallback || ttsEngine === "browser")) {
       if ("speechSynthesis" in window) {
         if (window.speechSynthesis.speaking && utteranceRef.current) {
           if (window.speechSynthesis.paused) {
@@ -521,7 +576,7 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({ text, messageId, autoPlay 
   };
 
   const handleReplay = () => {
-    if (isFallback || ttsEngine === "browser") {
+    if (!blockBrowserTts && (isFallback || ttsEngine === "browser")) {
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
         const utt = createUtterance();
@@ -787,8 +842,15 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({ text, messageId, autoPlay 
   }
 
   return (
-    <div className="w-full mt-3 relative" id={`tts-container-${messageId}`}>
-      <div className="w-full p-2.5 bg-stone-50 border border-stone-200/60 rounded-xl flex flex-col space-y-2 text-stone-700 font-sans shadow-2xs">
+    <div
+      className="w-full mt-3 relative"
+      id={`tts-container-${messageId}`}
+      style={messageId === "onboarding-welcome-greeting" ? { display: "none" } : undefined}
+    >
+      <div
+        className="w-full p-2.5 bg-stone-50 border border-stone-200/60 rounded-xl flex flex-col space-y-2 text-stone-700 font-sans shadow-2xs"
+        style={messageId === "onboarding-welcome-greeting" ? { display: "none" } : undefined}
+      >
         {/* Top Operational Row: Play/Pause, Voice Label, Engine Selector, Settings & Replay */}
         <div className="flex items-center justify-between gap-2 w-full min-w-0">
           <div className="flex items-center space-x-2 min-w-0">

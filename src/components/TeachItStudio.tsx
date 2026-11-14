@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
 import {
   X,
   Mic,
@@ -16,7 +17,6 @@ import {
   AlertTriangle,
   ChevronRight,
   ArrowRight,
-  ArrowLeft,
   RefreshCw,
   Play,
   Volume2,
@@ -37,530 +37,40 @@ import {
   Download,
   FileText,
   Printer,
-  Brain,
-  ExternalLink,
-  Copy,
-  Check,
-  Scroll,
-  Lightbulb,
-  PenLine,
-  ChevronDown,
-  ChevronUp
+  Brain
 } from "lucide-react";
-import { jsPDF } from "jspdf";
 import { Scripture } from "../types";
 import { useApp } from "../context/AppContext";
 import { callElderStephen } from "../lib/callElderStephen";
 import { getElderStephenVoice } from "./stba/RightPaneTools";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { bibleService } from "../services/bibleService";
-import { ScriptureLinkedText } from "./stba/ScriptureLinkedText";
-import { STBA_LOGO_URL } from "../assets/branding";
+import {
+  supabase,
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  SUPABASE_EDGE_FUNCTION_URL,
+  buildSupabaseLiveWebSocketUrl,
+  getSupabaseEdgeFunctionWsUrl,
+  getUntruncatedSessionToken,
+  type StudyContextQueryParams
+} from "../lib/supabase";
 
-// Clean slate active topic placeholder (no hardcoded scripture default)
-const CLEAN_SLATE_SCRIPTURE: Scripture = {
-  id: "active-study-topic",
-  reference: "Active Study Topic",
-  text: "Introduce any biblical topic, doctrine, or passage in dialogue with Elder Steven to begin your progressive study.",
-  keywords: ["scripture", "covenant", "christ", "truth", "obedience"]
+// Default target scripture used for exegesis (2 Timothy 2:15)
+const DEFAULT_SCRIPTURE: Scripture = {
+  id: "2tim-2-15",
+  reference: "2 Timothy 2:15",
+  text: "Study to shew thyself approved unto God, a workman that needeth not to be ashamed, rightly dividing the word of truth.",
+  keywords: ["study", "approved", "workman", "ashamed", "rightly dividing"]
 };
 
 // Simulated pre-baked responses for various stages if the user triggers simulator
 const SIMULATED_EXPOSITIONS: Record<string, string> = {
-  stage1: "In the foundational biblical context, the core message establishes God's covenant character and reveals His redemptive purpose in Christ. By comparing Scripture with Scripture, we see the immediate setting and original meaning clearly.",
-  stage2: "Looking at the Great Controversy timeline, God's truth has always been the target of counterfeit traditions. Standing on the plain testimony of the Word anchors the believer against deception.",
-  stage3: "This study connects directly to historic Seventh-day Adventist doctrinal harmony, uniting the Old and New Testament witness around the person and ministry of Jesus Christ.",
-  stage4: "A practical application for daily discipleship is to translate this biblical principle into intentional prayer, character growth, and faithful obedience in our homes and communities today.",
-  stage5: "When inviting a friend, neighbor, or seeker to explore this truth, we lead with warmth, clarity, and Christlike gentleness—opening the Bible together as fellow learners."
-};
-
-export interface FundamentalBeliefData {
-  number: number;
-  title: string;
-  summary: string;
-  egwQuote: string;
-  keyTexts: string[];
-}
-
-export interface ScriptureReferenceItem {
-  reference: string;
-  text: string;
-  role?: string;
-}
-
-export interface EgwQuoteItem {
-  quote: string;
-  source: string;
-  work: string;
-  theologicalContext: string;
-}
-
-export interface ExplanatoryNoteItem {
-  title: string;
-  lexicalOrDoctrinalNote: string;
-  howToExplainToOthers: string;
-  analogyOrIllustration?: string;
-}
-
-export interface TopicOverviewData {
-  topicTitle: string;
-  scriptureReference: string;
-  historicalContext: string;
-  quotedScriptures: ScriptureReferenceItem[];
-  egwWritings?: EgwQuoteItem[];
-  explanatoryNotes?: ExplanatoryNoteItem[];
-  lastDaysImportance: string;
-  stagesOutline: { stage: number; title: string; focus: string }[];
-}
-
-export type LearningTier = "Essential" | "Standard" | "Comprehensive";
-
-export const getDefaultTopicOverview = (scripture: Scripture, doctrineId?: string): TopicOverviewData => {
-  const rawRef = (scripture?.reference || "").trim();
-  const refLower = rawRef.toLowerCase();
-
-  // 1. THE SABBATH
-  if (doctrineId === "sabbath" || refLower.includes("exodus 20:8") || refLower.includes("sabbath") || refLower.includes("genesis 2")) {
-    return {
-      topicTitle: "The Sabbath: Seal of the Living God & Memorial of Creation",
-      scriptureReference: rawRef && rawRef !== "Active Study Topic" ? rawRef : "Exodus 20:8–11",
-      historicalContext: "Instituted by the Creator in Eden at Creation before sin entered (Genesis 2:1–3), etched into stone by God's own finger at Mount Sinai (Exodus 20:8–11), and consistently honored by Jesus and His apostles throughout the New Testament (Luke 4:16, Acts 17:2).",
-      quotedScriptures: [
-        {
-          reference: "Genesis 2:1–3",
-          text: "Thus the heavens and the earth were finished, and all the host of them. And on the seventh day God ended his work which he had made; and he rested on the seventh day from all his work which he had made. And God blessed the seventh day, and sanctified it: because that in it he had rested from all his work which God created and made.",
-          role: "Creation Origin & Edenic Blessing"
-        },
-        {
-          reference: "Exodus 20:8–11",
-          text: "Remember the sabbath day, to keep it holy. Six days shalt thou labour, and do all thy work: But the seventh day is the sabbath of the LORD thy God: in it thou shalt not do any work... For in six days the LORD made heaven and earth, the sea, and all that in them is, and rested the seventh day: wherefore the LORD blessed the sabbath day, and hallowed it.",
-          role: "Decalogue Core & Covenant Command"
-        },
-        {
-          reference: "Ezekiel 20:12",
-          text: "Moreover also I gave them my sabbaths, to be a sign between me and them, that they might know that I am the LORD that sanctify them.",
-          role: "Sign of Sanctification & Covenant Allegiance"
-        },
-        {
-          reference: "Isaiah 58:13–14",
-          text: "If thou turn away thy foot from the sabbath, from doing thy pleasure on my holy day; and call the sabbath a delight, the holy of the LORD, honourable; and shalt honour him, not doing thine own ways, nor finding thine own pleasure, nor speaking thine own words: Then shalt thou delight thyself in the LORD...",
-          role: "Delight & Spiritual Restoration"
-        },
-        {
-          reference: "Luke 4:16",
-          text: "And he came to Nazareth, where he had been brought up: and, as his custom was, he went into the synagogue on the sabbath day, and stood up for to read.",
-          role: "Christ's Custom & Apostolic Example"
-        },
-        {
-          reference: "Hebrews 4:9–11",
-          text: "There remaineth therefore a rest to the people of God. For he that is entered into his rest, he also hath ceased from his own works, as God did from his. Let us labour therefore to enter into that rest, lest any man fall after the same example of unbelief.",
-          role: "New Covenant Rest in Christ"
-        },
-        {
-          reference: "Revelation 14:7",
-          text: "Saying with a loud voice, Fear God, and give glory to him; for the hour of his judgment is come: and worship him that made heaven, and earth, and the sea, and the fountains of waters.",
-          role: "End-Time Call to Worship the Creator"
-        }
-      ],
-      egwWritings: [
-        {
-          work: "The Desire of Ages",
-          source: "DA 281.3",
-          quote: "The Sabbath was hallowed at the creation. As ordained for man, it had its origin when 'the morning stars sang together, and all the sons of God shouted for joy.' Peace brooded over the world; for earth was in harmony with heaven... It points to God as the Maker of all, and is a perpetual memorial of His power and wisdom.",
-          theologicalContext: "Establishes that the Sabbath is not a temporary Jewish shadow, but an unchangeable Edenic creation memorial given to all humanity before sin."
-        },
-        {
-          work: "The Great Controversy",
-          source: "GC 605.2",
-          quote: "The Sabbath will be the great test of loyalty; for it is the point of truth especially controverted. When the final test shall be brought to bear upon men, then the line of demarcation will be drawn between those who serve God and those who serve Him not.",
-          theologicalContext: "Highlights the prophetic conflict in Revelation 14 between the seal of God (the seventh-day Sabbath) and the counterfeit mark of human authority."
-        },
-        {
-          work: "Patriarchs and Prophets",
-          source: "PP 307.2",
-          quote: "The Sabbath is a golden clasp that unites God and His people. It was given to preserve a living knowledge of the true God in the minds of men.",
-          theologicalContext: "Reveals the relational, covenantal heart of the Sabbath as a weekly sanctuary in time uniting the soul with Christ."
-        }
-      ],
-      explanatoryNotes: [
-        {
-          title: "Hebrew Root: Shabbat (שַׁבָּת)",
-          lexicalOrDoctrinalNote: "Derived from 'shavat' (to cease, rest, desist from labor, celebrate completion). In Genesis 2:2–3, God ceased not from fatigue, but to contemplate His finished creation and invite humanity to enter His peace.",
-          howToExplainToOthers: "Explain to seekers that the Sabbath is not about a rigid list of 'do nots,' but about accepting a royal invitation into God's holy presence. Six days belong to secular pursuit, but the seventh is a sacred appointment with the Creator.",
-          analogyOrIllustration: "The Royal Anniversary Analogy: A spouse cannot say, 'I love you, so I will celebrate our anniversary on any day I choose.' The specific day commemorates the historical covenant. Likewise, the 7th day is God's specific memorial of Creation and Redemption."
-        },
-        {
-          title: "The Seal of God Structure in Exodus 20",
-          lexicalOrDoctrinalNote: "An authentic governmental seal requires three elements: the name of the lawgiver, their official title or office, and their jurisdictional territory. The 4th Commandment is the only one with all three: The LORD thy God (Name), Creator/Maker (Title), Heaven and Earth (Territory).",
-          howToExplainToOthers: "Show how removing or altering the Sabbath strips the Decalogue of its authorizing seal, reducing the moral law to advice rather than the sovereign mandate of the Creator.",
-          analogyOrIllustration: "The Notary Seal Analogy: A legal deed or royal proclamation without the official notary seal has no legal force. The Fourth Commandment is the divine notary seal validating the entire moral law."
-        }
-      ],
-      lastDaysImportance: "In Revelation 14's Three Angels' Messages, the final test of cosmic allegiance pivots on worship: worshiping the Creator who made heaven and earth (citing the Fourth Commandment) versus receiving the mark of the beast. The Sabbath stands as God's prophetic seal and sign of loyalty.",
-      stagesOutline: [
-        { stage: 1, title: "Foundational Overview", focus: "Original Hebrew 'shabbat' (cessation, sacred rest) and covenant context in Genesis 2 and Exodus 20." },
-        { stage: 2, title: "The Great Controversy", focus: "Satan's perennial assault on God's law (Daniel 7:25) and repairing the breach (Isaiah 58:12–13)." },
-        { stage: 3, title: "Doctrine", focus: "Fundamental Belief #20: The Sabbath as the sign of redemption, sanctification, and eternal rest in Christ." },
-        { stage: 4, title: "Application", focus: "Delighting in the Sabbath: preparation, releasing secular toil, family worship, and honoring holy time." },
-        { stage: 5, title: "Invitation", focus: "Extending a warm, winsome invitation to seekers to experience the healing rest of Jesus." }
-      ]
-    };
-  }
-
-  // 2. THE SANCTUARY & INVESTIGATIVE JUDGMENT
-  if (doctrineId === "sanctuary" || refLower.includes("daniel 8:14") || refLower.includes("hebrews 8") || refLower.includes("sanctuary")) {
-    return {
-      topicTitle: "Christ in the Heavenly Sanctuary: The Cleansing & Investigative Judgment",
-      scriptureReference: rawRef && rawRef !== "Active Study Topic" ? rawRef : "Daniel 8:14",
-      historicalContext: "Given to the prophet Daniel during Babylonian exile, unveiling the longest prophetic period of 2,300 prophetic days (years) from 457 BC to 1844, when the anti-typical Day of Atonement commenced in heaven.",
-      quotedScriptures: [
-        {
-          reference: "Daniel 8:14",
-          text: "And he said unto me, Unto two thousand and three hundred days; then shall the sanctuary be cleansed.",
-          role: "Prophetic Horizon & 2,300-Day Climax"
-        },
-        {
-          reference: "Leviticus 16:29–34",
-          text: "And this shall be a statute for ever unto you... in the seventh month, on the tenth day of the month, ye shall afflict your souls... For on that day shall the priest make an atonement for you, to cleanse you, that ye may be clean from all your sins before the LORD.",
-          role: "Typological Day of Atonement"
-        },
-        {
-          reference: "Hebrews 8:1–2",
-          text: "Now of the things which we have spoken this is the sum: We have such an high priest, who is set on the right hand of the throne of the Majesty in the heavens; A minister of the sanctuary, and of the true tabernacle, which the Lord pitched, and not man.",
-          role: "Christ Our True Heavenly High Priest"
-        },
-        {
-          reference: "Hebrews 9:23–24",
-          text: "It was therefore necessary that the patterns of things in the heavens should be purified with these; but the heavenly things themselves with better sacrifices than these. For Christ is not entered into the holy places made with hands, which are the figures of the true; but into heaven itself, now to appear in the presence of God for us.",
-          role: "Cleansing of the Heavenly Realities"
-        },
-        {
-          reference: "Daniel 9:24–27",
-          text: "Seventy weeks are determined upon thy people and upon thy holy city, to finish the transgression, and to make an end of sins, and to make reconciliation for iniquity, and to bring in everlasting righteousness, and to seal up the vision and prophecy, and to anoint the most Holy.",
-          role: "The 70-Week Prophetic Chronometer Anchor"
-        },
-        {
-          reference: "Psalm 77:13",
-          text: "Thy way, O God, is in the sanctuary: who is so great a God as our God?",
-          role: "The Sanctuary as the Map of Salvation"
-        },
-        {
-          reference: "Revelation 14:6–7",
-          text: "Saying with a loud voice, Fear God, and give glory to him; for the hour of his judgment is come: and worship him that made heaven, and earth, and the sea, and the fountains of waters.",
-          role: "The Pre-Advent Judgment Proclamation"
-        }
-      ],
-      egwWritings: [
-        {
-          work: "The Great Controversy",
-          source: "GC 423.1",
-          quote: "The subject of the sanctuary was the key which unlocked the mystery of the disappointment of 1844. It opened to view a complete system of truth, connected and harmonious, showing that God's hand had directed the great advent movement and revealing present duty as it brought to light the position and work of His people.",
-          theologicalContext: "Shows that the sanctuary reveals the total harmony of salvation, connecting Christ's cross with His closing heavenly high-priestly work."
-        },
-        {
-          work: "Patriarchs and Prophets",
-          source: "PP 358.1",
-          quote: "The earthly sanctuary was pitched by Moses according to the pattern shown him in the mount. The ministration of the earthly sanctuary was divided into two services: the priests ministered daily in the holy place, while once a year the high priest performed a special work of atonement in the most holy place, for the cleansing of the sanctuary.",
-          theologicalContext: "Differentiates between Christ's daily intercession for individual forgiveness and His yearly final judgment work of blotting out sin."
-        }
-      ],
-      explanatoryNotes: [
-        {
-          title: "Hebrew Root: Nitsdaq (נִצְדָּק)",
-          lexicalOrDoctrinalNote: "In Daniel 8:14, 'nitsdaq' (passive niphal form of tsadaq) means cleansed, justified, vindicated, restored to rightful standing. It refers to the cosmic vindication of God's character and the cleansing of the sanctuary records from the defilement of sin.",
-          howToExplainToOthers: "Explain that the cross was the perfect, once-for-all sacrificial offering, while the sanctuary shows how Jesus actively applies and completes that sacrifice in heaven's courts.",
-          analogyOrIllustration: "The Courtroom Ledger Audit: In a financial system, deposits are recorded daily, but at fiscal year-end, an exhaustive audit verifies every transaction, closes the ledgers, and certifies the accounts clean. Christ's investigative judgment is the final cosmic audit vindicating the repentant believer before angels."
-        },
-        {
-          title: "The 2,300-Day Prophetic Timeline (457 BC to 1844)",
-          lexicalOrDoctrinalNote: "Using the biblical year-day principle (Numbers 14:34, Ezekiel 4:6), the decree of Artaxerxes in 457 BC (Ezra 7) establishes the starting point. The first 490 years (70 weeks) reached Christ's baptism (27 AD), crucifixion (31 AD), and the gospel going to Gentiles (34 AD). The remaining 1,810 years lead exactly to 1844.",
-          howToExplainToOthers: "Use the 70 weeks as the shorter key that unlocks the front part of the longer 2,300-year chain, proving that Bible prophecy predicts Christ's ministry with chronological precision.",
-          analogyOrIllustration: "The Measuring Tape: A 23-foot tape measure where the first 4.9 feet are marked off for a specific task. If the first 4.9 feet align perfectly with historic landmarks (the Messiah's arrival), you can have total confidence in where the full 23-foot tape lands."
-        }
-      ],
-      lastDaysImportance: "The sanctuary doctrine unlocks the Great Controversy, revealing that Christ is currently engaged in His closing work of investigative judgment in the Most Holy Place, securing our vindication and cleansing our records before His literal return.",
-      stagesOutline: [
-        { stage: 1, title: "Foundational Overview", focus: "Original Hebrew 'nitsdaq' (cleansed, vindicated, restored to rightful state) in Daniel 8:14." },
-        { stage: 2, title: "The Great Controversy", focus: "The enemy's attack on the heavenly sanctuary and Christ's cosmic vindication before the universe." },
-        { stage: 3, title: "Doctrine", focus: "Fundamental Belief #24: Christ's Ministry in the Heavenly Sanctuary." },
-        { stage: 4, title: "Application", focus: "Living in the anti-typical Day of Atonement: deep heart surrender, daily abiding, and sanctified character." },
-        { stage: 5, title: "Invitation", focus: "Proclaiming the assurance of our compassionate High Priest who ever lives to intercede for us." }
-      ]
-    };
-  }
-
-  // 3. THE SECOND COMING OF CHRIST
-  if (doctrineId === "second-coming" || refLower.includes("titus 2:13") || refLower.includes("john 14") || refLower.includes("coming") || refLower.includes("advent")) {
-    return {
-      topicTitle: "The Second Coming of Christ: The Blessed Hope & Grand Climax",
-      scriptureReference: rawRef && rawRef !== "Active Study Topic" ? rawRef : "Titus 2:13",
-      historicalContext: "The crowning theme of all Scripture, promised by the prophets, guaranteed by Jesus before His crucifixion, and proclaimed by the apostles as the literal, personal, visible deliverance of God's people from sin, death, and decay.",
-      quotedScriptures: [
-        {
-          reference: "John 14:1–3",
-          text: "Let not your heart be troubled: ye believe in God, believe also in me. In my Father's house are many mansions... I go to prepare a place for you. And if I go and prepare a place for you, I will come again, and receive you unto myself; that where I am, there ye may be also.",
-          role: "The Savior's Covenant Promise"
-        },
-        {
-          reference: "Acts 1:9–11",
-          text: "This same Jesus, which is taken up from you into heaven, shall so come in like manner as ye have seen him go into heaven.",
-          role: "Literal, Bodily, Visible Ascension & Return"
-        },
-        {
-          reference: "1 Thessalonians 4:16–17",
-          text: "For the Lord himself shall descend from heaven with a shout, with the voice of the archangel, and with the trump of God: and the dead in Christ shall rise first: Then we which are alive and remain shall be caught up together with them in the clouds, to meet the Lord in the air...",
-          role: "The Resurrection of the Just & Gathering of the Saints"
-        },
-        {
-          reference: "Matthew 24:27",
-          text: "For as the lightning cometh out of the east, and shineth even unto the west; so shall also the coming of the Son of man be.",
-          role: "Universal, Unmistakable Visibility"
-        },
-        {
-          reference: "Titus 2:13",
-          text: "Looking for that blessed hope, and the glorious appearing of the great God and our Saviour Jesus Christ.",
-          role: "The Blessed Hope of the Church"
-        },
-        {
-          reference: "Revelation 1:7",
-          text: "Behold, he cometh with clouds; and every eye shall see him, and they also which pierced him: and all kindreds of the earth shall wail because of him. Even so, Amen.",
-          role: "Global Climax: Every Eye Shall See Him"
-        },
-        {
-          reference: "Revelation 19:11–16",
-          text: "And I saw heaven opened, and behold a white horse; and he that sat upon him was called Faithful and True... King of kings, and Lord of lords.",
-          role: "Cosmic Triumph of the Victorious King"
-        }
-      ],
-      egwWritings: [
-        {
-          work: "The Great Controversy",
-          source: "GC 299.1",
-          quote: "The doctrine of the Second Advent is the very keynote of the Sacred Scriptures. From the day when the first pair turned their sorrowing steps from Eden, the children of faith have waited the coming of the Promised One to break the destroyer's power and bring them again to the lost Paradise.",
-          theologicalContext: "Places the second coming as the centerpiece of redemptive history, restoring what was lost in Eden."
-        },
-        {
-          work: "The Desire of Ages",
-          source: "DA 832.2",
-          quote: "To the believer, Christ's second coming is not a day of terror, but a day of longing and joy, the hour when the Bridegroom claims His redeemed bride.",
-          theologicalContext: "Emphasizes the pastoral comfort, assurance, and loving intimacy of Christ's return for His waiting people."
-        }
-      ],
-      explanatoryNotes: [
-        {
-          title: "Greek Root: Parousia (παρουσία)",
-          lexicalOrDoctrinalNote: "Refers to the personal, bodily arrival and presence of a royal dignitary. Scripture completely refutes the idea of a secret or invisible return; Christ's coming is loud, audible ('trump of God'), and universally visible ('every eye shall see him').",
-          howToExplainToOthers: "Contrast the biblical glorious, literal return with popular secret rapture theories by comparing 1 Thess 4:16 (shout, trumpet, resurrection) with Matthew 24:27 (lightning across the sky).",
-          analogyOrIllustration: "The Royal Wedding Arrival: A bridegroom does not spirit his bride away secretly under cover of darkness without anyone knowing. The royal king arrives with trumpets sounding, royal heralds shouting, and full public majesty to celebrate the marriage supper."
-        }
-      ],
-      lastDaysImportance: "The Second Coming is the ultimate resolution to the Great Controversy. Without it, the dead remain in the grave, evil goes unpunished, and redemption remains incomplete.",
-      stagesOutline: [
-        { stage: 1, title: "Foundational Overview", focus: "Greek 'parousia' (literal bodily presence) and biblical descriptions of visibility and sound." },
-        { stage: 2, title: "The Great Controversy", focus: "Counterfeit deceptions: Satan impersonating Christ vs. true biblical return." },
-        { stage: 3, title: "Doctrine", focus: "Fundamental Belief #25: The Second Coming of Christ." },
-        { stage: 4, title: "Application", focus: "Living in constant readiness, purifying the heart, and actively hastening His coming." },
-        { stage: 5, title: "Invitation", focus: "Calling loved ones and neighbors to welcome the coming King with joy and peace." }
-      ]
-    };
-  }
-
-  // 4. STATE OF THE DEAD & RESURRECTION
-  if (doctrineId === "state-of-dead" || refLower.includes("ecclesiastes 9") || refLower.includes("death") || refLower.includes("resurrection") || refLower.includes("soul")) {
-    return {
-      topicTitle: "The State of the Dead: The Sleep in Christ & Resurrection Morning",
-      scriptureReference: rawRef && rawRef !== "Active Study Topic" ? rawRef : "Ecclesiastes 9:5–6",
-      historicalContext: "Satan's first lie in Eden—'Ye shall not surely die' (Genesis 3:4)—forms the root of spiritualism and theological errors. God's Word consistently reveals death as an unconscious sleep until the resurrection at Christ's return.",
-      quotedScriptures: [
-        {
-          reference: "Genesis 2:7",
-          text: "And the LORD God formed man of the dust of the ground, and breathed into his nostrils the breath of life; and man became a living soul.",
-          role: "The Creation Formula: Dust + Breath = Living Soul"
-        },
-        {
-          reference: "Ecclesiastes 9:5–6",
-          text: "For the living know that they shall die: but the dead know not any thing, neither have they any more a reward; for the memory of them is forgotten. Also their love, and their hatred, and their envy, is now perished...",
-          role: "Total Unconsciousness in the Grave"
-        },
-        {
-          reference: "Psalm 146:4",
-          text: "His breath goeth forth, he returneth to his earth; in that very day his thoughts perish.",
-          role: "Cessation of Mental Thought at Death"
-        },
-        {
-          reference: "John 11:11–14",
-          text: "These things said he: and after that he saith unto them, Our friend Lazarus sleepeth; but I go, that I may awake him out of sleep... Then said Jesus unto them plainly, Lazarus is dead.",
-          role: "Jesus Defines Death as a Sleep"
-        },
-        {
-          reference: "1 Corinthians 15:51–54",
-          text: "Behold, I shew you a mystery; We shall not all sleep, but we shall all be changed, In a moment, in the twinkling of an eye, at the last trump... and the dead shall be raised incorruptible... then shall be brought to pass the saying that is written, Death is swallowed up in victory.",
-          role: "Immortality Bestowed at the Resurrection"
-        },
-        {
-          reference: "1 Thessalonians 4:13–18",
-          text: "But I would not have you to be ignorant, brethren, concerning them which are asleep, that ye sorrow not, even as others which have no hope... Wherefore comfort one another with these words.",
-          role: "Pastoral Comfort in the Sleep of Death"
-        },
-        {
-          reference: "Revelation 20:5–6",
-          text: "Blessed and holy is he that hath part in the first resurrection: on such the second death hath no power, but they shall be priests of God and of Christ, and shall reign with him a thousand years.",
-          role: "The Two Resurrections & Millennial Judgment"
-        }
-      ],
-      egwWritings: [
-        {
-          work: "The Great Controversy",
-          source: "GC 531.1",
-          quote: "The theory of the immortality of the soul was one of those false doctrines that Rome, borrowing from paganism, incorporated into the religion of Christendom. Martin Luther classed it with the monstrous fables that form part of the Roman dunghill of decretals.",
-          theologicalContext: "Unmasks the pagan origin of natural immortality and vindicates God's justice against eternal torment."
-        },
-        {
-          work: "The Ministry of Healing",
-          source: "MH 416.2",
-          quote: "To the believer, death is but a small matter. Christ speaks of it as if it were of little moment. 'If a man keep My saying, he shall never see death.' To the Christian, death is but a sleep, a moment of silence and darkness, until the Lifegiver shall awaken him.",
-          theologicalContext: "Brings immense pastoral comfort to grieving families, removing fear of ghosts and demonic apparitions."
-        }
-      ],
-      explanatoryNotes: [
-        {
-          title: "Hebrew Formula: Nephesh Chayyah (נֶפֶשׁ חַיָּה)",
-          lexicalOrDoctrinalNote: "In Genesis 2:7, God did not put a soul INTO man. Dust + Breath of Life = Living Soul (nephesh). Man DOES NOT HAVE a soul; man IS a soul. When the breath (ruach) departs, the soul ceases to exist until the resurrection.",
-          howToExplainToOthers: "Use the lightbulb analogy to explain the difference between having an immortal ghost and being a living composite being.",
-          analogyOrIllustration: "The Lightbulb & Electricity Analogy: A lightbulb alone is cold glass and wire (the body/dust). An electrical current alone is invisible power (the breath of God). When connected, you get light (the living soul). When you flip off the switch, where does the light go? It doesn't go to heaven or float in the room—it simply ceases to exist until the power is reconnected. Death is the switch turned off until the resurrection morning!"
-        }
-      ],
-      lastDaysImportance: "Spiritualism and belief in communication with the dead form Satan's greatest end-time deception, uniting apostate churches and deceiving world leaders through counterfeit demonic apparitions.",
-      stagesOutline: [
-        { stage: 1, title: "Foundational Overview", focus: "Genesis 2:7 formula and Hebrew 'nephesh' / 'ruach' vs. Greek dualism." },
-        { stage: 2, title: "The Great Controversy", focus: "The Eden lie 'ye shall not surely die' and end-time spiritualistic delusions." },
-        { stage: 3, title: "Doctrine", focus: "Fundamental Belief #26: Death and Resurrection." },
-        { stage: 4, title: "Application", focus: "Shielding against grief exploitation, séances, and demonic medium deceptions." },
-        { stage: 5, title: "Invitation", focus: "Offering genuine comfort in Christ who holds the keys of hell and death." }
-      ]
-    };
-  }
-
-  // 5. DYNAMIC CONVERSATIONAL TOPIC OR CLEAN SLATE
-  const isCleanSlate = !rawRef || rawRef === "Active Study Topic";
-  const activeTopicTitle = isCleanSlate
-    ? "Active Conversational Study"
-    : `Biblical Study: ${rawRef}`;
-  const activeReference = isCleanSlate ? "Selected in Dialogue" : rawRef;
-
-  return {
-    topicTitle: activeTopicTitle,
-    scriptureReference: activeReference,
-    historicalContext: isCleanSlate
-      ? "Share any biblical passage, doctrine, or question with Elder Steven in the dialogue stream. As your conversation unfolds, each study stage will unlock methodically."
-      : `Examining the biblical context, covenant background, and canonical harmony of ${rawRef} by comparing Scripture with Scripture (Isaiah 28:9–10).`,
-    quotedScriptures: [
-      ...( !isCleanSlate && scripture?.text ? [{
-        reference: rawRef,
-        text: scripture.text,
-        role: "Primary Conversational Focus"
-      }] : []),
-      {
-        reference: "Isaiah 28:9–10",
-        text: "Whom shall he teach knowledge? and whom shall he make to understand doctrine? them that are weaned from the milk, and drawn from the breasts. For precept must be upon precept, precept upon precept; line upon line, line upon line; here a little, and there a little.",
-        role: "Biblical Study Principle: Line Upon Line"
-      },
-      {
-        reference: "2 Timothy 3:16–17",
-        text: "All scripture is given by inspiration of God, and is profitable for doctrine, for reproof, for correction, for instruction in righteousness: That the man of God may be perfect, throughly furnished unto all good works.",
-        role: "Divine Inspiration & Authority"
-      },
-      {
-        reference: "John 5:39",
-        text: "Search the scriptures; for in them ye think ye have eternal life: and they are they which testify of me.",
-        role: "Christ: The Living Center of All Scripture"
-      },
-      {
-        reference: "Acts 17:11",
-        text: "These were more noble than those in Thessalonica, in that they received the word with all readiness of mind, and searched the scriptures daily, whether those things were so.",
-        role: "The Berean Spirit of Daily Investigation"
-      },
-      {
-        reference: "Revelation 14:12",
-        text: "Here is the patience of the saints: here are they that keep the commandments of God, and the faith of Jesus.",
-        role: "The Faith of Jesus: The Fruit of Truth"
-      }
-    ],
-    egwWritings: [
-      {
-        work: "Education",
-        source: "Ed 190.1",
-        quote: "The Bible is its own expositor. Scripture is to be compared with scripture. The student should learn to view the word as a whole, and to see the relation of its parts. He should gain a knowledge of its grand central theme, of God's original purpose for the world, of the rise of the great controversy, and of the work of redemption.",
-        theologicalContext: "Articulates the primary biblical principle: letting Scripture interpret itself around the grand central theme of redemption."
-      },
-      {
-        work: "The Great Controversy",
-        source: "GC 593.1",
-        quote: "None but those who have fortified the mind with the truths of the Bible will stand through the last great conflict. To every soul will come the searching test: Shall I obey God rather than men? The decisive hour is even now at hand. Are our feet planted on the rock of God's immutable word?",
-        theologicalContext: "Shows that grounding the mind in God's Word is our essential spiritual anchor in earth's closing scenes."
-      }
-    ],
-    explanatoryNotes: [
-      {
-        title: "The Line-Upon-Line Principle (Isaiah 28:10)",
-        lexicalOrDoctrinalNote: "Scripture interprets Scripture. No single verse stands in isolation. Sound biblical study gathers all scriptural testimonies on the active topic to see the harmonious picture God intended.",
-        howToExplainToOthers: "Encourage learners to examine the broad biblical witness from Genesis to Revelation rather than isolating a single phrase out of context.",
-        analogyOrIllustration: "The Tapestry Threads: A single colored thread out of context looks like a random string. Woven together with all the other threads in the master weaver's loom, it forms a clear portrait of Jesus Christ."
-      },
-      {
-        title: "Christ-Centered Doctrinal Harmony (John 5:39)",
-        lexicalOrDoctrinalNote: "Every biblical doctrine finds its life and meaning in the person and ministry of Jesus Christ—our Creator, Redeemer, High Priest, and Coming King.",
-        howToExplainToOthers: "Show how every truth of Scripture reveals God's character of love and draws the heart closer to Christ.",
-        analogyOrIllustration: "The Hub and Spokes: Doctrines are like the spokes of a wheel; they only hold together and carry weight when anchored firmly into the central hub—Jesus Christ."
-      }
-    ],
-    lastDaysImportance: "In earth's closing conflict, grounding our faith line upon line in God's Word equips us to stand with the commandment-keeping people of God and share the Three Angels' Messages with clarity and love.",
-    stagesOutline: [
-      { stage: 1, title: "Foundational Overview", focus: `Core biblical context, primary scripture witness, and foundational meaning of ${isCleanSlate ? "your chosen study topic" : rawRef}.` },
-      { stage: 2, title: "The Great Controversy", focus: "The cosmic conflict between truth and error surrounding this biblical theme." },
-      { stage: 3, title: "Doctrine", focus: "How this theme connects harmoniously within Seventh-day Adventist biblical beliefs." },
-      { stage: 4, title: "Application", focus: "Translating this truth into daily Christian living, prayer, and character growth." },
-      { stage: 5, title: "Invitation", focus: "Sharing this truth with friends, family, and seekers with Christlike warmth and clarity." }
-    ]
-  };
-};
-
-export const FUNDAMENTAL_BELIEFS_CATALOG: Record<string, FundamentalBeliefData> = {
-  "holy-scriptures": {
-    number: 1,
-    title: "The Holy Scriptures",
-    summary: "The Holy Scriptures, Old and New Testaments, are the written Word of God, given by divine inspiration. They are the standard of character, the test of experience, the definitive revealer of doctrines, and the trustworthy record of God's acts in history.",
-    egwQuote: "The Bible is its own expositor. Scripture is to be compared with scripture. The student should learn to view the word as a whole, and to see the relation of its parts.",
-    keyTexts: ["2 Timothy 3:16-17", "Psalm 119:105", "Proverbs 30:5-6", "Isaiah 8:20", "John 17:17", "2 Peter 1:19-21"]
-  },
-  "great-controversy": {
-    number: 8,
-    title: "The Great Controversy",
-    summary: "All humanity is now involved in a great controversy between Christ and Satan regarding the character of God, His law, and His sovereignty over the universe.",
-    egwQuote: "The great controversy between good and evil will increase in intensity to the very close of time. In all ages the wrath of Satan has been manifested against the church of Christ.",
-    keyTexts: ["Genesis 3:15", "Revelation 12:4-9", "Isaiah 14:12-14", "Ezekiel 28:12-18", "Romans 8:19-22"]
-  },
-  "sanctuary": {
-    number: 24,
-    title: "Christ's Ministry in the Heavenly Sanctuary",
-    summary: "There is a sanctuary in heaven, the true tabernacle that the Lord set up and not humans. In it Christ ministers on our behalf, making available to believers the benefits of His atoning sacrifice.",
-    egwQuote: "The subject of the sanctuary was the key which unlocked the mystery of the disappointment of 1844. It opened to view a complete system of truth, connected and harmonious.",
-    keyTexts: ["Hebrews 8:1-5", "Daniel 8:14", "Leviticus 16", "Revelation 14:6-7", "Hebrews 9:11-28"]
-  },
-  "sabbath": {
-    number: 20,
-    title: "The Sabbath",
-    summary: "The gracious Creator, after the six days of Creation, rested on the seventh day and instituted the Sabbath for all people as a memorial of Creation and a sign of sanctification.",
-    egwQuote: "The Sabbath is a golden clasp that unites God and His people. It is a memorial of God's creative power and a token of His sanctifying presence.",
-    keyTexts: ["Genesis 2:1-3", "Exodus 20:8-11", "Luke 4:16", "Isaiah 58:13-14", "Hebrews 4:1-11"]
-  },
-  "second-coming": {
-    number: 25,
-    title: "The Second Coming of Christ",
-    summary: "The second coming of Christ is the blessed hope of the church, the grand climax of the gospel. The Savior's coming will be literal, personal, visible, and worldwide.",
-    egwQuote: "The doctrine of the Second Advent is the very keynote of the Sacred Scriptures.",
-    keyTexts: ["Titus 2:13", "Hebrews 9:28", "John 14:1-3", "Acts 1:9-11", "Revelation 1:7", "1 Thessalonians 4:16-17"]
-  }
+  stage1: "In Timothy's context, Paul uses the Greek term 'orthotomeo'—translated 'rightly dividing'—which literally means to cut a straight path or construct a straight road. Paul wants Timothy to be an unashamed workman, displaying intellectual integrity and accuracy when studying the Word of God, rather than bending scripture to fit human whims or philosophical fancies.",
+  stage2: "Looking at the Great Controversy timeline, the word of God has always been the primary target of satanic subversion. The serpent twisted God's words in Eden, and throughout history, spiritual truth has been obscured by tradition and human dogmas. 'Rightly dividing' is our spiritual bulkhead against the deceptive floodwaters of spiritual compromises.",
+  stage3: "This passage establishes Fundamental Belief #1 (Holy Scriptures) which represents our ultimate rule of faith, practice, and the objective test of Christian experience. In Seventh-day Adventist doctrine, we study the cohesive harmony of old and new testament scriptures to secure a theological anchor during the final shaking time.",
+  stage4: "A practical application for our busy lives is to reject passive checklist reading. If I want to be an approved workman, I must dedicate a high-focus 20-minute morning window, taking written log logs, cross-referencing scriptures, and allowing the principles to directly reform my temper and schedule today.",
+  stage5: "When inviting a non-Adventist neighbor or seeker to explore this, we must lead with winsome gentleness and absolute respect. We don't demand blind dogmatic subscription. Instead, we invite them as fellow Bereans, opening the scriptures together to discover the beautifully coherent plan of a loving, perfect Saviour."
 };
 
 interface TeachItStudioProps {
@@ -574,15 +84,6 @@ interface ChatMessage {
   sender: "user" | "ai";
   text: string;
   timestamp: Date;
-  type?: "standard" | "overview" | "scripture_proof" | "prompt";
-  topicTitle?: string;
-  scriptureRef?: string;
-  scriptureText?: string;
-  scriptureIndex?: number;
-  totalScriptures?: number;
-  historicalContext?: string;
-  lastDaysImportance?: string;
-  stagesOutline?: { stage: number; title: string; focus: string }[];
 }
 
 type PhaseType =
@@ -595,45 +96,12 @@ type PhaseType =
   | "feedback";
 
 export const TeachItStudio: React.FC<TeachItStudioProps> = ({
-  scripture: propScripture = CLEAN_SLATE_SCRIPTURE,
+  scripture: propScripture = DEFAULT_SCRIPTURE,
   onClose,
   sabbathMode = false
 }) => {
-  const { user, showConfetti, hasTierAccess, openUpgradeModal } = useApp();
+  const { user, showConfetti } = useApp();
   const location = useLocation();
-  const navigate = useNavigate();
-
-  // Sequential speech bubble timers
-  const sequentialTimersRef = useRef<NodeJS.Timeout[]>([]);
-
-  const clearSequentialTimers = () => {
-    sequentialTimersRef.current.forEach((t) => clearTimeout(t));
-    sequentialTimersRef.current = [];
-  };
-
-  useEffect(() => {
-    return () => {
-      clearSequentialTimers();
-    };
-  }, []);
-
-  // Direct navigation to Bible study module with target reference
-  const handleNavigateToBibleStudy = (reference: string) => {
-    if (!reference || !reference.trim()) return;
-    const cleanRef = reference.trim();
-
-    cleanupLiveAudioAndWS();
-    stopVoiceResponse();
-    clearIntervals();
-    clearSequentialTimers();
-    setIsTimerActive(false);
-
-    localStorage.setItem("stba_pending_search_ref", cleanRef);
-    localStorage.setItem("stba_pending_search_tool", "stephen");
-
-    triggerToast(`Opening ${cleanRef} in Bible Study module...`);
-    navigate(`/stba?ref=${encodeURIComponent(cleanRef)}`);
-  };
 
   // Resolve Holy Scriptures override
   const params = new URLSearchParams(location.search);
@@ -650,20 +118,6 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   const [activeScripture, setActiveScripture] = useState<Scripture>(initialScripture);
   const scripture = activeScripture;
 
-  // Learning tier selection to adapt content volume (Essential / Standard / Comprehensive)
-  const [learningTier, setLearningTier] = useState<LearningTier>(() => {
-    const saved = localStorage.getItem("stba_learning_tier");
-    if (saved === "Essential" || saved === "Standard" || saved === "Comprehensive") {
-      return saved;
-    }
-    return "Standard";
-  });
-
-  const handleLearningTierChange = (tier: LearningTier) => {
-    setLearningTier(tier);
-    localStorage.setItem("stba_learning_tier", tier);
-  };
-
   // Role selections and options
   const [userRole, setUserRole] = useState<string>(() => {
     return localStorage.getItem("stba_user_role") || user?.role || "Student";
@@ -675,243 +129,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 
   // Active state parameters
   const [phase, setPhase] = useState<PhaseType>("intro");
-  const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "blackboard" | "scorecard">("chat");
-  const [blackboardView, setBlackboardView] = useState<"all" | "scriptures" | "egw" | "pedagogy">("all");
-  const [showBlackboardDownloadMenu, setShowBlackboardDownloadMenu] = useState<boolean>(false);
-  const blackboardScrollRef = useRef<HTMLDivElement>(null);
-  const [blackboardNotes, setBlackboardNotes] = useState<string>(() => {
-    return localStorage.getItem(`stba_blackboard_notes_${scripture.id}`) || "";
-  });
-
-  const handleDownloadBlackboardPDF = () => {
-    try {
-      const doc = new jsPDF({ unit: "pt", format: "letter" });
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 44;
-      const maxLineWidth = pageWidth - margin * 2;
-      let y = margin;
-
-      const checkPageBreak = (neededHeight = 24) => {
-        if (y + neededHeight > pageHeight - margin) {
-          doc.addPage();
-          y = margin;
-        }
-      };
-
-      const writeWrapped = (text: string, fontSize = 10.5, isBold = false, indent = 0, color: [number, number, number] = [30, 35, 45]) => {
-        doc.setFont("helvetica", isBold ? "bold" : "normal");
-        doc.setFontSize(fontSize);
-        doc.setTextColor(color[0], color[1], color[2]);
-        const lines = doc.splitTextToSize(text, maxLineWidth - indent);
-        lines.forEach((line: string) => {
-          checkPageBreak(fontSize + 6);
-          doc.text(line, margin + indent, y);
-          y += fontSize + 5;
-        });
-      };
-
-      // Header
-      writeWrapped("TEACH IT INTERACTIVE STUDIO • INSTRUCTIONAL STUDY RECORD", 9, true, 0, [180, 130, 40]);
-      y += 2;
-      writeWrapped(topicOverview?.topicTitle || `Biblical Study: ${scripture.reference}`, 16, true, 0, [20, 26, 39]);
-      writeWrapped(`Active Study Topic: ${topicOverview?.scriptureReference || scripture.reference} | Tier: ${learningTier} | Generated: ${new Date().toLocaleDateString()}`, 10, false, 0, [100, 105, 115]);
-      y += 10;
-
-      // 1. Overviews
-      writeWrapped("1. THEOLOGICAL & PROPHETIC OVERVIEW", 12, true, 0, [180, 130, 40]);
-      y += 2;
-      writeWrapped("Historical, Cultural & Theological Setting:", 10.5, true);
-      writeWrapped(topicOverview?.historicalContext || "Awaiting structured topic overview.", 10, false, 8);
-      y += 4;
-      writeWrapped("Critical Importance for the Last Days:", 10.5, true);
-      writeWrapped(topicOverview?.lastDaysImportance || "Awaiting prophetic context.", 10, false, 8);
-      y += 10;
-
-      // 2. Stage-by-Stage Instructional Content
-      writeWrapped("2. STAGE-BY-STAGE INSTRUCTIONAL CONTENT (5 STAGES)", 12, true, 0, [180, 130, 40]);
-      y += 2;
-      stagesList.forEach((stg, idx) => {
-        const outlineItem = topicOverview?.stagesOutline?.[idx];
-        const stageScore = scoreStats.stageScores[stg.id] || 0;
-        writeWrapped(
-          `Stage ${stg.number}: ${stg.title} (${stg.subtitle})${stageScore > 0 ? ` — Score: ${stageScore}%` : ""}`,
-          10.5,
-          true
-        );
-        writeWrapped(`Overview: ${stg.overview}`, 9.5, false, 10);
-        if (outlineItem?.focus) {
-          writeWrapped(`Instructional Focus: ${outlineItem.focus}`, 9.5, false, 10);
-        }
-        writeWrapped(`Stage Scripture Witnesses: ${stg.coreTexts.join(", ")}`, 9.5, false, 10);
-        writeWrapped(`Teaching Prompt: ${stg.prompt}`, 9.5, false, 10);
-        y += 5;
-      });
-      y += 6;
-
-      // 3. Scripture References
-      const quotes = topicOverview?.quotedScriptures || [];
-      writeWrapped(`3. SCRIPTURE REFERENCES (${quotes.length} PASSAGES)`, 12, true, 0, [180, 130, 40]);
-      y += 2;
-      quotes.forEach((q, idx) => {
-        writeWrapped(`${idx + 1}. ${q.reference} [${q.role || "Biblical Witness"}]`, 10, true, 4);
-        writeWrapped(`"${q.text}"`, 9.5, false, 14);
-        y += 3;
-      });
-      y += 6;
-
-      // 4. Ellen White Writings
-      const egwList = topicOverview?.egwWritings || [];
-      writeWrapped("4. ELLEN G. WHITE WRITINGS (SPIRIT OF PROPHECY)", 12, true, 0, [180, 130, 40]);
-      y += 2;
-      egwList.forEach((e) => {
-        writeWrapped(`${e.work} (${e.source})`, 10, true, 4);
-        writeWrapped(`"${e.quote}"`, 9.5, false, 12);
-        if (e.theologicalContext) {
-          writeWrapped(`Theological Illumination: ${e.theologicalContext}`, 9.5, false, 12);
-        }
-        y += 4;
-      });
-      y += 6;
-
-      // 5. Pedagogy & Notes
-      const notesList = topicOverview?.explanatoryNotes || [];
-      writeWrapped("5. PEDAGOGY, TEACHING EXAMPLES & NOTES", 12, true, 0, [180, 130, 40]);
-      y += 2;
-      notesList.forEach((n) => {
-        writeWrapped(`• ${n.title}`, 10, true, 4);
-        writeWrapped(`Biblical / Doctrinal Note: ${n.lexicalOrDoctrinalNote}`, 9.5, false, 12);
-        writeWrapped(`How to Explain to Others: ${n.howToExplainToOthers}`, 9.5, false, 12);
-        if (n.analogyOrIllustration) {
-          writeWrapped(`Teaching Example / Analogy: ${n.analogyOrIllustration}`, 9.5, false, 12);
-        }
-        y += 4;
-      });
-
-      if (blackboardNotes.trim()) {
-        y += 4;
-        writeWrapped("Student Instructional Notes:", 10.5, true, 0);
-        writeWrapped(blackboardNotes.trim(), 9.5, false, 8);
-      }
-
-      const safeRef = (topicOverview?.scriptureReference || scripture.reference).replace(/[^a-zA-Z0-9_-]/g, "_");
-      doc.save(`STBA_Instructional_Slate_${safeRef}.pdf`);
-      setShowBlackboardDownloadMenu(false);
-      triggerToast("Instructional Slate downloaded as PDF!");
-    } catch (err) {
-      console.error("PDF generation error:", err);
-      triggerToast("Unable to generate PDF.");
-    }
-  };
-
-  const handleDownloadBlackboardDocs = () => {
-    const quotes = topicOverview?.quotedScriptures || [];
-    const egwList = topicOverview?.egwWritings || [];
-    const notesList = topicOverview?.explanatoryNotes || [];
-
-    const stagesDocHtml = stagesList
-      .map((stg, idx) => {
-        const outlineItem = topicOverview?.stagesOutline?.[idx];
-        const stageScore = scoreStats.stageScores[stg.id] || 0;
-        return `
-          <div style="margin-bottom:14px; padding:10px 12px; border:1px solid #d6d3cd; border-left:4px solid #C9973A; background:#faf8f5;">
-            <p style="margin:0 0 4px 0; font-weight:bold; font-size:12pt; color:#1C2333;">
-              Stage ${stg.number}: ${stg.title} — ${stg.subtitle} ${stageScore > 0 ? `(Score: ${stageScore}%)` : ""}
-            </p>
-            <p style="margin:0 0 4px 0; font-size:10.5pt;"><strong>Stage Overview:</strong> ${stg.overview}</p>
-            ${outlineItem?.focus ? `<p style="margin:0 0 4px 0; font-size:10.5pt;"><strong>Stage Focus:</strong> ${outlineItem.focus}</p>` : ""}
-            <p style="margin:0 0 4px 0; font-size:10.5pt;"><strong>Key Stage Scriptures:</strong> ${stg.coreTexts.join(", ")}</p>
-            <p style="margin:0; font-size:10.5pt;"><strong>Teaching Prompt:</strong> ${stg.prompt}</p>
-          </div>
-        `;
-      })
-      .join("");
-
-    const scripturesDocHtml = quotes
-      .map(
-        (q, idx) => `
-        <div style="margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid #e5e5e5;">
-          <p style="margin:0 0 3px 0; font-weight:bold; color:#1C2333;">${idx + 1}. ${q.reference} ${q.role ? `[${q.role}]` : ""}</p>
-          <p style="margin:0; color:#333333;">"${q.text}"</p>
-        </div>`
-      )
-      .join("");
-
-    const egwDocHtml = egwList
-      .map(
-        (e) => `
-        <div style="margin-bottom:12px; padding:10px; background:#f9f6f0; border-left:3px solid #C9973A;">
-          <p style="margin:0 0 4px 0; font-weight:bold;">${e.work} (${e.source})</p>
-          <p style="margin:0 0 4px 0;">"${e.quote}"</p>
-          ${e.theologicalContext ? `<p style="margin:0; font-size:10pt; color:#444;"><strong>Theological Illumination:</strong> ${e.theologicalContext}</p>` : ""}
-        </div>`
-      )
-      .join("");
-
-    const pedagogyDocHtml = notesList
-      .map(
-        (n) => `
-        <div style="margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #e5e5e5;">
-          <p style="margin:0 0 4px 0; font-weight:bold; color:#1C2333;">${n.title}</p>
-          <p style="margin:0 0 4px 0;"><strong>Biblical / Doctrinal Note:</strong> ${n.lexicalOrDoctrinalNote}</p>
-          <p style="margin:0 0 4px 0;"><strong>How to Explain to Others:</strong> ${n.howToExplainToOthers}</p>
-          ${n.analogyOrIllustration ? `<p style="margin:0;"><strong>Teaching Analogy:</strong> ${n.analogyOrIllustration}</p>` : ""}
-        </div>`
-      )
-      .join("");
-
-    const docContent = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office"
-            xmlns:w="urn:schemas-microsoft-com:office:word"
-            xmlns="http://www.w3.org/TR/REC-html40">
-      <head>
-        <meta charset="utf-8" />
-        <title>${topicOverview?.topicTitle || "Biblical Study"}</title>
-      </head>
-      <body style="font-family: 'Georgia', serif; color: #1a1a1a; line-height: 1.5; padding: 24px;">
-        <p style="font-family: monospace; font-size: 9pt; text-transform: uppercase; color: #C9973A; font-weight: bold; margin: 0;">
-          Teach It INTERACTIVE STUDIO • Study To Be Approved
-        </p>
-        <h1 style="font-size: 20pt; margin: 4px 0 6px 0; color: #1C2333;">${topicOverview?.topicTitle || "Biblical Study"}</h1>
-        <p style="font-size: 11pt; color: #555; margin: 0 0 18px 0;">
-          <strong>Active Topic:</strong> ${topicOverview?.scriptureReference || scripture.reference} • <strong>Date:</strong> ${new Date().toLocaleDateString()}
-        </p>
-
-        <h2 style="font-size: 14pt; color: #C9973A; border-bottom: 1px solid #C9973A; padding-bottom: 4px;">1. Theological & Prophetic Overview</h2>
-        <p><strong>Historical, Cultural & Theological Setting:</strong><br/>${topicOverview?.historicalContext || ""}</p>
-        <p><strong>Critical Importance for the Last Days:</strong><br/>${topicOverview?.lastDaysImportance || ""}</p>
-
-        <h2 style="font-size: 14pt; color: #C9973A; border-bottom: 1px solid #C9973A; padding-bottom: 4px; margin-top: 20px;">2. Stage-by-Stage Instructional Content</h2>
-        ${stagesDocHtml}
-
-        <h2 style="font-size: 14pt; color: #C9973A; border-bottom: 1px solid #C9973A; padding-bottom: 4px; margin-top: 20px;">3. Scripture References (${quotes.length} Passages)</h2>
-        ${scripturesDocHtml}
-
-        <h2 style="font-size: 14pt; color: #C9973A; border-bottom: 1px solid #C9973A; padding-bottom: 4px; margin-top: 20px;">4. Ellen White's Writings (Spirit of Prophecy)</h2>
-        ${egwDocHtml}
-
-        <h2 style="font-size: 14pt; color: #C9973A; border-bottom: 1px solid #C9973A; padding-bottom: 4px; margin-top: 20px;">5. Pedagogy & Notes</h2>
-        ${pedagogyDocHtml}
-        ${blackboardNotes.trim() ? `<h3>Student Instructional Notes</h3><p>${blackboardNotes.replace(/\n/g, "<br/>")}</p>` : ""}
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(["\ufeff", docContent], {
-      type: "application/msword;charset=utf-8"
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const safeRef = (topicOverview?.scriptureReference || scripture.reference).replace(/[^a-zA-Z0-9_-]/g, "_");
-    link.href = url;
-    link.download = `STBA_Instructional_Slate_${safeRef}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setShowBlackboardDownloadMenu(false);
-    triggerToast("Instructional Slate downloaded as DOCS (.doc)!");
-  };
+  const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "scorecard" | "checklist">("chat");
 
   // Teach-It Elder Stephen elements
   const [teachingDraftOutline, setTeachingDraftOutline] = useState(() => {
@@ -923,10 +141,6 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   const [outlineFeedback, setOutlineFeedback] = useState("");
 
   const handleGenerateOutlineWithElder = async () => {
-    if (!hasTierAccess("Leader")) {
-      openUpgradeModal("Leader", "Homiletic Teaching Outline Verification");
-      return;
-    }
     if (!teachingDraftOutline.trim()) return;
     setIsGeneratingOutline(true);
     setOutlineFeedback("");
@@ -941,7 +155,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
         noteTitle: `Teaching Outline: ${scripture.reference}`,
         noteContent: teachingDraftOutline,
         historyLog,
-        passage: topicOverview?.scriptureReference || scripture.reference || "Active Study Topic",
+        passage: scripture.reference || "2 Timothy 2:15",
         outline: teachingDraftOutline,
         audience: targetAudience,
         userAction: 'teach_it_outline' as const
@@ -970,7 +184,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const recognitionRef = useRef<any>(null);
 
-  // Real-time Scorecard stats (aligned dynamically to the active conversational topic)
+  // Real-time Scorecard stats (accumulated through user input)
   const [scoreStats, setScoreStats] = useState({
     overallScore: 0,
     stageScores: {
@@ -983,14 +197,14 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     foundKeywords: [] as string[],
     gaps: scripture.keywords || [],
     stageFeedback: {
-      stage1: "Awaiting foundational overview...",
-      stage2: "Awaiting Great Controversy insights...",
-      stage3: "Awaiting doctrinal connections...",
-      stage4: "Awaiting practical application...",
-      stage5: "Awaiting personal invitation & appeal..."
+      stage1: "Awaiting your exegesis...",
+      stage2: "Awaiting controversy insights...",
+      stage3: "Awaiting doctrinal links...",
+      stage4: "Awaiting action points...",
+      stage5: "Awaiting appeal presentation..."
     } as Record<string, string>,
     ellenWhiteQuote: "The Bible is its own expositor. Scripture is to be compared with scripture.",
-    devotionalPrompt: "What is God asking you to trust, release, or practice today from this study?"
+    devotionalPrompt: "What is God asking you to trust, release, or do today?"
   });
 
   const [devotionalReflection, setDevotionalReflection] = useState<string>("");
@@ -1014,195 +228,19 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     }
   }, [phase]);
 
-  // Gemini Live Voice variables & states
+  // Gemini Live Voice variables & states (gemini-3.8-live)
   const [useLiveVoiceAPI, setUseLiveVoiceAPI] = useState<boolean>(true);
   const [liveWebSocketActive, setLiveWebSocketActive] = useState<boolean>(false);
   const [liveState, setLiveState] = useState<"idle" | "connecting" | "ready" | "recording" | "playing" | "error">("idle");
   const [liveError, setLiveError] = useState<string | null>(null);
-  const [liveBarTranscript, setLiveBarTranscript] = useState<string>("");
-  const stage5CompletedRef = useRef<boolean>(false);
-  const [activeFundamentalBelief, setActiveFundamentalBelief] = useState<FundamentalBeliefData | null>(null);
-  const [publicReadinessScore, setPublicReadinessScore] = useState<number>(88);
-  const [evangelistTips, setEvangelistTips] = useState<string[]>([
-    "Lead with Christ and His character of love before presenting distinctive doctrinal frameworks.",
-    "Translate theological terms into clear, accessible language for non-Adventist listeners.",
-    "Appeal directly to Scripture as fellow Bereans, encouraging personal study and conviction."
-  ]);
-  const [activeGapFilter, setActiveGapFilter] = useState<boolean>(false);
-
-  // Strict Clean Slate: Initial topicOverview is null until explicitly pushed via structured tool updates
-  const [topicOverview, setTopicOverview] = useState<TopicOverviewData | null>(null);
-  const [isOverviewExpanded, setIsOverviewExpanded] = useState<boolean>(true);
-
-  // Dynamically align activeScripture keywords with the user's chosen conversational topic (without pre-seeding topicOverview)
-  const syncConversationalTopic = (rawInput: string) => {
-    const trimmed = (rawInput || "").trim();
-    if (!trimmed || trimmed.length < 3) return;
-    const lower = trimmed.toLowerCase();
-
-    // 1. Check explicit scripture reference (e.g., John 3:16, Exodus 20:8-11, Daniel 8:14)
-    const refMatch = trimmed.match(/\b([1-3]?\s*[A-Za-z]+)\s+(\d+:\d+(?:[–-]\d+)?)\b/i);
-    if (refMatch) {
-      const detectedRef = refMatch[0].trim();
-      bibleService.getText(detectedRef, "KJV").then((fetchedText) => {
-        const validText =
-          fetchedText && !fetchedText.includes("Invalid scripture")
-            ? fetchedText
-            : `Study of ${detectedRef} in its biblical and doctrinal context.`;
-        const cleanWords = validText
-          .replace(/[^a-zA-Z0-9\s]/g, "")
-          .split(/\s+/)
-          .map((w) => w.toLowerCase())
-          .filter((w) => w.length > 4 && !["shall", "there", "which", "their", "unto", "wherefore"].includes(w));
-        const keywords = Array.from(new Set(cleanWords)).slice(0, 6);
-        setActiveScripture({
-          id: detectedRef.toLowerCase().replace(/[^a-z0-9]/g, "-"),
-          reference: detectedRef,
-          text: validText,
-          keywords: keywords.length > 0 ? keywords : ["scripture", "covenant", "christ", "truth", "obedience"]
-        });
-      }).catch(() => {
-        setActiveScripture({
-          id: detectedRef.toLowerCase().replace(/[^a-z0-9]/g, "-"),
-          reference: detectedRef,
-          text: `Biblical study centered on ${detectedRef}.`,
-          keywords: ["scripture", "covenant", "christ", "truth", "obedience"]
-        });
-      });
-      return;
-    }
-
-    // 2. Check core doctrinal topics mentioned in conversation
-    if (lower.includes("sabbath") || lower.includes("fourth commandment") || lower.includes("seventh day")) {
-      setActiveScripture({
-        id: "sabbath-topic",
-        reference: "Exodus 20:8–11",
-        text: "Remember the sabbath day, to keep it holy. Six days shalt thou labour, and do all thy work: But the seventh day is the sabbath of the LORD thy God.",
-        keywords: ["remember", "sabbath", "holy", "creator", "rested", "sanctified"]
-      });
-      setActiveFundamentalBelief(FUNDAMENTAL_BELIEFS_CATALOG["sabbath"]);
-    } else if (lower.includes("sanctuary") || lower.includes("investigative judgment") || lower.includes("1844") || lower.includes("atonement")) {
-      setActiveScripture({
-        id: "sanctuary-topic",
-        reference: "Daniel 8:14",
-        text: "And he said unto me, Unto two thousand and three hundred days; then shall the sanctuary be cleansed.",
-        keywords: ["sanctuary", "cleansed", "high priest", "atonement", "judgment", "intercession"]
-      });
-      setActiveFundamentalBelief(FUNDAMENTAL_BELIEFS_CATALOG["sanctuary"]);
-    } else if (lower.includes("second coming") || lower.includes("blessed hope") || lower.includes("christ's return") || lower.includes("rapture")) {
-      setActiveScripture({
-        id: "second-coming-topic",
-        reference: "Titus 2:13",
-        text: "Looking for that blessed hope, and the glorious appearing of the great God and our Saviour Jesus Christ.",
-        keywords: ["blessed hope", "appearing", "clouds", "resurrection", "trumpet", "visible"]
-      });
-      setActiveFundamentalBelief(FUNDAMENTAL_BELIEFS_CATALOG["second-coming"]);
-    } else if (lower.includes("state of the dead") || lower.includes("death") || lower.includes("resurrection") || lower.includes("immortality")) {
-      setActiveScripture({
-        id: "state-of-dead-topic",
-        reference: "Ecclesiastes 9:5–6",
-        text: "For the living know that they shall die: but the dead know not any thing, neither have they any more a reward.",
-        keywords: ["sleep", "resurrection", "breath", "living soul", "immortality", "victory"]
-      });
-    } else if (activeScripture.reference === "Active Study Topic" && trimmed.length <= 80) {
-      const cleanedTopic = trimmed.replace(/^(let'?s\s+(?:study|discuss|talk\s+about|explore)|i\s+want\s+to\s+(?:study|discuss|learn\s+about)|topic:?)\s+/i, "").trim();
-      if (cleanedTopic.length >= 3) {
-        const topicWords = cleanedTopic
-          .replace(/[^a-zA-Z0-9\s]/g, "")
-          .split(/\s+/)
-          .map((w) => w.toLowerCase())
-          .filter((w) => w.length > 3);
-        const dynamicKeywords = Array.from(new Set([...topicWords, "scripture", "christ", "covenant", "application"])).slice(0, 6);
-        setActiveScripture({
-          id: cleanedTopic.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 32),
-          reference: cleanedTopic,
-          text: `Conversational Bible study focused on ${cleanedTopic}, comparing Scripture with Scripture.`,
-          keywords: dynamicKeywords
-        });
-      }
-    }
-  };
-
-  // Strict State-Gated Disclosure States (bound exclusively to post-speech tool accumulation)
-  const [isSlateCollapsed, setIsSlateCollapsed] = useState<boolean>(true);
-  const [verifiedTurnCount, setVerifiedTurnCount] = useState<number>(0);
-  const [unlockedStageCount, setUnlockedStageCount] = useState<number>(0);
-  const hasUserRespondedRef = useRef<boolean>(false);
-
-  // Accumulator for structured tool events (setTopicOverview & advanceExegesisStage) flushed strictly post-speech
-  const pendingToolUpdatesRef = useRef<{
-    topicOverview?: TopicOverviewData;
-    stageAdvance?: {
-      evaluatedStage: number;
-      score: number;
-      nextStage: number;
-      feedback?: string;
-      fundamentalBelief?: FundamentalBeliefData;
-      gaps?: string;
-      publicReadinessScore?: number;
-      evangelistTips?: string[];
-    };
-  }>({});
-  const serverTurnCompleteRef = useRef<boolean>(false);
-
-  // Strict completion handler: no automatic/optimistic stage advancement; stage progression ONLY advances via explicit tool updates
-  const recordVerifiedTurnCompletion = (options?: { unlockUpToStage?: number; uncollapseSlate?: boolean }) => {
-    setVerifiedTurnCount((prev) => prev + 1);
-    if (options?.uncollapseSlate) {
-      setIsSlateCollapsed(false);
-    }
-    if (options?.unlockUpToStage !== undefined) {
-      setIsSlateCollapsed(false);
-      setUnlockedStageCount((prev) => Math.min(5, Math.max(prev, options.unlockUpToStage!)));
-    }
-  };
-
-  // Always start instructional area from the very top when switching tabs or topics
-  useEffect(() => {
-    if (blackboardScrollRef.current) {
-      blackboardScrollRef.current.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
-    }
-  }, [blackboardView, topicOverview, phase]);
-
-  // Clean exit navigation: Returns to start session screen if in an active session, or to dashboard if on start screen
-  const handleExitStudio = () => {
-    clearSequentialTimers();
-    cleanupLiveAudioAndWS();
-    stopVoiceResponse();
-    clearIntervals();
-    setIsTimerActive(false);
-    setIsPaused(false);
-    setIsSlateCollapsed(true);
-    setVerifiedTurnCount(0);
-    setUnlockedStageCount(0);
-    setTopicOverview(null);
-    pendingToolUpdatesRef.current = {};
-    serverTurnCompleteRef.current = false;
-    hasUserRespondedRef.current = false;
-    if (phase !== "intro") {
-      setPhase("intro");
-      setChatMessages([]);
-      triggerToast("Returned to Start Session screen.");
-    } else {
-      onClose(); // Navigates to /dashboard
-    }
-  };
-
-  // 15-Minute Timer & 3-Minute Stage Pace Calculations (900 seconds total, 180s per stage)
-  const getStagePaceDetails = () => {
-    const activeStageNum = activeStage?.number || 1;
-    const stageEndRemaining = 900 - (activeStageNum * 180);
-    const stageTimeLeft = Math.max(0, Math.min(180, secondsRemaining - stageEndRemaining));
-    const mins = Math.floor(stageTimeLeft / 60);
-    const secs = stageTimeLeft % 60;
-    return {
-      activeStageNum,
-      stageTimeLeftFormatted: `${mins}:${secs.toString().padStart(2, "0")}`,
-      isOvertime: secondsRemaining < stageEndRemaining
-    };
-  };
+  const [liveModelName, setLiveModelName] = useState<string>("gemini-3.8-live");
+  const [isMicMuted, setIsMicMuted] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const liveSessionRunIdRef = useRef<number>(0);
+  const liveRetryTimerRef = useRef<any>(null);
+  const isMountedRef = useRef<boolean>(true);
+  // Separate 16kHz input and 24kHz output AudioContexts per Gemini Live API guidelines
   const inputAudioCtxRef = useRef<AudioContext | null>(null);
   const outputAudioCtxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -1211,8 +249,24 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   const nextStartTimeRef = useRef<number>(0);
   const currentLiveReplyTextRef = useRef<string>("");
   const currentLiveReplyIdRef = useRef<string | null>(null);
-  const currentUserTranscriptTextRef = useRef<string>("");
-  const currentUserTranscriptIdRef = useRef<string | null>(null);
+  const isElderSpeakingRef = useRef<boolean>(false);
+  const isMicMutedRef = useRef<boolean>(false);
+  const liveStateRef = useRef<string>("idle");
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    isMicMutedRef.current = isMicMuted;
+  }, [isMicMuted]);
+
+  useEffect(() => {
+    liveStateRef.current = liveState;
+  }, [liveState]);
 
   const phaseRef = useRef<PhaseType>(phase);
   const scoreStatsRef = useRef(scoreStats);
@@ -1232,7 +286,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     const view = new DataView(buffer);
     let offset = 0;
     for (let i = 0; i < floatSamples.length; i++, offset += 2) {
-      let s = Math.max(-1, Math.min(1, floatSamples[i]));
+      const s = Math.max(-1, Math.min(1, floatSamples[i]));
       view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
     }
     return buffer;
@@ -1253,23 +307,42 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     activeNodesRef.current.forEach((node) => {
       try {
         node.stop();
+        node.disconnect();
       } catch (e) {
         // Already ended or stopped
       }
     });
     activeNodesRef.current = [];
-    nextStartTimeRef.current = 0;
+    isElderSpeakingRef.current = false;
+    if (outputAudioCtxRef.current) {
+      nextStartTimeRef.current = outputAudioCtxRef.current.currentTime;
+    } else {
+      nextStartTimeRef.current = 0;
+    }
   };
 
   const cleanupLiveAudioAndWS = () => {
+    liveSessionRunIdRef.current += 1;
     setLiveWebSocketActive(false);
     setLiveState("idle");
-    
+
+    if (liveRetryTimerRef.current) {
+      clearTimeout(liveRetryTimerRef.current);
+      liveRetryTimerRef.current = null;
+    }
+
     if (wsRef.current) {
-      try {
-        wsRef.current.close();
-      } catch (e) {}
+      const ws = wsRef.current;
       wsRef.current = null;
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      try {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close(1000, "Session ended");
+        }
+      } catch (e) {}
     }
     if (processorRef.current) {
       try {
@@ -1286,9 +359,6 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       micStreamRef.current = null;
     }
     clearPlaybackQueue();
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
   };
 
   const resolveUserName = (): string => {
@@ -1305,16 +375,128 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     return "Berean";
   };
 
-  const hasReceivedLiveAudioRef = useRef<boolean>(false);
-  const hasCompletedOpeningGreetingRef = useRef<boolean>(false);
+  const syncLiveSessionProgress = (fullText: string) => {
+    const lowerText = fullText.toLowerCase();
+
+    // 1. Check if the AI announces an evaluation score in voice/text
+    const scorePatterns = [
+      /(?:evaluate|evaluates|evaluated|evaluating)\s+[^.!?\n]{0,60}?(?:at|is|with)?\s*(\d{2,3})\s*(?:%|percent|\/100|out of 100)?/i,
+      /(?:evaluation\s+score|assessment\s+score|your\s+score)[^.!?\n]{0,30}?(?:is|:|\sat)\s*(\d{2,3})\s*(?:%|percent|\/100|out of 100)?/i,
+      /(?:score|scored|score:)\s*(\d{2,3})\s*(?:%|percent|\/100|out of 100)/i,
+      /(\d{2,3})\s*(?:percent|%|out of 100|\/100)/i
+    ];
+
+    let parsedScore: number | null = null;
+    for (const pattern of scorePatterns) {
+      const match = fullText.match(pattern);
+      if (match) {
+        const val = parseInt(match[1], 10);
+        if (val >= 0 && val <= 100) {
+          parsedScore = val;
+          break;
+        }
+      }
+    }
+
+    const currentPhase = phaseRef.current;
+
+    // Trigger on evaluation score: as soon as the score is spoken, move stage indicator visually to the next stage
+    if (parsedScore !== null && currentPhase.startsWith("stage") && !evaluatedStagesLiveRef.current.has(currentPhase)) {
+      const currentStageNum = parseInt(currentPhase.replace("stage", ""), 10);
+      evaluatedStagesLiveRef.current.add(currentPhase);
+
+      if (currentStageNum < 5) {
+        const nextStageNum = currentStageNum + 1;
+        const nextStageId = `stage${nextStageNum}` as PhaseType;
+
+        // Immediately update stage score, reset session score for new stage, and move visual stage indicator
+        setScoreStats((prev) => {
+          const nextStageScores = { ...prev.stageScores };
+          nextStageScores[currentPhase] = parsedScore!;
+          return {
+            ...prev,
+            overallScore: 0, // Reset session score for the new stage
+            stageScores: nextStageScores
+          };
+        });
+
+        // Visually update the stage indicator immediately
+        setPhase(nextStageId);
+        triggerToast(`AI Evaluated Stage ${currentStageNum} at ${parsedScore}%. Advanced to Stage ${nextStageNum}!`);
+      } else {
+        // Stage 5 completed
+        setScoreStats((prev) => {
+          const nextStageScores = { ...prev.stageScores };
+          nextStageScores[currentPhase] = parsedScore!;
+          return {
+            ...prev,
+            overallScore: parsedScore!,
+            stageScores: nextStageScores
+          };
+        });
+        triggerToast(`AI Evaluated Stage 5 at ${parsedScore}%. Exegesis journey completed!`);
+        setTimeout(() => {
+          handleAdvanceToScorecard(true);
+        }, 1800);
+      }
+      return;
+    }
+
+    // 2. Check explicit verbal transition cues from AI: "move on to Stage 2", "advance to Stage 3", etc.
+    const transitionMatch = lowerText.match(/(?:move on to|proceed to|advance to|welcome to|starting with|let's move to|let's begin with|now on to|transition to|moving to|let's explore stage|now in stage)\s*(?:stage|step)?\s*([1-5])/i);
+    let detectedStage: PhaseType | null = null;
+    if (transitionMatch) {
+      const stNum = transitionMatch[1];
+      detectedStage = `stage${stNum}` as PhaseType;
+    } else {
+      // Check descending stage headers/markers
+      if (lowerText.includes("stage 5:") || lowerText.includes("step 5:") || lowerText.includes("stage 5 -") || lowerText.includes("stage 5.")) {
+        detectedStage = "stage5";
+      } else if (lowerText.includes("stage 4:") || lowerText.includes("step 4:") || lowerText.includes("stage 4 -") || lowerText.includes("stage 4.")) {
+        detectedStage = "stage4";
+      } else if (lowerText.includes("stage 3:") || lowerText.includes("step 3:") || lowerText.includes("stage 3 -") || lowerText.includes("stage 3.")) {
+        detectedStage = "stage3";
+      } else if (lowerText.includes("stage 2:") || lowerText.includes("step 2:") || lowerText.includes("stage 2 -") || lowerText.includes("stage 2.")) {
+        detectedStage = "stage2";
+      }
+    }
+
+    if (detectedStage && detectedStage !== phaseRef.current) {
+      setPhase(detectedStage);
+      setScoreStats((prev) => ({
+        ...prev,
+        overallScore: 0 // Reset for the newly active stage
+      }));
+      triggerToast(`Vocal Coach advanced to ${detectedStage === "stage1" ? "Stage 1" : detectedStage === "stage2" ? "Stage 2" : detectedStage === "stage3" ? "Stage 3" : detectedStage === "stage4" ? "Stage 4" : "Stage 5"}`);
+    }
+
+    // Check completion cues
+    if (
+      lowerText.includes("completed all five stages") ||
+      lowerText.includes("completed all 5 stages") ||
+      lowerText.includes("all five stages of our study journey")
+    ) {
+      setTimeout(() => {
+        handleAdvanceToScorecard(true);
+      }, 1500);
+    }
+  };
 
   const appendLiveReplyChunk = (chunk: string) => {
+    if (!chunk) return;
+    if (currentLiveReplyTextRef.current.length > 0) {
+      const lastChar = currentLiveReplyTextRef.current.slice(-1);
+      const firstChar = chunk.charAt(0);
+      if (!/\s/.test(lastChar) && !/[\s.,;:!?')\]]/.test(firstChar)) {
+        currentLiveReplyTextRef.current += " ";
+      }
+    }
     currentLiveReplyTextRef.current += chunk;
     const currentId = currentLiveReplyIdRef.current;
-
-    // NOTE: Regex-based stage advancement during streaming chunks is disabled.
-    // Stage progression and content disclosure are bound exclusively to post-speech tool events.
-
+    
+    // Parse stage and score dynamically from response chunks to sync scorecard and UI
+    syncLiveSessionProgress(currentLiveReplyTextRef.current);
+    
     setChatMessages((prev) => {
       if (currentId && prev.some((m) => m.id === currentId)) {
         return prev.map((m) => {
@@ -1323,16 +505,6 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
           }
           return m;
         });
-      } else if (prev.length === 1 && prev[0].id.startsWith("prompt-init-")) {
-        // Stream Elder Steven's live spoken opening greeting directly into the initial greeting bubble
-        const initId = prev[0].id;
-        currentLiveReplyIdRef.current = initId;
-        return [
-          {
-            ...prev[0],
-            text: currentLiveReplyTextRef.current.trim()
-          }
-        ];
       } else {
         const id = `live-ai-${Date.now()}`;
         currentLiveReplyIdRef.current = id;
@@ -1349,104 +521,20 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     });
   };
 
-  // Strictly post-speech tool accumulation flush: executes ONLY when audio playback drains
   const endLiveReplyAccumulation = () => {
-    hasCompletedOpeningGreetingRef.current = true;
     currentLiveReplyTextRef.current = "";
     currentLiveReplyIdRef.current = null;
-    serverTurnCompleteRef.current = false;
-
-    const pendingTopic = pendingToolUpdatesRef.current.topicOverview;
-    const pendingAdvance = pendingToolUpdatesRef.current.stageAdvance;
-    pendingToolUpdatesRef.current = {};
-
-    if (pendingTopic) {
-      setTopicOverview((prev) => ({
-        ...(prev || {
-          topicTitle: "",
-          scriptureReference: "",
-          historicalContext: "",
-          quotedScriptures: [],
-          egwWritings: [],
-          explanatoryNotes: [],
-          lastDaysImportance: "",
-          stagesOutline: []
-        }),
-        ...pendingTopic
-      }));
-      if (pendingTopic.scriptureReference) {
-        setActiveScripture((prev) => ({
-          ...prev,
-          reference: pendingTopic.scriptureReference,
-          text: pendingTopic.quotedScriptures?.[0]?.text || prev.text
-        }));
-      }
-      // Explicitly uncollapse slate and unlock Stage 1 overview & module post-speech when topicOverview tool is pushed
-      recordVerifiedTurnCompletion({ unlockUpToStage: 1, uncollapseSlate: true });
-      triggerToast("Elder Steven updated the Active Study Topic!");
-    }
-
-    if (pendingAdvance) {
-      const evaluatedIdx = (pendingAdvance.evaluatedStage || 1) - 1;
-      const score = pendingAdvance.score || 90;
-      if (pendingAdvance.fundamentalBelief) {
-        setActiveFundamentalBelief(pendingAdvance.fundamentalBelief);
-      }
-      if (pendingAdvance.publicReadinessScore) {
-        setPublicReadinessScore(pendingAdvance.publicReadinessScore);
-      }
-      if (pendingAdvance.evangelistTips && Array.isArray(pendingAdvance.evangelistTips)) {
-        setEvangelistTips(pendingAdvance.evangelistTips);
-      }
-      if (pendingAdvance.evaluatedStage === 5) {
-        stage5CompletedRef.current = true;
-      }
-      triggerAutoAdvanceToNextStage(evaluatedIdx, score, {
-        stageFeedback: pendingAdvance.feedback
-      });
-    }
-  };
-
-  const appendUserTranscriptChunk = (chunk: string) => {
-    hasUserRespondedRef.current = true;
-    currentUserTranscriptTextRef.current += chunk;
-    syncConversationalTopic(currentUserTranscriptTextRef.current);
-    const currentId = currentUserTranscriptIdRef.current;
-    setChatMessages((prev) => {
-      if (currentId && prev.some((m) => m.id === currentId)) {
-        return prev.map((m) => {
-          if (m.id === currentId) {
-            return { ...m, text: currentUserTranscriptTextRef.current };
-          }
-          return m;
-        });
-      } else {
-        const id = `usr-live-${Date.now()}`;
-        currentUserTranscriptIdRef.current = id;
-        return [
-          ...prev,
-          {
-            id,
-            sender: "user",
-            text: currentUserTranscriptTextRef.current,
-            timestamp: new Date()
-          }
-        ];
-      }
-    });
   };
 
   const playPCMChunk = (base64Audio: string) => {
     try {
       if (!outputAudioCtxRef.current) {
-        initializeAudioContext();
+        outputAudioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       }
       const ctx = outputAudioCtxRef.current;
-      if (!ctx) return;
       if (ctx.state === "suspended") {
         ctx.resume();
       }
-
       const binaryString = window.atob(base64Audio);
       const len = binaryString.length;
       const bytes = new Uint8Array(len);
@@ -1471,23 +559,27 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       
       const currentTime = ctx.currentTime;
       if (nextStartTimeRef.current < currentTime) {
-        nextStartTimeRef.current = currentTime + 0.05; // tiny latency gap
+        nextStartTimeRef.current = currentTime + 0.03;
       }
       
       sourceNode.start(nextStartTimeRef.current);
       nextStartTimeRef.current += buffer.duration;
       
       activeNodesRef.current.push(sourceNode);
+      isElderSpeakingRef.current = true;
+      setLiveState("playing");
+      setWaveHeights((prev) => prev.map(() => Math.floor(Math.random() * 18) + 8));
+
       sourceNode.onended = () => {
         activeNodesRef.current = activeNodesRef.current.filter((n) => n !== sourceNode);
-        if (activeNodesRef.current.length === 0) {
+        if (activeNodesRef.current.length === 0 && (!outputAudioCtxRef.current || outputAudioCtxRef.current.currentTime >= nextStartTimeRef.current - 0.05)) {
           setLiveState("ready");
-          endLiveReplyAccumulation();
-          if (stage5CompletedRef.current && phaseRef.current !== "feedback") {
-            setTimeout(() => {
-              handleAdvanceToScorecard(true);
-            }, 800);
-          }
+          setWaveHeights((prev) => prev.map(() => 6));
+          setTimeout(() => {
+            if (activeNodesRef.current.length === 0) {
+              isElderSpeakingRef.current = false;
+            }
+          }, 350);
         }
       };
     } catch (err) {
@@ -1497,8 +589,29 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 
   const startGeminiLiveSession = async () => {
     try {
+      stopVoiceResponse();
+      if (liveRetryTimerRef.current) {
+        clearTimeout(liveRetryTimerRef.current);
+        liveRetryTimerRef.current = null;
+      }
+      if (wsRef.current) {
+        const prevWs = wsRef.current;
+        wsRef.current = null;
+        prevWs.onopen = null;
+        prevWs.onmessage = null;
+        prevWs.onerror = null;
+        prevWs.onclose = null;
+        try {
+          if (prevWs.readyState === WebSocket.OPEN || prevWs.readyState === WebSocket.CONNECTING) {
+            prevWs.close(1000, "Replacing session");
+          }
+        } catch (_) {}
+      }
+
+      const sessionRunId = ++liveSessionRunIdRef.current;
       setLiveState("connecting");
       setLiveError(null);
+      initializeAudioContext();
       
       const isHttps = window.location.protocol === "https:";
       const protocol = isHttps ? "wss:" : "ws:";
@@ -1506,144 +619,301 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       const stateLesson = location.state?.lessonId || "";
       
       const userName = resolveUserName();
+      const passageRef = scripture?.reference || "2 Timothy 2:15";
+      const passageBody = (scripture?.text || "").trim();
+      const boundedQueryPassage = passageBody.length > 400 ? passageBody.slice(0, 400) : passageBody;
+      const elderStephenSystemInstruction = [
+        `You are Elder Stephen, an exegetical, Seventh-day Adventist historical method mentor for live interactive Bible study and vocal discipleship in the "Study To Be Approved" (STBA) ecosystem.`,
+        `Your persona is a warm, wise, calm, reverent, and supportive Seventh-day Adventist pastor and biblical scholar guiding ${userName} through the historic Seventh-day Adventist historical-grammatical and historicist method of biblical interpretation on ${passageRef}${passageBody ? ` ("${passageBody}")` : ""}.`,
+        `Core Hermeneutical & Exegetical Commitments:`,
+        `1. Sola Scriptura & Scripture Interprets Scripture (Isaiah 28:9-10; 2 Timothy 2:15).`,
+        `2. Historical-Grammatical Exegesis: Examine original historical context, authorial intent, and key Hebrew/Aramaic/Greek terms.`,
+        `3. Historicist & Sanctuary Lens: Connect the passage to the Great Controversy, Christ's Sanctuary ministry, the Three Angels' Messages (Revelation 14:6-12), and Seventh-day Adventist Fundamental Beliefs.`,
+        `4. Live Interactive Mentorship: Guide ${userName} smoothly through the 5 stages of exegesis, doctrine, application, and winsome witness.`
+      ].join("\n");
       
-      const queryParams = new URLSearchParams();
-      queryParams.set("mode", "teach");
-      if (stateDoctrine) queryParams.set("doctrineId", stateDoctrine);
-      if (stateLesson) queryParams.set("lessonId", stateLesson);
-      queryParams.set("userName", userName);
-      queryParams.set("learningTier", learningTier);
-      if (scripture?.reference) queryParams.set("reference", scripture.reference);
-      if (scripture?.text) queryParams.set("passageText", scripture.text);
-      
-      const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
-      const wsUrl = `${protocol}//${window.location.host}/api/teach/live${queryString}`;
-      
-      console.log("[STBA Live Voice Debug] Establishing link:", wsUrl);
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log("[STBA Live Voice Debug] Handshake completed successfully!");
+      const studyContext: StudyContextQueryParams = {
+        mode: "teach",
+        model: "gemini-3.8-live",
+        persona: "Elder Stephen",
+        doctrineId: stateDoctrine || undefined,
+        lessonId: stateLesson || undefined,
+        userName,
+        reference: scripture?.reference || undefined,
+        passageText: boundedQueryPassage || undefined
       };
 
-      ws.onmessage = (event) => {
+      const localSearchParams = new URLSearchParams();
+      Object.entries(studyContext).forEach(([key, val]) => {
+        if (val) localSearchParams.set(key, val);
+      });
+      const queryString = localSearchParams.toString() ? `?${localSearchParams.toString()}` : "";
+
+      const wsUrl = buildSupabaseLiveWebSocketUrl(
+        studyContext,
+        SUPABASE_EDGE_FUNCTION_URL || `${SUPABASE_URL}/functions/v1/gemini-live-relay`
+      );
+      console.log("[STBA Live Voice] VITE_SUPABASE_URL:", SUPABASE_URL, "| gemini-live-relay WS URL:", wsUrl);
+      const hasCustomEdgeFunction = Boolean(wsUrl && /^wss?:\/\//i.test(wsUrl));
+      const localLiveWsUrl = `${protocol}//${window.location.host}/api/teach/live${queryString}`;
+
+      // Retrieve the user's session access token for Edge Function auth (or setup metadata on local gateway)
+      let accessToken = await getUntruncatedSessionToken();
+      if (!accessToken) {
         try {
-          const msg = JSON.parse(event.data);
-          
-          if (msg.error) {
-            console.error("[STBA Live Voice Debug] Server message failure:", msg.error);
-            setLiveError(msg.error);
-            setLiveState("error");
-            triggerToast(msg.error);
-            ws.close();
+          const { data: { session } } = await supabase.auth.getSession();
+          accessToken = session?.access_token
+            ? String(session.access_token).trim()
+            : SUPABASE_PUBLISHABLE_KEY;
+        } catch {
+          accessToken = SUPABASE_PUBLISHABLE_KEY;
+        }
+      }
+
+      if (!isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
+        return;
+      }
+
+      const geminiLiveSessionPayload = {
+        type: "setup",
+        model: "models/gemini-3.8-live",
+        persona: "Elder Stephen",
+        reference: passageRef,
+        passageText: passageBody,
+        accessToken: accessToken || undefined,
+        systemInstruction: elderStephenSystemInstruction,
+        setup: {
+          model: "models/gemini-3.8-live",
+          systemInstruction: {
+            role: "system",
+            parts: [{ text: elderStephenSystemInstruction }]
+          },
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: "Charon"
+                }
+              }
+            }
+          }
+        },
+        config: {
+          model: "gemini-3.8-live",
+          responseModalities: ["AUDIO"],
+          systemInstruction: elderStephenSystemInstruction
+        }
+      };
+
+      const openTeachLiveSocket = (targetUrl: string, allowLocalFallback: boolean, retryAttempt: number = 0) => {
+        if (!isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
+          return;
+        }
+        const isSameOriginLocal = targetUrl === localLiveWsUrl;
+        let isDisposed = false;
+
+        console.log("[STBA Live Voice Debug] Establishing link:", targetUrl);
+        const ws = !isSameOriginLocal && accessToken
+          ? new WebSocket(targetUrl, [accessToken])
+          : new WebSocket(targetUrl);
+        wsRef.current = ws;
+        let hasOpened = false;
+        let errorHandled = false;
+
+        const disposeSocketHandlers = () => {
+          isDisposed = true;
+          ws.onopen = null;
+          ws.onmessage = null;
+          ws.onerror = null;
+          ws.onclose = null;
+        };
+
+        const handleSocketFailure = (errEvent?: any) => {
+          if (errorHandled || isDisposed || !isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
+            return;
+          }
+          errorHandled = true;
+          disposeSocketHandlers();
+          if (wsRef.current === ws) {
+            wsRef.current = null;
+          }
+          try {
+            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+              ws.close();
+            }
+          } catch (_) {}
+
+          if (!hasOpened && allowLocalFallback && targetUrl !== localLiveWsUrl) {
+            openTeachLiveSocket(localLiveWsUrl, false, 0);
             return;
           }
 
-          if (msg.ready) {
-            console.log("[STBA Live Voice Debug] Live engine linked up!");
-            setLiveState("ready");
-            setLiveWebSocketActive(true);
-            triggerToast("STBA Live bidirectional voice session initiated!");
+          if (!hasOpened && isSameOriginLocal && retryAttempt < 1) {
+            liveRetryTimerRef.current = setTimeout(() => {
+              liveRetryTimerRef.current = null;
+              if (isMountedRef.current && sessionRunId === liveSessionRunIdRef.current) {
+                openTeachLiveSocket(localLiveWsUrl, false, retryAttempt + 1);
+              }
+            }, 350);
+            return;
+          }
+
+          console.error("Live Voice Socket generic error:", errEvent);
+          setLiveError("Trouble connecting to live voice stream. Check microphone or use text/voice input below.");
+          setLiveState("error");
+        };
+
+        ws.onopen = () => {
+          if (isDisposed || !isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
+            disposeSocketHandlers();
+            try { ws.close(); } catch (_) {}
+            return;
+          }
+          hasOpened = true;
+          console.log("[STBA Live Voice Debug] Handshake completed successfully!");
+          try {
+            ws.send(JSON.stringify(geminiLiveSessionPayload));
+          } catch (setupErr) {
+            console.warn("[STBA Live Voice Debug] Failed to send initial session setup payload:", setupErr);
+          }
+        };
+
+        ws.onmessage = (event) => {
+          if (isDisposed || !isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) return;
+          try {
+            const msg = JSON.parse(event.data);
             
-            // Unmute/resume AudioContext and active microphone input
-            initializeAudioContext();
-            startMicCapture();
+            if (msg.heartbeat || msg.setupAck) {
+              return;
+            }
+
+            if (msg.error) {
+              console.warn("[STBA Live Voice Debug] Server message failure:", msg.error);
+              if (!isSameOriginLocal && allowLocalFallback) {
+                disposeSocketHandlers();
+                try { ws.close(); } catch (_) {}
+                openTeachLiveSocket(localLiveWsUrl, false, 0);
+                return;
+              }
+              setLiveError(msg.error);
+              setLiveState("error");
+              triggerToast(msg.error);
+              disposeSocketHandlers();
+              try { ws.close(); } catch (_) {}
+              return;
+            }
+
+            if (msg.ready) {
+              if (msg.model) setLiveModelName(msg.model);
+              console.log("[STBA Live Voice Debug] Live engine linked up!", msg.model || "gemini-3.8-live");
+              setLiveState("ready");
+              setLiveWebSocketActive(true);
+              stopVoiceResponse();
+              triggerToast("Gemini Live (gemini-3.8-live) real-time session active!");
+              
+              // Unmute/resume AudioContext and active microphone input
+              initializeAudioContext();
+              startMicCapture();
+              return;
+            }
+
+            if (msg.userTranscript) {
+              const spoken = msg.userTranscript.trim();
+              if (spoken && !isElderSpeakingRef.current) {
+                endLiveReplyAccumulation();
+                setChatMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last && last.sender === "user" && (Date.now() - new Date(last.timestamp).getTime() < 5000)) {
+                    const combined = last.text.endsWith(" ") || spoken.startsWith(" ")
+                      ? `${last.text}${spoken}`
+                      : `${last.text} ${spoken}`;
+                    const copy = [...prev];
+                    copy[copy.length - 1] = {
+                      ...last,
+                      text: combined.trim(),
+                      timestamp: new Date()
+                    };
+                    return copy;
+                  }
+                  return [
+                    ...prev,
+                    {
+                      id: `live-user-${Date.now()}`,
+                      sender: "user",
+                      text: spoken,
+                      timestamp: new Date()
+                    }
+                  ];
+                });
+              }
+            }
+
+            if (msg.audio) {
+              setLiveState("playing");
+              playPCMChunk(msg.audio);
+            }
+
+            if (msg.text) {
+              setLiveState("playing");
+              appendLiveReplyChunk(msg.text);
+            }
+
+            if (msg.turnComplete) {
+              endLiveReplyAccumulation();
+              if (activeNodesRef.current.length === 0) {
+                setLiveState("ready");
+              }
+            }
+
+            if (msg.stageAdvance) {
+              console.log("[STBA Live Voice Debug] stageAdvance received:", msg.stageAdvance);
+              const evaluatedIdx = (msg.stageAdvance.evaluatedStage || 1) - 1;
+              const score = msg.stageAdvance.score || 90;
+              triggerAutoAdvanceToNextStage(evaluatedIdx, score, {
+                stageFeedback: msg.stageAdvance.feedback
+              });
+            }
+
+            if (msg.interrupted) {
+              console.log("[STBA Live Voice Debug] Interrupt requested.");
+              clearPlaybackQueue();
+              endLiveReplyAccumulation();
+              setLiveState("ready");
+            }
+            
+            if (msg.closed) {
+              console.log("[STBA Live Voice Debug] Connection completed.");
+              cleanupLiveAudioAndWS();
+            }
+
+          } catch (err) {
+            console.error("Live translation extract exception:", err);
+          }
+        };
+
+        ws.onerror = (e) => {
+          handleSocketFailure(e);
+        };
+
+        ws.onclose = (ev) => {
+          if (isDisposed || !isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
             return;
           }
-
-          if (msg.userTranscript) {
-            appendUserTranscriptChunk(msg.userTranscript);
-            setLiveBarTranscript(`You: ${msg.userTranscript}`);
+          if (!hasOpened && !errorHandled) {
+            handleSocketFailure(ev);
+            return;
           }
-
-          if (msg.audio) {
-            hasReceivedLiveAudioRef.current = true;
-            currentUserTranscriptIdRef.current = null;
-            currentUserTranscriptTextRef.current = "";
-            setLiveState("playing");
-            playPCMChunk(msg.audio);
-          }
-
-          if (msg.text) {
-            hasReceivedLiveAudioRef.current = true;
-            setLiveState("playing");
-            appendLiveReplyChunk(msg.text);
-            setLiveBarTranscript(`Elder Steven: ${msg.text}`);
-          }
-
-          // Accumulate structured tool updates to be flushed strictly post-speech
-          if (msg.topicOverview) {
-            console.log("[STBA Live Voice Debug] topicOverview queued for post-speech flush:", msg.topicOverview);
-            pendingToolUpdatesRef.current.topicOverview = msg.topicOverview;
-            if (activeNodesRef.current.length === 0 && serverTurnCompleteRef.current) {
-              endLiveReplyAccumulation();
-            }
-          }
-
-          if (msg.stageAdvance) {
-            console.log("[STBA Live Voice Debug] stageAdvance queued for post-speech flush:", msg.stageAdvance);
-            pendingToolUpdatesRef.current.stageAdvance = msg.stageAdvance;
-            if (activeNodesRef.current.length === 0 && serverTurnCompleteRef.current) {
-              endLiveReplyAccumulation();
-            }
-          }
-
-          // Do NOT auto-increment turn or unlock stages when turnComplete arrives while audio is still playing
-          if (msg.turnComplete) {
-            serverTurnCompleteRef.current = true;
-            if (activeNodesRef.current.length === 0) {
-              endLiveReplyAccumulation();
-            }
-          }
-
-          if (msg.interrupted) {
-            console.log("[STBA Live Voice Debug] Interrupt requested.");
-            clearPlaybackQueue();
-            setLiveState("ready");
-          }
-          
-          if (msg.closed) {
-            console.log("[STBA Live Voice Debug] Connection completed.");
-            const hadAudio = hasReceivedLiveAudioRef.current;
-            cleanupLiveAudioAndWS();
-            if (!hadAudio && isAudioPrompterEnabled) {
-              triggerVoiceResponse(
-                `Hello ${userName ? `${userName}, ` : ""}I am Elder Steven, your Bible study mentor. What topic would you like to discuss today?`,
-                true
-              );
-            }
-          }
-
-        } catch (err) {
-          console.error("Live translation extract exception:", err);
-        }
+          console.log("Live Voice Socket closed.");
+          cleanupLiveAudioAndWS();
+        };
       };
 
-      ws.onerror = (e) => {
-        console.error("Live Voice Socket generic error:", e);
-        setLiveError("Trouble connecting. Keep settings checked.");
-        setLiveState("error");
-        if (!hasReceivedLiveAudioRef.current && isAudioPrompterEnabled) {
-          triggerVoiceResponse(
-            `Hello ${userName ? `${userName}, ` : ""}I am Elder Steven, your Bible study mentor. What topic would you like to discuss today?`,
-            true
-          );
-        }
-      };
-
-      ws.onclose = () => {
-        console.log("Live Voice Socket closed.");
-        const hadAudio = hasReceivedLiveAudioRef.current;
-        cleanupLiveAudioAndWS();
-        if (!hadAudio && isAudioPrompterEnabled) {
-          triggerVoiceResponse(
-            `Hello ${userName ? `${userName}, ` : ""}I am Elder Steven, your Bible study mentor. What topic would you like to discuss today?`,
-            true
-          );
-        }
-      };
-
+      if (hasCustomEdgeFunction && wsUrl) {
+        openTeachLiveSocket(wsUrl, true, 0);
+      } else {
+        openTeachLiveSocket(localLiveWsUrl, false, 0);
+      }
     } catch (err: any) {
       console.error("Connection establish aborted:", err);
       setLiveError(err.message || "Unspecified connection exception");
@@ -1652,16 +922,15 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   };
 
   const initializeAudioContext = () => {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!inputAudioCtxRef.current) {
-      inputAudioCtxRef.current = new AudioContextClass({ sampleRate: 16000 });
+      inputAudioCtxRef.current = new AudioCtx({ sampleRate: 16000 });
     }
     if (inputAudioCtxRef.current.state === "suspended") {
       inputAudioCtxRef.current.resume();
     }
-
     if (!outputAudioCtxRef.current) {
-      outputAudioCtxRef.current = new AudioContextClass({ sampleRate: 24000 });
+      outputAudioCtxRef.current = new AudioCtx({ sampleRate: 24000 });
     }
     if (outputAudioCtxRef.current.state === "suspended") {
       outputAudioCtxRef.current.resume();
@@ -1672,23 +941,27 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   const startMicCapture = async () => {
     try {
       initializeAudioContext();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
       micStreamRef.current = stream;
 
-      const ctx = inputAudioCtxRef.current!;
-      const source = ctx.createMediaStreamSource(stream);
-      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      const source = inputAudioCtxRef.current!.createMediaStreamSource(stream);
+      const processor = inputAudioCtxRef.current!.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
 
       source.connect(processor);
-      processor.connect(ctx.destination);
+      processor.connect(inputAudioCtxRef.current!.destination);
 
       processor.onaudioprocess = (e) => {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-        // Avoid streaming ambient mic noise while Elder Steven is delivering his initial greeting
-        if (!hasCompletedOpeningGreetingRef.current && activeNodesRef.current.length > 0) {
-          return;
-        }
+        if (isMicMutedRef.current || isElderSpeakingRef.current) return;
         
         const floatSamples = e.inputBuffer.getChannelData(0);
         
@@ -1699,9 +972,14 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
         const rms = Math.sqrt(sum / floatSamples.length);
         
         if (rms > 0.015) {
-          setLiveState("recording");
+          if (liveStateRef.current !== "playing") {
+            setLiveState("recording");
+          }
           setWaveHeights((prev) => prev.map(() => Math.max(6, Math.floor(rms * 150))));
         } else {
+          if (liveStateRef.current === "recording") {
+            setLiveState("ready");
+          }
           setWaveHeights((prev) => prev.map(() => Math.max(6, Math.floor(Math.random() * 4) + 4)));
         }
 
@@ -1712,8 +990,8 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       };
 
     } catch (err: any) {
-      console.warn("Microphone capture unavailable (Elder Steven Live voice output and text chat remain active):", err);
-      setIsRecording(false);
+      console.error("Microphone grab aborted:", err);
+      setLiveError("Microphone permission denied or unavailable. You can still interact with the Gemini Live session using text below.");
     }
   };
 
@@ -1722,259 +1000,114 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
-  const ttsAbortRef = useRef<AbortController | null>(null);
+  // Speaks prompt aloud using browser speech synthesis ONLY when Gemini Live voice stream is not active
+  const triggerVoiceResponse = (text: string) => {
+    if (useLiveVoiceAPI && (liveWebSocketActive || liveStateRef.current === "connecting" || liveStateRef.current === "playing" || liveStateRef.current === "ready")) {
+      return; // Gemini Live (gemini-3.8-live) handles real-time spoken voice directly
+    }
+    if (isAudioPrompterEnabled && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+
+      // Clean up markdown markers for a pure reading cadence matching CSMS Guide
+      const parsedText = text
+        .replace(/\*\*|###|##|\*/g, "")
+        .replace(/[\[\]]/g, "")
+        .trim();
+
+      const utterance = new SpeechSynthesisUtterance(parsedText);
+      utterance.rate = 0.92; // Consistent pacing with CSMS (0.92)
+      utterance.pitch = 0.85; // Warmer elder voice tuning (0.85)
+
+      const bestVoice = getElderStephenVoice();
+      if (bestVoice) {
+        utterance.voice = bestVoice;
+      }
+
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   const stopVoiceResponse = () => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
-    }
-    if (ttsAbortRef.current) {
-      try {
-        ttsAbortRef.current.abort();
-      } catch (_) {}
-      ttsAbortRef.current = null;
-    }
-    if (ttsAudioRef.current) {
-      try {
-        ttsAudioRef.current.pause();
-        ttsAudioRef.current.src = "";
-      } catch (_) {}
-      ttsAudioRef.current = null;
-    }
-    clearPlaybackQueue();
-  };
-
-  // Elder Steven voice synthesis ("Charon" voice)
-  const triggerVoiceResponse = async (rawText: string, forcePlay: boolean = false) => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-    if (!isAudioPrompterEnabled) return;
-    // If bidirectional Gemini Live WebSocket is actively streaming voice, avoid overlapping audio unless forced as fallback
-    if (liveWebSocketActive && !forcePlay) return;
-
-    const cleanText = (rawText || "")
-      .replace(/\*\*([^*]+)\*\*/g, "$1")
-      .replace(/\*([^*]+)\*/g, "$1")
-      .replace(/#+\s*/g, "")
-      .replace(/`+/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (!cleanText) return;
-
-    if (ttsAbortRef.current) {
-      try {
-        ttsAbortRef.current.abort();
-      } catch (_) {}
-    }
-    if (ttsAudioRef.current) {
-      try {
-        ttsAudioRef.current.pause();
-        ttsAudioRef.current.src = "";
-      } catch (_) {}
-      ttsAudioRef.current = null;
-    }
-
-    const controller = new AbortController();
-    ttsAbortRef.current = controller;
-
-    try {
-      setLiveState("playing");
-      const res = await fetch("/api/study/narrate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: cleanText.slice(0, 900),
-          voice: "Charon"
-        }),
-        signal: controller.signal
-      });
-
-      if (!res.ok) {
-        setLiveState("idle");
-        return;
-      }
-
-      const data = await res.json();
-      if ((!data?.audio && !data?.wavAudio) || controller.signal.aborted) {
-        setLiveState("idle");
-        return;
-      }
-
-      if (data.audio) {
-        // Play raw 24kHz 16-bit PCM directly through the unlocked Web Audio API context
-        playPCMChunk(data.audio);
-        return;
-      }
-
-      const audioSrc = `data:${data.mimeType || "audio/wav"};base64,${data.wavAudio || data.audio}`;
-      const audio = new Audio(audioSrc);
-      ttsAudioRef.current = audio;
-
-      audio.onended = () => {
-        if (ttsAudioRef.current === audio) {
-          ttsAudioRef.current = null;
-          setLiveState((prev) => (prev === "playing" ? "idle" : prev));
-          endLiveReplyAccumulation();
-        }
-      };
-      audio.onerror = () => {
-        if (ttsAudioRef.current === audio) {
-          ttsAudioRef.current = null;
-          setLiveState((prev) => (prev === "playing" ? "idle" : prev));
-        }
-      };
-
-      await audio.play();
-    } catch (err: any) {
-      if (err?.name !== "AbortError") {
-        console.warn("Elder Steven voice playback note:", err);
-      }
-      setLiveState((prev) => (prev === "playing" ? "idle" : prev));
     }
   };
 
-  // Manage steps — Slow and methodical 5-stage learning progression
-  const primaryRefForStage1 =
-    topicOverview?.scriptureReference && topicOverview.scriptureReference !== "Selected in Dialogue"
-      ? topicOverview.scriptureReference
-      : "Isaiah 28:9-10";
-
+  // Manage steps
   const stagesList = [
     {
       id: "stage1" as PhaseType,
       number: 1,
-      title: "Foundational Overview",
-      subtitle: "Stage 1 • Introduces foundational concepts",
+      title: "Exegesis & Context",
+      subtitle: "Authorial intent & linguistic setting",
       icon: <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />,
-      overview: "Stage 1 introduces foundational concepts of the active topic in its immediate biblical setting, establishing core scriptural terms and central truth before moving into deeper layers.",
-      coreTexts: Array.from(new Set([primaryRefForStage1, "Isaiah 28:9-10", "Nehemiah 8:8", "Acts 17:11"])),
-      prompt: "What foundational concept stands out to you in this study? Share in your own words what the passage is introducing."
+      prompt: "Welcome! What text would you like us to discuss?"
     },
     {
       id: "stage2" as PhaseType,
       number: 2,
-      title: "The Great Controversy",
-      subtitle: "Stage 2 • Deepens understanding through cosmic & redemptive context",
+      title: "Cosmic Lens",
+      subtitle: "The Great Controversy & spiritual warfare",
       icon: <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />,
-      overview: "Stage 2 deepens understanding by examining original biblical nuances, authorial intent, and how this truth illuminates the Great Controversy between Christ and Satan.",
-      coreTexts: ["Genesis 3:15", "Revelation 12:7-9", "Job 1:6-12", "Revelation 14:6-12"],
-      prompt: "Looking closer at the biblical context, how does this truth deepen our view of God's character in the Great Controversy?"
+      prompt: isFromBelief1 ? `Excellent! Let us move to Stage 2: The Cosmic Lens & The Great Controversy. 
+
+The Great Controversy Lens views scriptures through the conflict between Christ and Satan. 
+
+How is "rightly dividing" the Word of God essential in guarding against the deceptive floodwaters of compromise regarding the authority of the Holy Scriptures?` : `Stage 2: The Cosmic Lens & The Great Controversy. 
+
+The Great Controversy Lens views scriptures through the grand perspective of the cosmic conflict between Christ and Satan over the character of God's love and law. Why is this important? Because it unveils the underlying spiritual warfare behind theological errors and exposes the adversary's efforts to counterfeit or obscure divine truth, keeping us spiritually vigilant.
+
+Let us explore: How does this passage fit into the cosmic conflict? How is "rightly dividing truth" essential to guarding against theological compromises and spiritual deceptions?`
     },
     {
       id: "stage3" as PhaseType,
       number: 3,
-      title: "Doctrine",
-      subtitle: "Stage 3 • Explores historical & doctrinal context",
+      title: "Doctrinal Connections",
+      subtitle: "Adventist pillars & fundamental beliefs",
       icon: <BrainCircuit className="w-4 h-4 sm:w-5 sm:h-5" />,
-      overview: "Stage 3 explores the historical setting and connects the topic line-upon-line to the harmonious system of Seventh-day Adventist Fundamental Beliefs.",
-      coreTexts: ["2 Timothy 3:16-17", "Exodus 20:8-11", "Daniel 8:14", "Revelation 14:12"],
-      prompt: "How does the historical context of this study anchor and clarify a core Seventh-day Adventist Fundamental Belief?"
+      prompt: isFromBelief1 ? `Stage 3: Doctrinal Implication & Fundamental Beliefs.
+
+Let us link our findings back to the foundational pillars of our faith, specifically Seventh-day Adventist Fundamental Belief 1: The Holy Scriptures. 
+
+How does this text establish the Bible as the supreme, authoritative, and infallible revelation of God's will, the standard of character, the test of experience, the definitive revealer of doctrines, and the trustworthy record of God's acts in history?` : `Stage 3: Doctrinal Implication & Fundamental Beliefs.
+
+Doctrinal Connections systematically link our exegetical findings to the foundational pillars of our faith, specifically Seventh-day Adventist Fundamental Beliefs. Why is this important? Because it builds a cohesive, unified system of theology (line upon line, precept upon precept) so that we stay grounded as one body and are not shaken by temporary or deceptive teachings.
+
+Let us explore: Connect this passage to Seventh-day Adventist Fundamental Beliefs (such as Fundamental Belief #1: Holy Scriptures). How does understanding this text shape our theological foundations?`
     },
     {
       id: "stage4" as PhaseType,
       number: 4,
-      title: "Application",
-      subtitle: "Stage 4 • Connects principles to practical application",
+      title: "Practical Application",
+      subtitle: "Sanctification & daily lifestyle reform",
       icon: <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />,
-      overview: "Stage 4 connects theological principles to practical daily living—translating doctrinal conviction into concrete habits, character growth, and sanctification.",
-      coreTexts: ["Romans 12:1-2", "James 1:22-25", "Philippians 2:12-13", "1 John 3:18"],
-      prompt: "How can we connect this principle to practical daily life? What concrete step does this truth call us to practice today?"
+      prompt: isFromBelief1 ? `Stage 4: Practical Life-Reforming Application.
+
+Scripture study is not just an academic task; it is meant to sanctify us.
+
+How does the dual promise of 2 Timothy 3:16 (being profitable for doctrine, reproof, correction, and instruction) practically reform your daily habits, mindset, and routine tomorrow morning? Share concrete action steps.` : `Stage 4: Practical Life-Reforming Application.
+
+Practical Application brings the intellectual and doctrinal content down to our individual daily walking experience. Why is this important? Because scripture study is not an academic game; it is meant to sanctify the soul, reforming our actual behavior, habits, and daily schedules so we live an active testament of Christ's character.
+
+Let us explore: How does this scripture reform your personal life, habits, mindset, or schedule tomorrow morning? Share concrete, direct real-life action steps.`
     },
     {
       id: "stage5" as PhaseType,
       number: 5,
-      title: "Invitation",
-      subtitle: "Stage 5 • Invites reflection & personal commitment",
+      title: "Evangelistic Invitation",
+      subtitle: "Warm, winsome appeal to seekers",
       icon: <Share2 className="w-4 h-4 sm:w-5 sm:h-5" />,
-      overview: "Stage 5 invites heartfelt reflection, personal commitment to Christ, and a gentle, winsome appeal to share this truth with others (1 Peter 3:15).",
-      coreTexts: ["1 Peter 3:15", "Colossians 4:5-6", "2 Timothy 2:24-25", "Acts 26:28-29"],
-      prompt: "As you reflect on our study together, what personal commitment is God placing on your heart—and how would you gently invite a friend to consider this truth?"
+      prompt: isFromBelief1 ? `Stage 5: Graceful Evangelistic Invitation.
+
+As disciples, we are called to teach others what we have learned.
+
+How would you winsomely, gently, and respectfully explain the authority and beauty of the Holy Scriptures to a friend or neighbor who is skeptical or unfamiliar with the Bible? Frame a warm, Christ-centered appeal.` : `Stage 5: Graceful Evangelistic Invitation.
+
+The Evangelistic Invitation prepares us to effectively and winsomely share our study discoveries with others. Why is this important? Because disciples are called to teach others. Presenting deep truths with gentleness, winsomeness, and respect vindicates God's beautiful character of love and successfully draws seekers to Jesus.
+
+Let us explore: How would you explain this truth gently and respectfully to a seeker, neighbor, or friend who doesn't share our faith background? Frame a warm, winsome appeal.`
     }
   ];
-
-  const getActiveBelief = (): FundamentalBeliefData => {
-    if (activeFundamentalBelief) {
-      return {
-        number: activeFundamentalBelief.number || 1,
-        title: activeFundamentalBelief.title || "The Holy Scriptures",
-        summary: activeFundamentalBelief.summary || FUNDAMENTAL_BELIEFS_CATALOG["holy-scriptures"].summary,
-        egwQuote: activeFundamentalBelief.egwQuote || FUNDAMENTAL_BELIEFS_CATALOG["holy-scriptures"].egwQuote,
-        keyTexts: activeFundamentalBelief.keyTexts || FUNDAMENTAL_BELIEFS_CATALOG["holy-scriptures"].keyTexts
-      };
-    }
-    if (isFromBelief1) return FUNDAMENTAL_BELIEFS_CATALOG["holy-scriptures"];
-    if (stateDoctrine && FUNDAMENTAL_BELIEFS_CATALOG[stateDoctrine]) {
-      return FUNDAMENTAL_BELIEFS_CATALOG[stateDoctrine];
-    }
-    return FUNDAMENTAL_BELIEFS_CATALOG["holy-scriptures"];
-  };
-
-  const getStageWithMostGaps = () => {
-    let minScore = 101;
-    let worstStage = stagesList[0];
-    stagesList.forEach((st) => {
-      const sc = scoreStats.stageScores[st.id] ?? 0;
-      if (sc < minScore) {
-        minScore = sc;
-        worstStage = st;
-      }
-    });
-    return {
-      stage: worstStage,
-      score: minScore === 101 ? 75 : minScore,
-      feedback: scoreStats.stageFeedback[worstStage.id] || "This stage showed the greatest opportunity for deeper scriptural evidence and clearer explanation."
-    };
-  };
-
-  const renderHighlightedScriptureText = (text: string, foundKeywords: string[], gaps: string[]) => {
-    if (!text) return null;
-    const foundSet = new Set((foundKeywords || []).map((k) => k.toLowerCase().trim()));
-    const gapsSet = new Set((gaps || []).map((g) => g.toLowerCase().trim()));
-
-    // Split text by word boundaries
-    const tokens = text.split(/(\s+|[.,;!?]+)/);
-
-    return (
-      <div className="font-serif text-sm sm:text-base text-stone-200 leading-relaxed select-text p-4 bg-white/5 border border-white/10 rounded-xl">
-        {tokens.map((chunk, idx) => {
-          const clean = chunk.toLowerCase().replace(/[^a-z0-9]/g, "");
-          if (!clean) return <span key={idx}>{chunk}</span>;
-
-          const isFound = Array.from(foundSet).some((kw) => kw.includes(clean) || clean.includes(kw));
-          const isGap = !isFound && Array.from(gapsSet).some((g) => g.includes(clean) || clean.includes(g));
-
-          if (isFound) {
-            return (
-              <span
-                key={idx}
-                className="bg-[#C9973A]/30 text-amber-200 border-b-2 border-[#C9973A] px-1 py-0.5 rounded font-bold shadow-sm inline-block mx-0.5"
-                title="Theological Keyword Mastered"
-              >
-                {chunk}
-              </span>
-            );
-          }
-
-          if (isGap) {
-            return (
-              <span
-                key={idx}
-                className="bg-red-500/20 text-red-300 border-b-2 border-dashed border-red-400/80 px-1 py-0.5 rounded font-semibold inline-block mx-0.5"
-                title="Key Theological Gap - Needs Greater Coverage"
-              >
-                {chunk}
-              </span>
-            );
-          }
-
-          return <span key={idx}>{chunk}</span>;
-        })}
-      </div>
-    );
-  };
 
   const getCurrentStageIndex = (): number => {
     if (phase === "stage1") return 0;
@@ -1990,10 +1123,6 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   const completedStagesCount = stagesList.filter(
     (st) => (scoreStats.stageScores[st.id] || 0) > 0
   ).length;
-  const hasActiveDialogue = chatMessages.length > 0;
-  // Strict Blackboard gate: Right pane remains completely blank (rendering ONLY the top persistent header)
-  // until a user message initializes a new dialogue session
-  const hasUserInitializedSession = chatMessages.some((m) => m.sender === "user");
 
   // Cleanup synthesis and timers
   useEffect(() => {
@@ -2055,17 +1184,15 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   useEffect(() => {
     if (hasAutoStartedRef.current) return;
     const searchParams = new URLSearchParams(location.search);
+    const docParam = searchParams.get("doctrine");
     const autoLiveParam = searchParams.get("autoLive") === "true";
     const stateAutoLive = location.state?.autoLive;
+    const stateDoctrine = location.state?.doctrineId;
 
-    const isAutoLiveRequested = autoLiveParam || Boolean(stateAutoLive);
+    const isAutoLiveRequested = autoLiveParam;
 
     if (isAutoLiveRequested) {
-      hasAutoStartedRef.current = true;
       setUseLiveVoiceAPI(true);
-      setTimeout(() => {
-        handleBeginSession();
-      }, 150);
     }
   }, [location.search, location.state]);
 
@@ -2074,13 +1201,15 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     if (waveIntervalRef.current) clearInterval(waveIntervalRef.current);
   };
 
-  // Maintain bottom-anchored chat stream: automatically pin scroll to bottom as messages append upward
+  // Scroll to bottom of chat if near bottom or last message is from user, enabling independent scrolling
   useEffect(() => {
     if (chatContainerRef.current) {
       const el = chatContainerRef.current;
-      requestAnimationFrame(() => {
-        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-      });
+      const lastMsgIsUser = chatMessages.length > 0 && chatMessages[chatMessages.length - 1].sender === "user";
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+      if (isNearBottom || lastMsgIsUser || chatMessages.length <= 1) {
+        el.scrollTop = el.scrollHeight;
+      }
     }
   }, [chatMessages, isLoading]);
 
@@ -2155,9 +1284,8 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     }
   };
 
-  // Starting the dialogue session - begins timer, ensures right instructional slate remains completely unmounted/collapsed until explicitly triggered
+  // Starting the dialogue session - begins timer and starts Stage 1
   const handleBeginSession = () => {
-    clearSequentialTimers();
     setIsTimerActive(true);
     setSecondsRemaining(900);
     setChatMessages([]);
@@ -2177,68 +1305,53 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       foundKeywords: [],
       gaps: scripture.keywords || [],
       stageFeedback: {
-        stage1: "Awaiting foundational overview...",
-        stage2: "Awaiting Great Controversy insights...",
-        stage3: "Awaiting doctrinal connections...",
-        stage4: "Awaiting practical application...",
-        stage5: "Awaiting personal invitation & appeal..."
+        stage1: "Awaiting your exegesis...",
+        stage2: "Awaiting controversy insights...",
+        stage3: "Awaiting doctrinal links...",
+        stage4: "Awaiting action points...",
+        stage5: "Awaiting appeal presentation..."
       },
       ellenWhiteQuote: "The Bible is its own expositor. Scripture is to be compared with scripture.",
-      devotionalPrompt: "What specific step is God inviting you to take today from this study?"
+      devotionalPrompt: "What is God asking you to trust, release, or do today?"
     });
 
-    stage5CompletedRef.current = false;
     const userName = resolveUserName();
+    const initialPrompt = `Hello ${userName}, welcome to today’s study session! Today, I'll be guiding you through our 5-stage study journey:
 
-    setLiveBarTranscript(`Elder Steven: Hello ${userName ? `${userName}, ` : ""}I am Elder Steven, your Bible study mentor. What topic would you like to discuss today?`);
+• **Stage 1**: Exegesis & Original Context
+• **Stage 2**: The Cosmic Lens & The Great Controversy
+• **Stage 3**: Doctrinal Connections & Fundamental Beliefs
+• **Stage 4**: Practical Life-Reforming Application
+• **Stage 5**: Graceful Evangelistic Invitation & Appeal
 
-    const promptText = `Hello ${userName ? `${userName}, ` : ""}I am Elder Steven, your Bible study mentor. What topic would you like to discuss today?`;
+Let's begin right away with **Stage 1: Exegesis & Original Context** for **${scripture.reference}**:
+*"${scripture.text}"*
 
-    const promptMsg: ChatMessage = {
-      id: `prompt-init-${Date.now()}`,
-      sender: "ai",
-      type: "prompt",
-      text: promptText,
-      timestamp: new Date()
-    };
-    setChatMessages([promptMsg]);
+What is the authorial setting and original context of this passage, and how would you summarize its central meaning in your own words?`;
 
-    // Enforce strict state gating: right-hand slate remains completely unmounted/collapsed and topicOverview is null until pushed via tool updates
-    setTopicOverview(null);
-    setIsSlateCollapsed(true);
-    setVerifiedTurnCount(0);
-    setUnlockedStageCount(0);
-    pendingToolUpdatesRef.current = {};
-    serverTurnCompleteRef.current = false;
-    hasUserRespondedRef.current = false;
-
-    // Unlock Web Audio API synchronously on user click gesture so Elder Steven's voice plays immediately
-    initializeAudioContext();
-    hasReceivedLiveAudioRef.current = false;
-    hasCompletedOpeningGreetingRef.current = false;
-
-    if (blackboardScrollRef.current) {
-      blackboardScrollRef.current.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
-    }
-
-    // Proactively initiate Live Gemini voice session if enabled
-    if (useLiveVoiceAPI) {
-      if (liveWebSocketActive) {
-        cleanupLiveAudioAndWS();
+    setChatMessages([
+      {
+        id: "sys-init",
+        sender: "ai",
+        text: initialPrompt,
+        timestamp: new Date()
       }
+    ]);
+
+    // Proactively initiate Live Gemini (gemini-3.8-live) voice session immediately on Start Session
+    if (useLiveVoiceAPI) {
       startGeminiLiveSession();
       setIsRecording(true);
     } else {
-      triggerVoiceResponse(
-        `Hello ${userName ? `${userName}, ` : ""}I am Elder Steven, your Bible study mentor. What topic would you like to discuss today?`,
-        true
-      );
+      setTimeout(() => {
+        triggerVoiceResponse(initialPrompt);
+      }, 400);
     }
 
-    triggerToast(`Welcome ${userName}! Study session initialized.`);
+    triggerToast(`Welcome ${userName}! Gemini Live Study Session initialized.`);
   };
 
-  // Explicit structured tool handler: advances to next stage ONLY when invoked by stageAdvance tool
+  // Simple event trigger: auto-advance to next stage as soon as evaluation score is provided
   const triggerAutoAdvanceToNextStage = (
     currentIdx: number,
     numericScore: number,
@@ -2282,34 +1395,33 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       };
     });
 
-    // 2. Synchronized stage transition bound exclusively to the stageAdvance tool event
+    // 2. Synchronized stage transition: move from current stage to next stage AS SOON AS score is revealed!
     if (currentIdx < 4) {
       const nextIdx = currentIdx + 1;
       const nextStage = stagesList[nextIdx];
 
-      if (nextStage) {
-        setPhase(nextStage.id);
-        recordVerifiedTurnCompletion({ unlockUpToStage: nextStage.number, uncollapseSlate: true });
+      // Move to the next stage IMMEDIATELY visually
+      setPhase(nextStage.id);
 
-        const promptText = `**Stage ${nextStage.number}: ${nextStage.title}**\n\n${nextStage.prompt || ""}`;
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: `sys-next-${Date.now()}`,
-            sender: "ai",
-            text: promptText,
-            timestamp: new Date()
-          }
-        ]);
+      // Present next stage's prompt in chat so the user can immediately continue
+      const promptText = `**Stage ${nextStage.number}: ${nextStage.title}**\n\n${nextStage.prompt}`;
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `sys-next-${Date.now()}`,
+          sender: "ai",
+          text: promptText,
+          timestamp: new Date()
+        }
+      ]);
 
-        triggerVoiceResponse(
-          `I evaluate your Stage ${currentIdx + 1} response at ${numericScore} out of 100. Moving to Stage ${nextStage.number}: ${nextStage.title}. ${nextStage.prompt || ""}`
-        );
-        triggerToast(`Stage ${currentIdx + 1} score: ${numericScore}%. Advanced to Stage ${nextStage.number}: ${nextStage.title}`);
-      }
+      // Spoken voice synchronized with the stage transition
+      triggerVoiceResponse(
+        `I evaluate your Stage ${currentIdx + 1} response at ${numericScore} out of 100. Moving to Stage ${nextStage.number}: ${nextStage.title}. ${nextStage.prompt}`
+      );
+      triggerToast(`Stage ${currentIdx + 1} score: ${numericScore}%. Advanced to Stage ${nextStage.number}: ${nextStage.title}`);
     } else {
       // Completed final Stage 5!
-      recordVerifiedTurnCompletion({ unlockUpToStage: 5, uncollapseSlate: true });
       triggerVoiceResponse(
         `I evaluate your final Stage 5 response at ${numericScore} out of 100. Praise God! You have successfully completed all five stages of our study journey today.`
       );
@@ -2325,8 +1437,23 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     const textToSend = (customText || userInput).trim();
     if (!textToSend) return;
 
-    // Synchronize active conversational topic keywords with user input
-    syncConversationalTopic(textToSend);
+    // Detect if user provided a scripture reference
+    const refMatch = textToSend.match(/\b([1-3]?\s*[A-Za-z]+)\s+(\d+:\d+(?:-\d+)?)\b/i);
+    if (refMatch) {
+      const detectedRef = refMatch[0];
+      bibleService.getText(detectedRef, "KJV").then((fetchedText) => {
+        if (fetchedText && !fetchedText.includes("Invalid scripture")) {
+          const cleanWords = fetchedText.replace(/[^a-zA-Z0-9\s]/g, "").split(/\s+/).filter((w) => w.length > 4);
+          const keywords = Array.from(new Set(cleanWords)).slice(0, 6);
+          setActiveScripture({
+            id: detectedRef.toLowerCase().replace(/[^a-z0-9]/g, ""),
+            reference: detectedRef,
+            text: fetchedText,
+            keywords: keywords.length > 0 ? keywords : ["scripture", "context", "truth", "grace"]
+          });
+        }
+      }).catch((e) => console.warn("Bible lookup note:", e));
+    }
 
     // Append user's chat message
     const userMsgId = `usr-${Date.now()}`;
@@ -2338,7 +1465,6 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     };
 
     const nextMessages = [...chatMessages, newUserMsg];
-    hasUserRespondedRef.current = true;
     setChatMessages(nextMessages);
     setUserInput("");
     setIsLoading(true);
@@ -2350,19 +1476,17 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       setIsRecording(false);
     }
 
-    // If Live Gemini WebSocket is active, send directly to Live API and avoid duplicate REST request
+    // If Live Gemini WebSocket is active, notify the live speech session as well
     if (liveWebSocketActive && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       try {
         wsRef.current.send(JSON.stringify({ text: textToSend, currentStage: phase }));
-        setLiveBarTranscript(`You: ${textToSend}`);
-        return;
       } catch (wsErr) {
         console.warn("WebSocket send note:", wsErr);
       }
     }
 
     try {
-      const response = await fetch("/api/teach/chat", {
+      const response = await apiFetch("/api/teach/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2373,8 +1497,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
           })),
           stage: phase,
           userRole,
-          isEvangelist,
-          learningTier
+          isEvangelist
         })
       });
 
@@ -2382,21 +1505,13 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
         throw new Error("Tutor communications offline.");
       }
 
-      const data = await response.json();
+      const data = await safeParseResponseJson<any>(response);
+      if (!data || (data.ok === false && !data.reply)) {
+        throw new Error(data?.error || "Tutor communications returned non-JSON payload.");
+      }
       const stageHeading = phase.replace("stage", "Stage ");
       const numericScore = data.score || 85;
-      const baseReply = data.reply || "Wonderful insights, Noble Berean.";
-      const extraTeaching =
-        data.teachingExample && !baseReply.includes(data.teachingExample)
-          ? `\n\n* **Pedagogical Teaching Example**: ${data.teachingExample}`
-          : "";
-      const extraRefs =
-        Array.isArray(data.scriptureReferences) &&
-        data.scriptureReferences.length > 0 &&
-        !baseReply.includes(data.scriptureReferences[0])
-          ? `\n* **Key Biblical Witnesses**: ${data.scriptureReferences.join(" • ")}`
-          : "";
-      const formattedReply = `**${stageHeading} Evaluation Score: ${numericScore}/100**\n\n${baseReply}${extraTeaching}${extraRefs}`;
+      const formattedReply = `**${stageHeading} Evaluation Score: ${numericScore}/100**\n\n${data.reply || "Wonderful insights, Noble Berean."}`;
 
       // Append AI response
       const aiMsgId = `ai-${Date.now()}`;
@@ -2410,42 +1525,63 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
         }
       ]);
 
-      // Queue structured tool payloads (topicOverview & stageAdvance) from the response
-      if (data.topicOverview) {
-        pendingToolUpdatesRef.current.topicOverview = data.topicOverview;
-      }
-      if (data.stageAdvance) {
-        pendingToolUpdatesRef.current.stageAdvance = data.stageAdvance;
-      }
-
-      // If audio prompter is disabled, flush accumulated tool updates immediately; otherwise flush post-speech when TTS finishes
-      if (!isAudioPrompterEnabled) {
-        endLiveReplyAccumulation();
-      } else {
-        await triggerVoiceResponse(baseReply);
-        if (activeNodesRef.current.length === 0 && !ttsAudioRef.current) {
-          endLiveReplyAccumulation();
-        }
+      // Event trigger: reveal score dynamically, display in Session Scorecard, then immediately advance to next stage
+      const currentIdx = getCurrentStageIndex();
+      if (currentIdx !== -1) {
+        triggerAutoAdvanceToNextStage(currentIdx, numericScore, {
+          foundKeywords: data.foundKeywords,
+          stageFeedback: data.stageFeedback,
+          ellenWhiteQuote: data.ellenWhiteQuote,
+          devotionalPrompt: data.devotionalPrompt
+        });
       }
     } catch (err: any) {
       console.error(err);
-      triggerToast("Tutor connection interrupted. Please try again.");
+      triggerToast("Failed to reach GenAI companion. Using theological local exegesis fallback.");
+
+      // Emergency client-side mock so testing is perfect
+      const fallbackReplies: Record<string, string> = {
+        stage1: `Highly detailed point! Timothy's unashamed labor relates directly to accuracy. You discussed exegesis and linguistic context with wonderful accuracy.`,
+        stage2: `Brilliant reflection! In the cosmic war, divine truth holds up the lamp of God's character and counters deceptive compromises with clarity.`,
+        stage3: `Excellent mapping! Scripture indeed is our rock-solid standard, anchoring our fundamental beliefs unified as a global remnant church.`,
+        stage4: `Amazing action blueprint. Laying down a specific, daily study routine tomorrow morning is practical and highly sanctifying.`,
+        stage5: `Beautiful, respectful gospel presentation! Your warm, winsome appeal perfectly reflects Christ's character of love.`
+      };
+
+      const reply = fallbackReplies[phase] || "Well divided truth, Berean scholar!";
+      const fallbackHeading = phase.replace("stage", "Stage ");
+      const fallbackScore = 85;
+      const formattedFallbackReply = `**${fallbackHeading} Evaluation Score: ${fallbackScore}/100**\n\n${reply}`;
+      const aiMsgId = `ai-fallback-${Date.now()}`;
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: aiMsgId,
+          sender: "ai",
+          text: formattedFallbackReply,
+          timestamp: new Date()
+        }
+      ]);
+
+      // Event trigger for fallback: reveal score, display in Session Scorecard, then advance to next stage
+      const currentIdx = getCurrentStageIndex();
+      if (currentIdx !== -1) {
+        triggerAutoAdvanceToNextStage(currentIdx, fallbackScore, {
+          stageFeedback: reply
+        });
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Explicit stage transition handler when triggered by structured tools
+  // Jump to next phase
   const handleNextStage = (nextPhase: PhaseType) => {
     stopVoiceResponse();
     setPhase(nextPhase);
 
     const nextIdx = nextPhase === "stage1" ? 0 : nextPhase === "stage2" ? 1 : nextPhase === "stage3" ? 2 : nextPhase === "stage4" ? 3 : 4;
-    const targetStage = stagesList[nextIdx];
-    const stagePrompt = targetStage?.prompt || "";
-    const stageTitle = targetStage?.title || "Next Stage";
-
-    recordVerifiedTurnCompletion({ unlockUpToStage: nextIdx + 1, uncollapseSlate: true });
+    const stagePrompt = stagesList[nextIdx].prompt;
 
     setChatMessages((prev) => [
       ...prev,
@@ -2457,10 +1593,9 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       }
     ]);
 
-    if (stagePrompt) {
-      triggerVoiceResponse(stagePrompt);
-    }
-    triggerToast(`Advanced target context to ${stageTitle}`);
+    // Read next stage prompt
+    triggerVoiceResponse(stagePrompt);
+    triggerToast(`Advanced target context to ${stagesList[nextIdx].title}`);
   };
 
   const handleAdvanceToScorecard = (keepVoice = false) => {
@@ -2472,21 +1607,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     // Trigger celebration confetti
     showConfetti('teach', 'Hallelujah! All 5 Study Stages Mastered!');
 
-    // Calculate final cumulative score and dynamically align assessment with the active conversational topic
-    const combinedUserDialogue = chatMessages
-      .filter((m) => m.sender === "user")
-      .map((m) => m.text.toLowerCase())
-      .join(" ");
-
-    const activeTopicKeywords =
-      scripture.keywords && scripture.keywords.length > 0
-        ? scripture.keywords
-        : ["scripture", "covenant", "christ", "truth", "obedience"];
-
-    const detectedFound = activeTopicKeywords.filter((kw) =>
-      combinedUserDialogue.includes(kw.toLowerCase())
-    );
-
+    // Calculate final cumulative score
     setScoreStats((prev) => {
       const nextScores = { ...prev.stageScores };
       const completedKeys = Object.keys(nextScores).filter((k) => nextScores[k] > 0);
@@ -2497,45 +1618,15 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       } else {
         overall = 85;
       }
-
-      const mergedFound = Array.from(new Set([...prev.foundKeywords, ...detectedFound]));
-      const finalFound = mergedFound.length > 0 ? mergedFound : activeTopicKeywords.slice(0, 3);
-      const finalGaps = activeTopicKeywords.filter((kw) => !finalFound.includes(kw));
-
-      const activeTopicLabel = topicOverview?.topicTitle || scripture.reference;
-      const activeRefLabel = topicOverview?.scriptureReference || scripture.reference;
-      const nextFeedback = { ...prev.stageFeedback };
-      if (nextFeedback.stage1.startsWith("Awaiting")) {
-        nextFeedback.stage1 = `Foundational overview of ${activeTopicLabel} established with clear scriptural context.`;
-      }
-      if (nextFeedback.stage2.startsWith("Awaiting")) {
-        nextFeedback.stage2 = `Connected ${activeTopicLabel} to the Great Controversy theme and God's character of love.`;
-      }
-      if (nextFeedback.stage3.startsWith("Awaiting")) {
-        nextFeedback.stage3 = `Harmonized ${activeTopicLabel} with Seventh-day Adventist doctrinal pillars.`;
-      }
-      if (nextFeedback.stage4.startsWith("Awaiting")) {
-        nextFeedback.stage4 = `Translated ${activeTopicLabel} into practical daily Christian discipleship.`;
-      }
-      if (nextFeedback.stage5.startsWith("Awaiting")) {
-        nextFeedback.stage5 = `Formulated a warm, Christ-centered invitation to share ${activeTopicLabel} with others.`;
-      }
-
       return {
         ...prev,
         stageScores: nextScores,
-        overallScore: overall,
-        foundKeywords: finalFound,
-        gaps: finalGaps,
-        stageFeedback: nextFeedback,
-        ellenWhiteQuote:
-          topicOverview?.egwWritings?.[0]?.quote || prev.ellenWhiteQuote,
-        devotionalPrompt: `Reflecting on ${activeTopicLabel} (${activeRefLabel}), what specific step is God inviting you to take today?`
+        overallScore: overall
       };
     });
 
     setPhase("feedback");
-    triggerToast("Congratulations! Study Mastery Session Completed!");
+    triggerToast("🎉 Congratulations! Exegesis Mastery Session Completed!");
   };
 
   const handleSimulateWisdomInput = () => {
@@ -2553,71 +1644,67 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   };
 
   const downloadSummaryAsTxt = () => {
-    const activeTitle = topicOverview?.topicTitle || scripture.reference;
-    const activeRef = topicOverview?.scriptureReference || scripture.reference;
     let output = "";
-    output += "============================================================\n";
-    output += "         STUDY TO BE APPROVED (STBA) - SESSION SUMMARY       \n";
-    output += `         Topic: ${activeTitle} (${activeRef})\n`;
-    output += `         Learning Tier: ${learningTier}\n`;
-    output += `         Date: ${new Date().toLocaleDateString()} @ ${new Date().toLocaleTimeString()} \n`;
-    output += "============================================================\n\n";
+    output += "============================================================\\n";
+    output += "         STUDY TO BE APPROVED (STBA) - SESSION SUMMARY       \\n";
+    output += `         Reference: ${scripture.reference}                     \\n`;
+    output += `         Date: ${new Date().toLocaleDateString()} @ ${new Date().toLocaleTimeString()} \\n`;
+    output += "============================================================\\n\\n";
 
-    output += `[ACTIVE STUDY TOPIC]\n`;
-    output += `Topic: ${activeTitle}\n`;
-    output += `Reference: ${activeRef}\n`;
-    output += `Text: "${scripture.text}"\n\n`;
+    output += `[SCRIPTURE THEME]\\n`;
+    output += `Reference: ${scripture.reference}\\n`;
+    output += `Text: "${scripture.text}"\\n\\n`;
 
-    output += `[OVERALL COGNITIVE EVALUATION]\n`;
-    output += `Overall Mastery Score: ${scoreStats.overallScore}%\n`;
-    output += `Discipleship Rank: ${getMasteryLevelText(scoreStats.overallScore)}\n`;
-    output += `Active Profile Background: ${userRole}\n\n`;
+    output += `[OVERALL COGNITIVE EVALUATION]\\n`;
+    output += `Overall Mastery Score: ${scoreStats.overallScore}%\\n`;
+    output += `Discipleship Rank: ${getMasteryLevelText(scoreStats.overallScore)}\\n`;
+    output += `Active Profile Background: ${userRole}\\n\\n`;
 
-    output += "------------------------------------------------------------\n";
-    output += "                 STAGE-BY-STAGE EVALUATION                  \n";
-    output += "------------------------------------------------------------\n";
+    output += "------------------------------------------------------------\\n";
+    output += "                 STAGE-BY-STAGE EVALUATION                  \\n";
+    output += "------------------------------------------------------------\\n";
     stagesList.forEach((stg) => {
       const sc = scoreStats.stageScores[stg.id] || 0;
       const feedback = scoreStats.stageFeedback[stg.id] || "No discussion recorded.";
-      output += `Stage ${stg.number}: ${stg.title}\n`;
-      output += `Score: ${sc}/100\n`;
-      output += `Feedback: ${feedback}\n`;
-      output += `------------------------------------------------------------\n`;
+      output += `Stage ${stg.number}: ${stg.title}\\n`;
+      output += `Score: ${sc}/100\\n`;
+      output += `Feedback: ${feedback}\\n`;
+      output += `------------------------------------------------------------\\n`;
     });
 
-    output += "\n";
-    output += "------------------------------------------------------------\n";
-    output += "                 DEVOTIONAL HEART REFLECTION                \n";
-    output += "------------------------------------------------------------\n";
-    output += `Prompt: ${scoreStats.devotionalPrompt}\n`;
-    output += `Your Reflection:\n`;
+    output += "\\n";
+    output += "------------------------------------------------------------\\n";
+    output += "                 DEVOTIONAL HEART REFLECTION                \\n";
+    output += "------------------------------------------------------------\\n";
+    output += `Prompt: ${scoreStats.devotionalPrompt}\\n`;
+    output += `Your Reflection:\\n`;
     output += devotionalReflection.trim() ? devotionalReflection.trim() : "(No reflection text captured in memory journal yet.)";
-    output += "\n\n";
+    output += "\\n\\n";
 
-    output += "------------------------------------------------------------\n";
-    output += "                 SESSION TRANSLOGUE DIALOGUE                \n";
-    output += "------------------------------------------------------------\n";
+    output += "------------------------------------------------------------\\n";
+    output += "                 SESSION TRANSLATION DIALOGUE               \\n";
+    output += "------------------------------------------------------------\\n";
     if (chatMessages.length === 0) {
-      output += "(No dialogue text captures. Session completed using voice/audio prompters.)\n";
+      output += "(No dialogue text captures. Session completed using voice/audio prompters.)\\n";
     } else {
       chatMessages.forEach((msg, idx) => {
         const title = msg.sender === "ai" ? "STBA INTERACTIVE GUIDE" : "STUDENT";
-        output += `[${idx + 1}] ${title} (${msg.timestamp.toLocaleTimeString()}):\n`;
-        output += `    ${msg.text}\n\n`;
+        output += `[${idx + 1}] ${title} (${msg.timestamp.toLocaleTimeString()}):\\n`;
+        output += `    ${msg.text}\\n\\n`;
       });
     }
 
-    output += "\n============================================================\n";
-    output += "               VINDICATED & APPROVED BEREAN                 \n";
-    output += `               "${scoreStats.ellenWhiteQuote}"\n`;
-    output += "============================================================\n";
+    output += "\\n============================================================\\n";
+    output += "               VINDICATED & APPROVED BEREAN                 \\n";
+    output += `               "${scoreStats.ellenWhiteQuote}"\\n`;
+    output += "============================================================\\n";
 
     // Trigger download
     const blob = new Blob([output], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `STBA_${activeRef.replace(/\s+/g, "_")}_Session_Summary.txt`;
+    link.download = `STBA_${scripture.reference.replace(/\\s+/g, "_")}_Session_Summary.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2626,11 +1713,9 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   };
 
   const downloadSummaryAsHtml = () => {
-    const activeTitle = topicOverview?.topicTitle || scripture.reference;
-    const activeRef = topicOverview?.scriptureReference || scripture.reference;
     let chatHtml = "";
     if (chatMessages.length === 0) {
-      chatHtml = `<p style="color: #888;">No textual dialogue logged. Session completed using real-time vocal streams.</p>`;
+      chatHtml = `<p style="font-style: italic; color: #888;">No textual dialogue logged. Session completed using real-time vocal streams.</p>`;
     } else {
       chatMessages.forEach((msg) => {
         const isAi = msg.sender === "ai";
@@ -2667,9 +1752,9 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>STBA Biblical Study Record: ${activeTitle}</title>
+  <title>STBA Scripture Exegesis Record: ${scripture.reference}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=Playfair+Display:wght@500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,500;0,700;1,400&family=JetBrains+Mono:wght@400;700&display=swap');
     
     body {
       background-color: #f6f5f0;
@@ -2735,6 +1820,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     }
     .scripture-card p {
       font-family: 'Playfair Display', serif;
+      font-style: italic;
       font-size: 15px;
       color: #333;
       line-height: 1.6;
@@ -2775,6 +1861,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     }
     .reflection-text {
       font-family: 'Playfair Display', serif;
+      font-style: italic;
       font-size: 14.5px;
       line-height: 1.6;
       color: #2b2b2b;
@@ -2786,6 +1873,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     .quote {
       text-align: center;
       font-family: 'Playfair Display', serif;
+      font-style: italic;
       font-size: 13.5px;
       color: #666;
       border-top: 1px solid #e8e4da;
@@ -2847,12 +1935,12 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 
     <div class="header">
       <p>Study To Be Approved (STBA)</p>
-      <h1>Biblical Study Mastery Record</h1>
-      <p style="color: #666; font-size: 10px; margin-top: 4px;">Conversational Assessment & Stage Evaluation (${learningTier} Tier)</p>
+      <h1>Scriptural Exegesis Record</h1>
+      <p style="color: #666; font-size: 10px; margin-top: 4px;">Syllabus Assessment & Verbal Evaluation</p>
     </div>
 
     <div class="scripture-card">
-      <h2>Active Study Topic: ${activeTitle} (${activeRef})</h2>
+      <h2>Active Study Core: ${scripture.reference}</h2>
       <p>"${scripture.text}"</p>
     </div>
 
@@ -2860,7 +1948,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       <div>
         <h3 style="margin-bottom: 4px;">Assessment Profile</h3>
         <p style="font-size: 12px; color: #aaa; margin: 0; font-family: 'Inter', sans-serif;">
-          Role: <strong>${userRole} background</strong> • Tier: <strong>${learningTier}</strong> • Status: <strong>VERIFIED</strong>
+          Role: <strong>${userRole} background</strong> • Status: <strong>VERIFIED</strong>
         </p>
       </div>
       <div>
@@ -2879,7 +1967,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     <div class="section-title">Active Recall Keywords Captured</div>
     <p style="font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: #1C2333;">
       <strong>Identified Scriptural Keys:</strong><br/>
-      ${(scoreStats.foundKeywords.length > 0 ? scoreStats.foundKeywords : scripture.keywords).map(k => {
+      ${scripture.keywords.map(k => {
         return `<span style="display: inline-block; margin-right: 12px; color: #2E7D32; font-weight: bold;">[✓] ${k}</span>`;
       }).join(' ')}
     </p>
@@ -2904,7 +1992,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     </div>
 
     <div class="footer">
-      Syllabus Reference Code STBA-STUDY-${scripture.id.toUpperCase()} • STBA SECURE ARCHIVAL LEDGER
+      Syllabus Reference Code STBA-EXP-${scripture.id.toUpperCase()} • STBA SECURE ARCHIVAL LEDGER
     </div>
   </div>
 
@@ -2916,12 +2004,12 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `STBA_${activeRef.replace(/\s+/g, "_")}_Study_Record.html`;
+    link.download = `STBA_${scripture.reference.replace(/\s+/g, "_")}_Exegesis_Record.html`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    triggerToast("HTML/PDF-ready study certificate exported!");
+    triggerToast("Beautiful HTML/PDF-ready certificate template exported!");
   };
 
   const getMasteryLevelText = (sc: number): string => {
@@ -2938,8 +2026,6 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const stagePaceMarkers = ["15m–12m", "12m–9m", "9m–6m", "6m–3m", "3m–0m"];
-
   return (
     <div
       id="stba-teach-it-studio"
@@ -2954,7 +2040,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
           </div>
           <div>
             <h2 className="font-serif text-sm font-bold tracking-wider text-stone-200 uppercase">
-              Teach It INTERACTIVE STUDIO
+              STUDY INTERACTIVE STUDIO
             </h2>
             <p className="text-[10px] text-stone-400 font-mono">
               AI Bible Study Companion & Recall Engine
@@ -2962,31 +2048,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
-          {/* Learning Tier Selector (Adapts content volume & pacing depth) */}
-          <div
-            className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-0.5 text-[10px] font-mono"
-            title="Select Learning Tier to adapt content volume"
-          >
-            {(["Essential", "Standard", "Comprehensive"] as LearningTier[]).map((tier) => (
-              <button
-                key={tier}
-                type="button"
-                onClick={() => {
-                  handleLearningTierChange(tier);
-                  triggerToast(`Learning Tier set to ${tier} volume`);
-                }}
-                className={`px-2 py-1 rounded-md transition-all cursor-pointer font-bold uppercase tracking-wider ${
-                  learningTier === tier
-                    ? "bg-[#C9973A] text-stone-950 shadow-sm"
-                    : "text-stone-400 hover:text-stone-200"
-                }`}
-              >
-                {tier}
-              </button>
-            ))}
-          </div>
-
+        <div className="flex items-center gap-3">
           {/* Audio Synthesizer switch */}
           <button
             onClick={() => {
@@ -3011,14 +2073,14 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
           </button>
 
           <button
-            onClick={handleExitStudio}
-            className="p-1.5 px-3 border border-white/10 hover:border-amber-400/60 text-stone-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-all cursor-pointer text-xs flex items-center gap-1.5 font-mono group"
-            title={phase !== "intro" ? "Close Studio and Return to Start Screen" : "Return to Study Dashboard"}
+            onClick={() => {
+              stopVoiceResponse();
+              onClose();
+            }}
+            className="p-1 px-2 border border-white/10 hover:border-red-400 text-stone-400 hover:text-red-400 rounded transition-all cursor-pointer text-xs"
+            title="Quit Session"
           >
-            <X className="w-4 h-4 text-stone-400 group-hover:text-red-400" />
-            <span className="hidden sm:inline text-[11px] uppercase tracking-wider font-bold">
-              {phase !== "intro" ? "Close to Start" : "Close to Dashboard"}
-            </span>
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -3051,7 +2113,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
             >
               <div className="space-y-3">
                 <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#C9973A] font-extrabold px-3 py-1 rounded bg-[#C9973A]/10 border border-[#C9973A]/20 inline-block">
-                  {topicOverview?.topicTitle || "Interactive Study Studio"}
+                  {scripture.reference}
                 </span>
 
                 <h1 className="font-serif text-3.5xl sm:text-5xl font-normal text-white leading-tight tracking-tight pt-2">
@@ -3060,54 +2122,24 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                 </h1>
 
                 <p className="font-sans text-sm sm:text-base text-stone-300 leading-relaxed max-w-[550px] mx-auto pt-2">
-                  Engage in a methodical, interactive Bible study session with Elder Steven. Converse at a calm pace, explore any biblical topic stage by stage, and receive a realigned end-of-study assessment tailored to your conversation.
+                  Engage in an intelligent, real-time interactive Bible study session powered by AI. Converse with your theological partner, present your exegesis, discuss "your understanding of Scripture," and receive instant scorecard evaluations!
                 </p>
               </div>
 
               {/* Configurations panel */}
               <div className="pt-2 max-w-md mx-auto space-y-4 pb-12 md:pb-0">
-                {/* Learning Tier Volume Selector */}
-                <div className="bg-white/5 border border-white/10 p-3.5 rounded-xl text-left space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#C9973A] font-extrabold">
-                      Select Learning Tier (Content Volume)
-                    </span>
-                    <span className="text-[10px] font-mono text-stone-400">
-                      Active: {learningTier}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(
-                      [
-                        { id: "Essential" as LearningTier, desc: "Concise & Core" },
-                        { id: "Standard" as LearningTier, desc: "Balanced Study" },
-                        { id: "Comprehensive" as LearningTier, desc: "Full Depth" }
-                      ]
-                    ).map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => handleLearningTierChange(item.id)}
-                        className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
-                          learningTier === item.id
-                            ? "bg-[#C9973A]/20 border-[#C9973A] text-white"
-                            : "bg-black/20 border-white/10 text-stone-400 hover:text-stone-200"
-                        }`}
-                      >
-                        <div className="font-mono text-xs font-bold text-[#C9973A]">{item.id}</div>
-                        <div className="text-[10px] text-stone-300 mt-0.5">{item.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 <div className="bg-[#C9973A]/10 border border-[#C9973A]/25 p-3 rounded-lg text-xs text-[#D2A650] flex flex-col gap-1 leading-normal text-left">
-                  <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[#C9973A]">
-                    <Sparkles className="w-4 h-4 text-[#C9973A] shrink-0 animate-pulse" />
-                    <span>Interactive Mentor: Elder Steven</span>
+                  <div className="flex items-center justify-between gap-1.5 font-bold uppercase tracking-wider text-[#C9973A]">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-[#C9973A] shrink-0 animate-pulse" />
+                      <span>AI Voice Profile Active: Elder Stephen</span>
+                    </div>
+                    <span className="px-1.5 py-0.5 rounded bg-[#C9973A]/20 border border-[#C9973A]/40 text-[9px] font-mono">
+                      gemini-3.8-live
+                    </span>
                   </div>
                   <span>
-                    Engages real-time voice and text interaction. Choose any topic or passage in conversation and unlock study stages methodically!
+                    Engages real-time bidirectional voice interaction via Gemini Live API (gemini-3.8-live). Speak your mind and Elder Stephen responds vocally and in writing instantly!
                   </span>
                 </div>
 
@@ -3122,7 +2154,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                         Lay Evangelist Active Scorecard
                       </span>
                       <p className="text-stone-300 text-[11.5px] leading-relaxed mt-1">
-                        Evangelistic presentation guidelines triggered. Evaluates your warmth, clarity, and biblical simplicity for seekers!
+                        Evangelistic presentation guidelines triggered. The AI evaluates your winsomeness, clarity, and theological simplicity for seekers!
                       </p>
                     </div>
                   </div>
@@ -3136,21 +2168,6 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                 >
                   <BrainCircuit className="w-4 h-4 animate-bounce" />
                   <span>Start Session</span>
-                </button>
-
-                {/* RETURN TO DASHBOARD BUTTON */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    cleanupLiveAudioAndWS();
-                    stopVoiceResponse();
-                    onClose();
-                  }}
-                  className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 hover:text-white font-sans font-semibold text-xs sm:text-sm uppercase tracking-wider rounded-[8px] transition-all cursor-pointer flex items-center justify-center gap-2"
-                  id="btn-teach-intro-dashboard"
-                >
-                  <ArrowLeft className="w-4 h-4 text-stone-400" />
-                  <span>Return to Study Dashboard</span>
                 </button>
               </div>
             </motion.div>
@@ -3183,25 +2200,17 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                   <span className="text-[11px] font-mono uppercase tracking-widest font-extrabold text-stone-300">
                     {!isPaused ? "AI Session Live" : "Study Paused"}
                   </span>
-                  <span className="text-[10px] font-mono text-[#C9973A] bg-[#C9973A]/10 border border-[#C9973A]/30 px-2 py-0.5 rounded">
-                    Tier: {learningTier}
-                  </span>
                 </div>
 
                 {/* TIMERS HUD PANEL */}
                 <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10 text-xs">
-                  <div className="px-3 py-1 font-mono font-bold text-stone-200 flex items-center gap-2 border-r border-white/10">
+                  <div className="px-3 py-1 font-mono font-bold text-stone-200 flex items-center gap-1.5 border-r border-white/5">
                     <Clock className={`w-3.5 h-3.5 ${isTimerActive && !isPaused ? "text-[#C9973A] animate-pulse" : "text-stone-400"}`} />
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                      <span className="text-[#C9973A] font-bold">
-                        {!isTimerActive ? "15:00 Standby" : `Total: ${formatTimerMMSS(secondsRemaining)}`}
-                      </span>
-                      {isTimerActive && (
-                        <span className="text-[10px] text-stone-300 font-normal border-l border-white/10 pl-2 hidden sm:inline">
-                          Stage {getStagePaceDetails().activeStageNum} Pace: {getStagePaceDetails().stageTimeLeftFormatted} left in 3m block
-                        </span>
-                      )}
-                    </div>
+                    <span>
+                      {!isTimerActive
+                        ? "Timer Standby"
+                        : `Time Left: ${formatTimerMMSS(secondsRemaining)}`}
+                    </span>
                   </div>
                   {isTimerActive ? (
                     <button
@@ -3221,7 +2230,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                 </div>
               </div>
 
-              {/* TOP STAGE ICONS TIMELINE WITH 3-MINUTE STAGE MARKERS */}
+              {/* TOP STAGE ICONS TIMELINE */}
               <div 
                 ref={stageSelectorRef}
                 className="col-span-12 w-full bg-[#141A27]/60 border border-white/10 rounded-2xl p-3 sm:p-4 backdrop-blur-sm shadow-md" 
@@ -3283,14 +2292,11 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                             )}
                           </div>
 
-                          {/* Stage details with 3-minute stage pace marker */}
+                          {/* Stage details */}
                           <div className="flex flex-col text-left pr-1">
                             <div className="flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-wider">
                               <span className={isCurrent ? "text-[#C9973A] font-extrabold" : isVisited ? "text-emerald-400 font-bold" : "text-stone-500"}>
                                 Stage {st.number}
-                              </span>
-                              <span className="text-[8px] sm:text-[9px] text-[#C9973A]/80 font-bold bg-[#C9973A]/10 px-1 py-0.2 rounded border border-[#C9973A]/20">
-                                {stagePaceMarkers[idx]}
                               </span>
                               <span className={`font-bold px-1 py-0.2 rounded text-[8px] sm:text-[9px] ${
                                 hasScore
@@ -3333,17 +2339,6 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveMobileTab("blackboard")}
-                  className={`flex-1 py-2.5 rounded-lg text-center font-bold uppercase tracking-wide transition-all cursor-pointer ${
-                    activeMobileTab === "blackboard"
-                      ? "bg-emerald-700 text-white shadow-md font-extrabold"
-                      : "text-stone-400 hover:text-stone-200"
-                  }`}
-                >
-                  Blackboard
-                </button>
-                <button
-                  type="button"
                   onClick={() => setActiveMobileTab("scorecard")}
                   className={`flex-1 py-2.5 rounded-lg text-center font-bold uppercase tracking-wide transition-all cursor-pointer ${
                     activeMobileTab === "scorecard"
@@ -3353,1158 +2348,452 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                 >
                   Scorecard
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveMobileTab("checklist")}
+                  className={`flex-1 py-2.5 rounded-lg text-center font-bold uppercase tracking-wide transition-all cursor-pointer ${
+                    activeMobileTab === "checklist"
+                      ? "bg-[#C9973A] text-white shadow shadow-md font-extrabold"
+                      : "text-stone-400 hover:text-stone-200"
+                  }`}
+                >
+                  Checklist
+                </button>
               </div>
 
-              {/* STUDY WORKSPACE PANELS: LOCKED ASYMMETRIC TWO-COLUMN GRID (LEFT 5 COLS DIALOGUE + RIGHT 7 COLS INSTRUCTIONAL SLATE) */}
-              <div className="col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch w-full min-w-0" id="study-workspace-panels">
+              {/* STUDY WORKSPACE PANELS */}
+              <div className="col-span-12 flex flex-col lg:flex-row gap-6 items-stretch w-full min-w-0" id="study-workspace-panels">
 
-                {/* ============================================================== */}
-                {/* LEFT PANE: CAPTURES ALL DIALOGUE & PROMPT INPUT BOX (5 COLS)   */}
-                {/* ============================================================== */}
-                <div
-                  id="left-pane-dialogue-flux"
-                  className={`lg:col-span-5 min-w-0 w-full bg-[#141A27] rounded-2xl border border-white/10 p-3 sm:p-5 flex-col justify-between shadow-2xl relative overflow-hidden h-[680px] sm:h-[740px] max-h-[740px] ${
-                    activeMobileTab === "chat" ? "flex" : "hidden lg:flex"
-                  }`}
-                >
-                  {/* Top Header: Active Stage & Active Topic (Locked at Top) */}
-                  <div 
-                    className="shrink-0 flex flex-col items-center justify-center text-center w-full px-2 py-2 gap-2 border-b border-white/5 text-[10px] font-mono select-none lg:flex-col lg:items-start lg:text-left"
-                    id="chat-metadata-header"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-1.5 text-stone-400 w-full">
-                      <div className="flex items-center gap-1.5">
-                        <span className="whitespace-nowrap">Active study phase:</span>
-                        <span className="text-[#C9973A] font-bold uppercase whitespace-nowrap">
-                          Stage {activeStage?.number || 1}: {activeStage?.title || "Foundational Overview"}
-                        </span>
-                        <span className="text-[9px] text-[#C9973A]/80 font-bold bg-[#C9973A]/10 px-1.5 py-0.2 rounded border border-[#C9973A]/20 ml-1">
-                          {stagePaceMarkers[activeStageIndex !== -1 ? activeStageIndex : 0]}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-stone-400 font-mono text-[9.5px]">Active Topic:</span>
-                        {topicOverview?.scriptureReference ? (
-                          <button
-                            type="button"
-                            onClick={() => handleNavigateToBibleStudy(topicOverview.scriptureReference)}
-                            className="inline-flex items-center gap-1 text-[#C9973A] hover:text-amber-300 font-mono text-[10px] font-bold underline underline-offset-2 decoration-[#C9973A]/40 transition-colors cursor-pointer"
-                            title="Open Active Topic in Bible Study Module"
-                          >
-                            <BookOpen className="w-2.5 h-2.5" />
-                            <span>{topicOverview.scriptureReference}</span>
-                            <ExternalLink className="w-2.5 h-2.5 opacity-70" />
-                          </button>
-                        ) : (
-                          <span className="text-stone-500 font-mono text-[10px]">
-                            Awaiting Topic Tool Update
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* PROMINENT LIVE VOCAL MENTOR & TRANSCRIPT BAR (Locked Below Header) */}
-                  <div className="shrink-0 w-full bg-[#101522] border-2 border-[#C9973A]/40 rounded-2xl p-3 sm:p-3.5 my-3 shadow-xl backdrop-blur-md relative overflow-hidden select-none">
-                    <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-white/10">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2.5 h-2.5 rounded-full ${
-                          liveState === "playing"
-                            ? "bg-amber-400 animate-ping"
-                            : liveState === "recording"
-                            ? "bg-red-500 animate-pulse"
-                            : liveState === "ready"
-                            ? "bg-emerald-400"
-                            : "bg-stone-500"
-                        }`} />
-                        <span className="font-mono text-xs uppercase tracking-widest font-extrabold text-[#C9973A]">
-                          Elder Steven Live Voice
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider ${
-                          liveState === "playing"
-                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                            : liveState === "recording"
-                            ? "bg-red-500/20 text-red-300 border border-red-500/40"
-                            : liveState === "ready"
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                            : "bg-white/5 text-stone-400"
-                        }`}>
-                          {liveState === "playing" ? "● Speaking" : liveState === "recording" ? "● Streaming Mic" : liveState === "ready" ? "● Listening" : "● Standby"}
-                        </span>
-
-                        <button
-                          onClick={handleToggleRecording}
-                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                            liveWebSocketActive
-                              ? "bg-[#C9973A]/20 border-[#C9973A] text-[#C9973A]"
-                              : "bg-white/5 border-white/10 text-stone-400 hover:text-white"
-                          }`}
-                          title={liveWebSocketActive ? "Mute Microphone" : "Start Live Voice"}
-                        >
-                          {liveWebSocketActive ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Live Streaming Transcript */}
-                    <div className="pt-2 flex items-start gap-2.5 text-xs sm:text-sm">
-                      <span className="font-mono text-[9.5px] uppercase tracking-wider text-[#C9973A] shrink-0 bg-[#C9973A]/10 border border-[#C9973A]/30 px-2 py-0.5 rounded font-bold">
-                        Live Transcript:
-                      </span>
-                      <span className="text-stone-100 font-sans leading-relaxed min-h-[20px]">
-                        {liveBarTranscript || "Awaiting voice interaction... Speak or type to Elder Steven."}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Dialogue Screen / Bottom-Anchored Speech Bubble Stream */}
-                  <div
-                    ref={chatContainerRef}
-                    className="w-full min-w-0 flex-1 min-h-0 flex flex-col overflow-y-auto overscroll-contain pr-1 pb-4 scrollbar-thin border-b border-white/5"
-                    id="chat-scroller-box"
-                  >
-                    {/* INITIAL DIALOGUE PROMPT STATE */}
-                    {!hasActiveDialogue ? (
-                      <div
-                        id="dialogue-screen-initial-blank"
-                        className="w-full flex flex-col items-center justify-center text-center p-6 sm:p-8 space-y-4 my-auto select-none opacity-90"
-                      >
-                        <div className="w-14 h-14 rounded-2xl bg-[#C9973A]/10 border border-[#C9973A]/30 flex items-center justify-center text-[#C9973A] shadow-inner">
-                          <MessageSquare className="w-7 h-7 opacity-85" />
-                        </div>
-                        <div className="space-y-1.5 max-w-md">
-                          <h4 className="font-serif text-lg sm:text-xl font-bold text-white tracking-wide">
-                            Dialogue Stream Ready
-                          </h4>
-                          <p className="text-xs sm:text-sm text-stone-300 font-sans leading-relaxed">
-                            This column is dedicated exclusively to your live conversational dialogue with Elder Steven. The right instructional slate remains hidden by default and reveals stages sequentially as verified turns complete.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleBeginSession}
-                          className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#C9973A] to-[#B5852F] hover:from-[#B5852F] hover:to-[#9F7224] text-stone-950 font-sans font-bold text-xs sm:text-sm shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
-                        >
-                          <Play className="w-4 h-4 fill-current" />
-                          <span>Begin Interactive Dialogue</span>
-                        </button>
-                      </div>
-                    ) : (
-                      /* Bottom-anchored message stack: mt-auto anchors messages to the bottom and scrolls seamlessly as messages grow */
-                      <div className="mt-auto flex flex-col justify-end space-y-4 w-full pt-2">
-                        <AnimatePresence initial={false}>
-                          {chatMessages.map((msg) => {
-                            const isAi = msg.sender === "ai";
-                            if (isAi) {
-                              return (
-                                <motion.div
-                                  key={msg.id}
-                                  initial={{ opacity: 0, y: 12 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  className="flex items-start gap-3 w-full mr-auto text-left select-text"
-                                >
-                                  <div className="w-9 h-9 rounded-xl bg-[#C9973A]/20 border border-[#C9973A]/40 flex items-center justify-center text-[#C9973A] shrink-0 font-serif text-xs font-bold shadow-md">
-                                    AI
-                                  </div>
-                                  <div className="flex-1 bg-white/[0.06] text-[#E8E4DA] border border-white/10 rounded-2xl rounded-tl-none p-4 sm:p-5 font-serif font-light leading-relaxed select-text space-y-2 shadow-md">
-                                    <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5 mb-2 font-mono text-[10px] text-stone-400">
-                                      <span className="font-bold uppercase tracking-wider text-[#C9973A] flex items-center gap-1.5">
-                                        <BrainCircuit className="w-3.5 h-3.5" />
-                                        <span>Elder Steven • Dialogue Mentor</span>
-                                      </span>
-                                      <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                                    </div>
-                                    <div className="whitespace-pre-wrap text-sm sm:text-base font-serif leading-relaxed text-stone-100">
-                                      <ScriptureLinkedText
-                                        text={msg.text}
-                                        onNavigateRef={handleNavigateToBibleStudy}
-                                      />
-                                    </div>
-                                  </div>
-                                </motion.div>
-                              );
-                            }
-
-                            // USER SPEECH BUBBLE
-                            return (
-                              <motion.div
-                                key={msg.id}
-                                initial={{ opacity: 0, y: 12 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="flex items-start gap-3 w-full ml-auto flex-row-reverse text-right select-text"
-                              >
-                                <div className="w-9 h-9 rounded-xl bg-[#C9973A] text-stone-950 flex items-center justify-center shrink-0 font-sans text-xs font-extrabold shadow-md">
-                                  You
-                                </div>
-                                <div className="max-w-[85%] bg-[#C9973A] text-stone-950 rounded-2xl rounded-tr-none p-4 sm:p-5 font-sans leading-relaxed text-sm sm:text-base shadow-md text-left">
-                                  <div className="flex items-center justify-between gap-2 border-b border-black/15 pb-1 mb-1.5 font-mono text-[10px] text-stone-900/80">
-                                    <span className="font-bold uppercase tracking-wider">Your Dialogue Response</span>
-                                    <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                                  </div>
-                                  <div className="whitespace-pre-wrap select-text font-medium text-stone-950">
-                                    <ScriptureLinkedText
-                                      text={msg.text}
-                                      onNavigateRef={handleNavigateToBibleStudy}
-                                    />
-                                  </div>
-                                </div>
-                              </motion.div>
-                            );
-                          })}
-                        </AnimatePresence>
-
-                        {isLoading && (
-                          <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="flex items-center gap-2.5 mr-auto max-w-[80%]"
-                          >
-                            <div className="p-2 rounded-full bg-[#C9973A]/10 text-[#C9973A] shrink-0 text-xs animate-pulse">
-                              AI
-                            </div>
-                            <div className="bg-white/5 border border-white/5 p-3 rounded-xl rounded-tl-none flex items-center gap-3">
-                              <div className="flex space-x-1">
-                                <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce" />
-                                <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce [animation-delay:0.2s]" />
-                                <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce [animation-delay:0.4s]" />
-                              </div>
-                              <span className="font-mono text-[10px] text-stone-400">Preparing response...</span>
-                            </div>
-                          </motion.div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ============================================================== */}
-                  {/* PROMPT BOX: LOCKED AT THE BASE OF THE LEFT DIALOGUE PANE       */}
-                  {/* ============================================================== */}
-                  <div className="shrink-0 space-y-3 pt-3 select-none" id="left-pane-prompt-box">
-                    
-                    {/* Speech transcription recording indicator banner */}
-                    {isRecording && (
-                      <div className="bg-red-500/15 border border-red-500/30 px-3 py-1.5 rounded-lg text-[10px] text-red-300 flex items-center justify-between font-mono animate-pulse">
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-red-400 animate-ping" />
-                          <span>Capturing voice input directly into dialogue prompt...</span>
-                        </span>
-                        <button onClick={handleToggleRecording} className="text-stone-300 hover:text-white underline cursor-pointer">
-                          Stop recording
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Dialogue Input Row: Textarea + Send + Mic */}
-                    <div className="flex flex-row items-end gap-2 w-full" id="chat-input-row">
-                      <textarea
-                        value={userInput}
-                        onChange={(e) => setUserInput(e.target.value)}
-                        placeholder={isRecording ? "Speak now..." : "Name any biblical topic or type your dialogue response here..."}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendMessage();
-                          }
-                        }}
-                        disabled={isLoading}
-                        rows={2}
-                        className="flex-1 min-w-0 resize-none rounded-xl px-3.5 py-2.5 text-sm bg-black/30 border border-white/10 text-stone-100 placeholder-stone-400 focus:outline-none focus:border-[#C9973A] focus:ring-1 focus:ring-[#C9973A] scrollbar-thin shadow-inner"
-                      />
-
-                      <button
-                        onClick={() => handleSendMessage()}
-                        disabled={isLoading || !userInput.trim()}
-                        className="flex-shrink-0 w-11 h-11 rounded-xl bg-[#C9973A] hover:bg-[#B5852F] text-stone-950 font-bold disabled:opacity-40 transition-all cursor-pointer flex items-center justify-center group shadow-md"
-                        title="Send Dialogue Message"
-                      >
-                        <Send className="w-4 h-4 group-hover:scale-110" />
-                      </button>
-                      
-                      <button
-                        onClick={handleToggleRecording}
-                        className={`flex-shrink-0 w-11 h-11 rounded-xl border transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-md ${
-                          isRecording ? "bg-red-600 border-red-500 text-white" : "bg-white/5 hover:bg-white/10 border-white/10 text-stone-400 hover:text-white"
-                        }`}
-                        title="Toggle Mic Dictation"
-                      >
-                        <Mic className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Stage Navigation Controls & Actions Footer at Bottom of Left Pane */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5 text-[10px] text-stone-400 font-mono" id="chat-actions-footer">
-                      <div className="flex items-center gap-1.5 text-stone-400">
-                        <span>Press</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-stone-300 text-[9px]">Enter ↵</kbd>
-                        <span>to send dialogue</span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {activeStageIndex > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => handleNextStage(stagesList[activeStageIndex - 1].id)}
-                            className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 hover:text-white uppercase tracking-wider rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                            title={`Return to Stage ${activeStageIndex}`}
-                          >
-                            <ArrowLeft className="w-3 h-3" />
-                            <span>Prev Stage</span>
-                          </button>
-                        )}
-                        {activeStageIndex >= 0 && activeStageIndex < 4 && (
-                          <button
-                            type="button"
-                            onClick={() => handleNextStage(stagesList[activeStageIndex + 1].id)}
-                            className="px-2.5 py-1.5 bg-[#C9973A]/15 hover:bg-[#C9973A]/25 border border-[#C9973A]/40 text-[#C9973A] uppercase tracking-wider rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                            title={`Advance to Stage ${activeStageIndex + 2}`}
-                          >
-                            <span>Next Stage</span>
-                            <ArrowRight className="w-3 h-3" />
-                          </button>
-                        )}
-                        {activeStageIndex >= 4 && (
-                          <button
-                            type="button"
-                            onClick={() => handleAdvanceToScorecard()}
-                            className="px-3.5 py-1.5 bg-[#C9973A] hover:bg-[#B5852F] text-stone-950 uppercase tracking-wider rounded-lg text-[10px] font-bold transition-all cursor-pointer shadow-md"
-                          >
-                            Check Analytical Scorecard →
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ============================================================== */}
-                {/* RIGHT PANE: DEDICATED AI INSTRUCTIONAL AREA (7 COLS ASYMMETRIC) */}
-                {/* ============================================================== */}
-                <div
-                  id="right-pane-blackboard"
-                  className={`lg:col-span-7 min-w-0 w-full bg-[#0e1712] rounded-2xl border-4 border-[#3a2c1e] shadow-2xl flex flex-col justify-start items-stretch relative overflow-hidden transition-all duration-300 ${
-                    isSlateCollapsed || verifiedTurnCount === 0
-                      ? "h-auto lg:h-[680px] sm:lg:h-[740px] lg:max-h-[740px]"
-                      : "h-[680px] sm:h-[740px] max-h-[740px]"
-                  } ${
-                    activeMobileTab === "blackboard" ? "flex" : "hidden lg:flex"
-                  }`}
-                >
-                  {/* 1. PERSISTENT INSTRUCTIONAL SLATE HEADER (LOCKED AT TOP) */}
-                  <div
-                    id="right-pane-blackboard-header"
-                    className="bg-[#132018] border-b border-[#24382a] p-3 sm:p-4 select-none shrink-0"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-[#253d2c] border border-[#3b5d44] flex items-center justify-center text-amber-300 shadow-inner">
-                          <Scroll className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h3 className="font-serif text-sm sm:text-base font-bold text-[#f5ebd7] tracking-wider uppercase">
-                            AI INSTRUCTIONAL AREA • PROGRESSIVE DISCLOSURE SLATE
-                          </h3>
-                          <p className="text-[10px] font-mono text-[#a5bfa8]">
-                            {verifiedTurnCount === 0 || isSlateCollapsed
-                              ? "Default State: Unmounted / Collapsed • Awaiting Post-Speech Tool Unlock"
-                              : !topicOverview
-                              ? "Greeting Complete • Awaiting Topic Selection & Tool Update"
-                              : unlockedStageCount === 0
-                              ? `Topic Overview Loaded • Active Stage Overview Only (${learningTier} Tier)`
-                              : `Methodical Pacing • ${unlockedStageCount} of 5 Stages Revealed (${learningTier} Tier)`}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {verifiedTurnCount > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setIsSlateCollapsed((prev) => !prev)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1a2c20] hover:bg-[#253d2c] border border-[#3b5d44] text-[#c8decb] text-[10px] font-mono font-bold transition-all cursor-pointer"
-                            title={isSlateCollapsed ? "Expand Instructional Slate" : "Collapse Instructional Slate"}
-                          >
-                            {isSlateCollapsed ? (
-                              <>
-                                <ChevronDown className="w-3.5 h-3.5 text-amber-300" />
-                                <span>Expand Slate</span>
-                              </>
-                            ) : (
-                              <>
-                                <ChevronUp className="w-3.5 h-3.5 text-amber-300" />
-                                <span>Collapse Slate</span>
-                              </>
-                            )}
-                          </button>
-                        )}
-
-                        {topicOverview && unlockedStageCount >= 1 && !isSlateCollapsed && (
-                          /* Download Dropdown Button (PDF or DOCS) */
-                          <div className="relative">
-                            <button
-                              type="button"
-                              id="blackboard-download-btn"
-                              onClick={() => setShowBlackboardDownloadMenu((prev) => !prev)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1f3325] hover:bg-[#2b4733] border border-[#3c6145] text-amber-200 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm active:scale-95"
-                              title="Download Instructional Slate as PDF or DOCS"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                              <span>Download</span>
-                              <ChevronDown className="w-3 h-3 opacity-80" />
-                            </button>
-
-                            <AnimatePresence>
-                              {showBlackboardDownloadMenu && (
-                                <>
-                                  <div
-                                    className="fixed inset-0 z-20"
-                                    onClick={() => setShowBlackboardDownloadMenu(false)}
-                                  />
-                                  <motion.div
-                                    initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                                    transition={{ duration: 0.15 }}
-                                    className="absolute right-0 mt-1.5 w-48 rounded-xl bg-[#132018] border border-[#3c6145] shadow-2xl p-1.5 z-30 space-y-1"
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={handleDownloadBlackboardPDF}
-                                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#253d2c] text-xs font-mono text-amber-100 flex items-center justify-between transition-colors cursor-pointer"
-                                    >
-                                      <span className="flex items-center gap-2 font-bold">
-                                        <Printer className="w-3.5 h-3.5 text-amber-300" />
-                                        <span>Download PDF</span>
-                                      </span>
-                                      <span className="text-[10px] text-[#8ea892]">.pdf</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={handleDownloadBlackboardDocs}
-                                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#253d2c] text-xs font-mono text-amber-100 flex items-center justify-between transition-colors cursor-pointer"
-                                    >
-                                      <span className="flex items-center gap-2 font-bold">
-                                        <FileText className="w-3.5 h-3.5 text-emerald-300" />
-                                        <span>Download DOCS</span>
-                                      </span>
-                                      <span className="text-[10px] text-[#8ea892]">.doc</span>
-                                    </button>
-                                  </motion.div>
-                                </>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 4 Instructional Area Category Tabs — Only rendered once topicOverview is pushed and Stage 1+ is unlocked */}
-                    {topicOverview && unlockedStageCount >= 1 && !isSlateCollapsed && (
-                      <div className="flex flex-wrap gap-1.5 pt-3 text-[10px] font-mono">
-                        {[
-                          { id: "all", label: "All Slate" },
-                          { id: "scriptures", label: "Scriptures" },
-                          { id: "egw", label: "Ellen White" },
-                          { id: "pedagogy", label: "Pedagogy & Notes" }
-                        ].map((tab) => (
-                          <button
-                            key={tab.id}
-                            type="button"
-                            onClick={() => setBlackboardView(tab.id as any)}
-                            className={`px-3 py-1.5 rounded-md transition-all cursor-pointer font-bold ${
-                              blackboardView === tab.id
-                                ? "bg-amber-300/20 text-amber-200 border border-amber-300/40 shadow-sm"
-                                : "text-[#8ea892] hover:text-[#e0ebe1] bg-black/20 hover:bg-black/30 border border-transparent"
-                            }`}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 2. PROGRESSIVE, STATE-MANAGED INSTRUCTIONAL SLATE BODY */}
-                  {verifiedTurnCount === 0 || isSlateCollapsed ? null : !topicOverview ? (
-                    <div
-                      id="slate-empty-placeholder"
-                      className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 text-center select-none"
-                    >
-                      <div className="max-w-md space-y-2 border border-dashed border-[#2f4838] rounded-xl p-6 bg-[#142319]/40">
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-amber-300/80 block font-bold">
-                          Awaiting Structured Tool Update
-                        </span>
-                        <p className="text-xs sm:text-sm text-[#a5bfa8] font-sans leading-relaxed">
-                          Share your chosen biblical topic or scripture with Elder Steven. Content cards, scripture references, and stage modules will populate only when explicitly pushed via tool updates after his spoken response completes.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div
-                        ref={blackboardScrollRef}
-                        className="blackboard-scroll overflow-y-auto overscroll-contain flex-1 min-h-0 flex flex-col justify-start items-stretch content-start p-4 sm:p-5 space-y-5 text-left select-text"
-                      >
-                        {/* ============================================================ */}
-                        {/* CARD 0: ACTIVE STAGE OVERVIEW (REVEALED ON TOOL PUSH)        */}
-                        {/* ============================================================ */}
-                        <motion.div
-                          key={`active-stage-overview-${activeStage?.id || "stage1"}`}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.35 }}
-                          className="bg-[#142319]/95 border-2 border-[#C9973A]/60 rounded-xl p-4 space-y-3 shadow-lg"
-                          id="active-stage-overview-card"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#273c2d] pb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 rounded bg-[#C9973A] text-stone-950 font-mono text-[10px] font-extrabold uppercase tracking-wider">
-                                Active Stage {activeStage?.number || 1} Overview
-                              </span>
-                              <span className="font-serif text-sm sm:text-base font-bold text-[#f5ebd7]">
-                                {activeStage?.title || "Foundational Overview"}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleNavigateToBibleStudy(topicOverview.scriptureReference)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#203627] hover:bg-[#2b4733] text-amber-200 border border-[#3b5e43] font-mono text-[10px] font-bold transition-all cursor-pointer"
-                              title={`Open ${topicOverview.scriptureReference} in Bible Study module`}
-                            >
-                              <BookOpen className="w-3 h-3 text-[#C9973A]" />
-                              <span>{topicOverview.scriptureReference}</span>
-                              <ExternalLink className="w-2.5 h-2.5" />
-                            </button>
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <div className="text-[11px] font-mono text-amber-300/90 uppercase tracking-wider font-bold">
-                              {activeStage?.subtitle || "Stage 1 • Introduces foundational concepts"}
-                            </div>
-                            <p className="text-xs sm:text-sm text-[#e8f0e6] font-sans leading-relaxed">
-                              {activeStage?.overview || stagesList[0].overview}
-                            </p>
-                          </div>
-
-                          {/* Stage Progress Strip (1 to 5) showing locked vs unlocked stages */}
-                          <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {stagesList.map((st, idx) => {
-                                const isUnlocked = idx < unlockedStageCount;
-                                const isActive = phase === st.id;
-                                return (
-                                  <span
-                                    key={st.id}
-                                    className={`px-2 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all ${
-                                      isActive
-                                        ? "bg-[#C9973A]/25 text-amber-200 border border-[#C9973A]"
-                                        : isUnlocked
-                                        ? "bg-emerald-950/70 text-emerald-300 border border-emerald-600/40"
-                                        : "bg-black/30 text-stone-500 border border-white/5"
-                                    }`}
-                                  >
-                                    {isUnlocked ? "✓" : "🔒"} S{st.number}: {st.title}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                            {unlockedStageCount === 0 && (
-                              <span className="text-[10px] font-mono text-amber-300/90">
-                                Reply to Elder Steven to unlock Stage 1 module →
-                              </span>
-                            )}
-                          </div>
-                        </motion.div>
-
-                        {/* ============================================================ */}
-                        {/* SUBSEQUENT STAGES & MODULES — GATED UNTIL UNLOCKED BY TOOLS  */}
-                        {/* ============================================================ */}
-                        {unlockedStageCount >= 1 && (
-                          <>
-                            {/* OVERVIEW & STAGE-SEPARATED INSTRUCTIONAL MODULES (ALL SLATE) */}
-                            {blackboardView === "all" && (
-                              <div className="space-y-5" id="blackboard-overview-and-stages">
-                                {/* A. THEOLOGICAL & PROPHETIC OVERVIEW CARD */}
-                                <motion.div
-                                  initial={{ opacity: 0, y: 12 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  transition={{ duration: 0.35 }}
-                                  className="bg-[#142319]/95 border border-amber-400/35 rounded-xl p-4 space-y-3 shadow-lg"
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#273c2d] pb-2">
-                                    <span className="font-mono text-xs uppercase tracking-wider text-amber-300 font-extrabold flex items-center gap-1.5">
-                                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                                      <span>Theological & Prophetic Overview ({learningTier} Volume)</span>
-                                    </span>
-                                    <span className="text-[10px] font-mono text-emerald-300">
-                                      Unlocked at Turn {verifiedTurnCount}
-                                    </span>
-                                  </div>
-
-                                  <h4 className="font-serif text-base sm:text-lg font-bold text-[#f5ebd7] leading-snug">
-                                    {topicOverview.topicTitle}
-                                  </h4>
-
-                                  <div className="space-y-2 text-xs sm:text-sm text-stone-200 font-sans">
-                                    <div className="bg-black/25 border border-white/5 rounded-lg p-3 space-y-1">
-                                      <span className="font-mono text-[10px] uppercase tracking-wider text-amber-300 font-bold block">
-                                        1. Historical, Cultural & Theological Setting:
-                                      </span>
-                                      <p className="leading-relaxed text-[#e8f0e6]">
-                                        <ScriptureLinkedText
-                                          text={topicOverview.historicalContext}
-                                          onNavigateRef={handleNavigateToBibleStudy}
-                                        />
-                                      </p>
-                                    </div>
-
-                                    {unlockedStageCount >= 2 && learningTier !== "Essential" && (
-                                      <div className="bg-amber-950/25 border border-amber-500/25 rounded-lg p-3 space-y-1">
-                                        <span className="font-mono text-[10px] uppercase tracking-wider text-amber-300 font-bold block">
-                                          2. Critical Importance for the Last Days & Final Crisis:
-                                        </span>
-                                        <p className="leading-relaxed text-[#e8f0e6]">
-                                          <ScriptureLinkedText
-                                            text={topicOverview.lastDaysImportance}
-                                            onNavigateRef={handleNavigateToBibleStudy}
-                                          />
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </motion.div>
-
-                                {/* B. SEQUENTIAL STAGE CARDS (REVEALED ONE BY ONE AS UNLOCKED) */}
-                                <div className="space-y-3" id="blackboard-stages-breakdown">
-                                  <div className="flex items-center justify-between border-b border-[#273c2d] pb-1.5">
-                                    <span className="font-mono text-xs uppercase tracking-wider text-amber-300 font-extrabold flex items-center gap-1.5">
-                                      <BrainCircuit className="w-3.5 h-3.5 text-amber-300" />
-                                      <span>Progressive Stage Modules ({unlockedStageCount} of 5 Revealed)</span>
-                                    </span>
-                                    <span className="text-[10px] font-mono text-[#89a58d]">
-                                      Active: Stage {activeStage?.number || 1}
-                                    </span>
-                                  </div>
-
-                                  <div className="space-y-3">
-                                    {stagesList.slice(0, unlockedStageCount).map((stg, idx) => {
-                                      const isCurrentStage = phase === stg.id;
-                                      const stageScore = scoreStats.stageScores[stg.id] || 0;
-                                      const outlineItem = topicOverview.stagesOutline?.[idx];
-                                      const stageNote = topicOverview.explanatoryNotes?.[idx % (topicOverview.explanatoryNotes?.length || 1)];
-                                      const maxTextsForTier = learningTier === "Essential" ? 1 : learningTier === "Standard" ? 2 : stg.coreTexts.length;
-
-                                      return (
-                                        <motion.div
-                                          key={stg.id}
-                                          initial={{ opacity: 0, y: 12 }}
-                                          animate={{ opacity: 1, y: 0 }}
-                                          transition={{ duration: 0.3 }}
-                                          className={`rounded-xl p-3.5 sm:p-4 space-y-2.5 border transition-all shadow-md ${
-                                            isCurrentStage
-                                              ? "bg-[#1a2e22] border-2 border-[#C9973A] ring-1 ring-[#C9973A]/30"
-                                              : stageScore > 0
-                                              ? "bg-[#142319]/90 border-emerald-600/40"
-                                              : "bg-[#142319]/80 border-[#2f4838]"
-                                          }`}
-                                        >
-                                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
-                                            <div className="flex items-center gap-2">
-                                              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-extrabold uppercase ${
-                                                isCurrentStage
-                                                  ? "bg-[#C9973A] text-stone-950"
-                                                  : stageScore > 0
-                                                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                                  : "bg-[#203627] text-amber-300 border border-[#3b5e43]"
-                                              }`}>
-                                                Stage {stg.number}
-                                              </span>
-                                              <span className="font-serif text-sm font-bold text-[#f5ebd7]">
-                                                {stg.title}
-                                              </span>
-                                              <span className="text-[10px] font-mono text-[#89a58d] hidden sm:inline">
-                                                • {stg.subtitle}
-                                              </span>
-                                            </div>
-
-                                            <div className="flex items-center gap-1.5">
-                                              {isCurrentStage && (
-                                                <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-400/40 font-bold">
-                                                  Active Stage
-                                                </span>
-                                              )}
-                                              {stageScore > 0 && (
-                                                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-600/40">
-                                                  Score: {stageScore}%
-                                                </span>
-                                              )}
-                                            </div>
-                                          </div>
-
-                                          {/* Stage Overview & Focus */}
-                                          <div className="text-xs text-stone-200 font-sans space-y-1">
-                                            <p className="leading-relaxed text-[#e8f0e6]">
-                                              <strong className="text-amber-200 font-mono text-[10px] uppercase tracking-wider">Instructional Overview: </strong>
-                                              {stg.overview}
-                                            </p>
-                                            {outlineItem?.focus && learningTier !== "Essential" && (
-                                              <p className="leading-relaxed text-stone-300">
-                                                <strong className="text-emerald-300 font-mono text-[10px] uppercase tracking-wider">Topic Focus: </strong>
-                                                {outlineItem.focus}
-                                              </p>
-                                            )}
-                                          </div>
-
-                                          {/* Stage Scripture References scaled by Learning Tier */}
-                                          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                            <span className="text-[9.5px] font-mono uppercase tracking-wider text-[#89a58d] font-bold">
-                                              Stage Scriptures:
-                                            </span>
-                                            {stg.coreTexts.slice(0, maxTextsForTier).map((refText) => (
-                                              <button
-                                                key={refText}
-                                                type="button"
-                                                onClick={() => handleNavigateToBibleStudy(refText)}
-                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#203627] hover:bg-[#2b4733] text-amber-200 border border-[#3b5e43] text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                                                title={`Open ${refText} in Bible Study`}
-                                              >
-                                                <BookOpen className="w-2.5 h-2.5 text-[#C9973A]" />
-                                                <span>{refText}</span>
-                                              </button>
-                                            ))}
-                                          </div>
-
-                                          {/* Stage Teaching Prompt & Pedagogical Guidance */}
-                                          <div className="bg-black/25 border border-white/5 rounded-lg p-2.5 text-xs space-y-1">
-                                            <span className="font-mono text-[9.5px] uppercase tracking-wider text-amber-300 font-bold block">
-                                              Stage {stg.number} Teaching Guide & Prompt:
-                                            </span>
-                                            <p className="text-stone-200 leading-relaxed">
-                                              {stg.prompt}
-                                            </p>
-                                            {stageNote?.howToExplainToOthers && learningTier !== "Essential" && (
-                                              <p className="text-stone-300 font-serif pt-1 border-t border-white/5">
-                                                Tip: {stageNote.howToExplainToOthers}
-                                              </p>
-                                            )}
-                                          </div>
-                                        </motion.div>
-                                      );
-                                    })}
-
-                                    {/* Next Gated Stage Indicator */}
-                                    {unlockedStageCount < 5 && (
-                                      <div className="bg-black/30 border border-dashed border-[#3b5d44] rounded-xl p-3 flex items-center justify-between gap-2 text-xs font-mono text-[#89a58d]">
-                                        <span>
-                                          🔒 Next Module Gated: Stage {unlockedStageCount + 1} ({stagesList[unlockedStageCount].title})
-                                        </span>
-                                        <span className="text-[10px] text-amber-300/80">
-                                          Unlocks via stageAdvance tool post-speech
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* ============================================================ */}
-                            {/* SECTION: SCRIPTURE REFERENCES (SCALED BY LEARNING TIER)      */}
-                            {/* ============================================================ */}
-                            {(blackboardView === "all" || blackboardView === "scriptures") && (
-                              <div className="space-y-3" id="blackboard-scriptures-section">
-                                {(() => {
-                                  const allScriptures = topicOverview.quotedScriptures || [];
-                                  const tierMaxScriptures =
-                                    learningTier === "Essential"
-                                      ? Math.min(2, Math.max(1, unlockedStageCount))
-                                      : learningTier === "Standard"
-                                      ? Math.min(4, Math.max(2, unlockedStageCount))
-                                      : Math.max(2, unlockedStageCount + 2);
-                                  const visibleScriptures =
-                                    blackboardView === "scriptures"
-                                      ? allScriptures.slice(0, learningTier === "Essential" ? 3 : learningTier === "Standard" ? 5 : allScriptures.length)
-                                      : allScriptures.slice(0, tierMaxScriptures);
-
-                                  return (
-                                    <>
-                                      <div className="flex items-center justify-between border-b border-[#273c2d] pb-1.5">
-                                        <span className="font-mono text-xs uppercase tracking-wider text-amber-300 font-extrabold flex items-center gap-1.5">
-                                          <BookOpen className="w-3.5 h-3.5 text-amber-300" />
-                                          <span>
-                                            Scripture Reference Matrix ({visibleScriptures.length} of {allScriptures.length} Shown • {learningTier} Tier)
-                                          </span>
-                                        </span>
-                                        <span className="text-[10px] font-mono text-[#89a58d]">Line upon Line</span>
-                                      </div>
-
-                                      <div className="space-y-2.5">
-                                        {visibleScriptures.map((item, idx) => (
-                                          <div
-                                            key={item.reference + idx}
-                                            className="bg-[#142319]/90 border border-[#2f4838] rounded-xl p-3.5 sm:p-4 space-y-2 hover:border-amber-400/40 transition-all shadow-md group"
-                                          >
-                                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2">
-                                              <div className="flex items-center gap-2">
-                                                <span className="w-5 h-5 rounded bg-[#203627] text-amber-300 text-[10px] font-mono font-bold flex items-center justify-center border border-[#3b5e43]">
-                                                  {idx + 1}
-                                                </span>
-                                                <span className="text-amber-200 font-serif text-sm font-bold">
-                                                  {item.reference}
-                                                </span>
-                                                {item.role && (
-                                                  <span className="text-[9px] font-mono text-emerald-300 bg-emerald-950/60 border border-emerald-700/40 px-2 py-0.5 rounded-full">
-                                                    {item.role}
-                                                  </span>
-                                                )}
-                                              </div>
-
-                                              <button
-                                                type="button"
-                                                onClick={() => handleNavigateToBibleStudy(item.reference)}
-                                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#C9973A] hover:bg-[#B5852F] text-stone-950 font-mono text-[10px] font-bold shadow transition-all cursor-pointer active:scale-95"
-                                                title={`Open ${item.reference} in Bible Study module`}
-                                              >
-                                                <BookOpen className="w-3 h-3" />
-                                                <span>Open in Bible Study</span>
-                                                <ExternalLink className="w-2.5 h-2.5 opacity-80" />
-                                              </button>
-                                            </div>
-
-                                            <p className="font-serif text-xs sm:text-sm text-[#e8f0e6] leading-relaxed pt-0.5">
-                                              "<ScriptureLinkedText
-                                                text={item.text}
-                                                onNavigateRef={handleNavigateToBibleStudy}
-                                              />"
-                                            </p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </>
-                                  );
-                                })()}
-
-                                {/* Stage-Separated Scripture Witnesses when viewing Scriptures Tab */}
-                                {blackboardView === "scriptures" && (
-                                  <div className="space-y-2.5 pt-2">
-                                    <div className="flex items-center justify-between border-b border-[#273c2d] pb-1.5">
-                                      <span className="font-mono text-xs uppercase tracking-wider text-amber-300 font-extrabold">
-                                        Stage-Separated Scripture Witnesses (Unlocked Stages 1–{unlockedStageCount})
-                                      </span>
-                                    </div>
-                                    {stagesList.slice(0, unlockedStageCount).map((stg) => (
-                                      <div
-                                        key={stg.id}
-                                        className="bg-[#142319]/85 border border-[#2f4838] rounded-xl p-3 space-y-2"
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <span className="font-serif text-xs font-bold text-amber-200">
-                                            Stage {stg.number}: {stg.title}
-                                          </span>
-                                          <span className="text-[10px] font-mono text-[#89a58d]">{stg.subtitle}</span>
-                                        </div>
-                                        <div className="flex flex-wrap gap-1.5">
-                                          {stg.coreTexts.map((refText) => (
-                                            <button
-                                              key={refText}
-                                              type="button"
-                                              onClick={() => handleNavigateToBibleStudy(refText)}
-                                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#203627] hover:bg-[#2b4733] text-amber-200 border border-[#3b5e43] text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                                            >
-                                              <BookOpen className="w-3 h-3 text-[#C9973A]" />
-                                              <span>{refText}</span>
-                                              <ExternalLink className="w-2.5 h-2.5 opacity-75" />
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {/* ============================================================ */}
-                            {/* SECTION: ELLEN WHITE'S WRITINGS (UNLOCKED AT STAGE 2+ OR TAB) */}
-                            {/* ============================================================ */}
-                            {((blackboardView === "all" && unlockedStageCount >= 2) || blackboardView === "egw") && (
-                              <div className="space-y-3" id="blackboard-egw-section">
-                                <div className="flex items-center justify-between border-b border-[#273c2d] pb-1.5">
-                                  <span className="font-mono text-xs uppercase tracking-wider text-amber-300 font-extrabold flex items-center gap-1.5">
-                                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                                    <span>Ellen G. White Writings (Spirit of Prophecy)</span>
-                                  </span>
-                                  <span className="text-[10px] font-mono text-[#89a58d]">Harmonious Commentary</span>
-                                </div>
-
-                                <div className="space-y-3">
-                                  {(topicOverview.egwWritings || [])
-                                    .slice(
-                                      0,
-                                      learningTier === "Essential"
-                                        ? 1
-                                        : blackboardView === "egw"
-                                        ? undefined
-                                        : Math.max(1, unlockedStageCount - 1)
-                                    )
-                                    .map((egw, idx) => (
-                                      <div
-                                        key={egw.source + idx}
-                                        className="bg-[#17261d]/90 border border-amber-600/30 rounded-xl p-3.5 sm:p-4 space-y-2.5 shadow-md"
-                                      >
-                                        <div className="flex items-center justify-between gap-2 border-b border-amber-500/20 pb-1.5">
-                                          <span className="font-serif text-xs sm:text-sm font-bold text-amber-200">
-                                            {egw.work}
-                                          </span>
-                                          <span className="font-mono text-[10px] text-amber-300/80 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded">
-                                            {egw.source}
-                                          </span>
-                                        </div>
-
-                                        <blockquote className="font-serif text-xs sm:text-sm text-[#f0ece1] leading-relaxed border-l-2 border-[#C9973A] pl-3 py-0.5">
-                                          "{egw.quote}"
-                                        </blockquote>
-
-                                        {egw.theologicalContext && learningTier !== "Essential" && (
-                                          <div className="text-[11px] font-sans text-stone-200 bg-black/35 p-2.5 rounded-lg border border-white/5 space-y-0.5">
-                                            <span className="text-amber-300 font-mono font-bold text-[9.5px] uppercase tracking-wider block">
-                                              Theological Illumination:
-                                            </span>
-                                            <p className="leading-relaxed text-stone-300">
-                                              {egw.theologicalContext}
-                                            </p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* ============================================================ */}
-                            {/* SECTION: PEDAGOGY & NOTES (UNLOCKED AT STAGE 3+ OR TAB)      */}
-                            {/* ============================================================ */}
-                            {((blackboardView === "all" && unlockedStageCount >= 3) || blackboardView === "pedagogy") && (
-                              <div className="space-y-4" id="blackboard-pedagogy-section">
-                                <div className="flex items-center justify-between border-b border-[#273c2d] pb-1.5">
-                                  <span className="font-mono text-xs uppercase tracking-wider text-amber-300 font-extrabold flex items-center gap-1.5">
-                                    <Lightbulb className="w-3.5 h-3.5 text-amber-300" />
-                                    <span>Pedagogy, Teaching Examples & Notes</span>
-                                  </span>
-                                  <span className="text-[10px] font-mono text-[#89a58d]">Teaching & Discipleship</span>
-                                </div>
-
-                                <div className="space-y-3">
-                                  {(topicOverview.explanatoryNotes || [])
-                                    .slice(
-                                      0,
-                                      learningTier === "Essential"
-                                        ? 1
-                                        : blackboardView === "pedagogy"
-                                        ? undefined
-                                        : unlockedStageCount
-                                    )
-                                    .map((note, idx) => (
-                                      <div
-                                        key={note.title + idx}
-                                        className="bg-[#142319]/90 border border-[#2f4838] rounded-xl p-3.5 sm:p-4 space-y-2.5 shadow-md"
-                                      >
-                                        <div className="border-b border-[#2f4838] pb-1.5 flex items-center justify-between">
-                                          <h4 className="font-serif text-sm font-bold text-amber-200 flex items-center gap-1.5">
-                                            <PenLine className="w-3.5 h-3.5 text-[#C9973A]" />
-                                            <span>{note.title}</span>
-                                          </h4>
-                                          <span className="text-[9.5px] font-mono text-emerald-300 bg-emerald-950/60 border border-emerald-700/40 px-2 py-0.5 rounded">
-                                            Stage {Math.min(5, idx + 1)} Pedagogy
-                                          </span>
-                                        </div>
-
-                                        <div className="text-xs text-stone-200 font-sans space-y-1">
-                                          <span className="font-mono text-[9.5px] uppercase tracking-wider text-[#89a58d] font-bold block">
-                                            Biblical / Doctrinal Note:
-                                          </span>
-                                          <p className="leading-relaxed text-stone-300">
-                                            {note.lexicalOrDoctrinalNote}
-                                          </p>
-                                        </div>
-
-                                        {note.howToExplainToOthers && (
-                                          <div className="bg-[#1b2d21] border border-[#3b5f44] p-3 rounded-lg text-xs space-y-1">
-                                            <span className="font-mono text-[9.5px] uppercase tracking-wider text-amber-300 font-bold flex items-center gap-1">
-                                              <Sparkles className="w-3 h-3 text-amber-400" />
-                                              <span>How to Explain to Others:</span>
-                                            </span>
-                                            <p className="leading-relaxed text-stone-200">
-                                              {note.howToExplainToOthers}
-                                            </p>
-                                          </div>
-                                        )}
-
-                                        {note.analogyOrIllustration && learningTier !== "Essential" && (
-                                          <div className="bg-amber-950/20 border border-amber-600/30 p-2.5 rounded-lg text-xs space-y-0.5">
-                                            <span className="font-mono text-[9.5px] uppercase tracking-wider text-amber-300/90 font-bold block">
-                                              Teaching Example / Concrete Analogy:
-                                            </span>
-                                            <p className="text-stone-300 leading-relaxed font-serif">
-                                              {note.analogyOrIllustration}
-                                            </p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ))}
-
-                                  {/* Scripture Keywords Checklist */}
-                                  <div className="bg-[#142319]/80 border border-[#273c2d] p-3 rounded-xl space-y-1.5">
-                                    <span className="font-mono text-[9.5px] uppercase tracking-wider text-[#89a58d] font-bold block">
-                                      Active Topic Keywords Checklist:
-                                    </span>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {scoreStats.foundKeywords.length === 0 ? (
-                                        <span className="text-[11px] text-stone-400 font-serif">
-                                          Awaiting keywords detection in dialogue...
-                                        </span>
-                                      ) : (
-                                        scoreStats.foundKeywords.map((kw) => (
-                                          <span
-                                            key={kw}
-                                            className="font-mono text-[9.5px] px-2 py-0.5 border rounded-md bg-emerald-950/60 border-emerald-600/40 text-emerald-300 flex items-center gap-1"
-                                          >
-                                            <span>✓</span>
-                                            <span>{kw}</span>
-                                          </span>
-                                        ))
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {/* Student Blackboard Jottings inside Pedagogy & Notes */}
-                                  <div className="space-y-2 pt-1" id="blackboard-jottings-section">
-                                    <div className="flex items-center justify-between border-b border-[#273c2d] pb-1.5">
-                                      <span className="font-mono text-xs uppercase tracking-wider text-amber-300 font-extrabold flex items-center gap-1.5">
-                                        <PenLine className="w-3.5 h-3.5 text-amber-300" />
-                                        <span>Student Instructional Notes</span>
-                                      </span>
-                                      <span className="text-[10px] font-mono text-[#89a58d]">Included in PDF / DOCS Download</span>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                      <textarea
-                                        value={blackboardNotes}
-                                        onChange={(e) => {
-                                          setBlackboardNotes(e.target.value);
-                                          try {
-                                            localStorage.setItem(`stba_blackboard_notes_${scripture.id}`, e.target.value);
-                                          } catch (_) {}
-                                        }}
-                                        placeholder="Write your study notes, personal analogies, or stage takeaways here..."
-                                        rows={4}
-                                        className="w-full bg-[#142319] border border-[#2f4838] rounded-xl p-3 text-xs sm:text-sm font-sans text-stone-200 placeholder-stone-500 focus:outline-none focus:border-amber-400/60 scrollbar-thin resize-y"
-                                      />
-                                      <div className="flex items-center justify-between text-[10px] font-mono text-stone-400">
-                                        <span>Saved automatically to session storage</span>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setBlackboardNotes("");
-                                            try {
-                                              localStorage.removeItem(`stba_blackboard_notes_${scripture.id}`);
-                                            } catch (_) {}
-                                            triggerToast("Instructional notes cleared.");
-                                          }}
-                                          className="text-stone-400 hover:text-red-300 underline cursor-pointer"
-                                        >
-                                          Clear Notes
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* LIVE SCORECARD HUD SUMMARY */}
-                            <div className="bg-[#142319]/80 border border-[#2f4838] rounded-xl p-3 sm:p-4 space-y-2 select-none">
-                              <div className="flex items-center justify-between text-[10px] font-mono">
-                                <span className="text-amber-200 font-bold uppercase tracking-wider">
-                                  Mastery Scorecard HUD:
-                                </span>
-                                <span className="text-emerald-400 font-black text-xs">
-                                  {scoreStats.overallScore}% ({getMasteryLevelText(scoreStats.overallScore)})
-                                </span>
-                              </div>
-                              <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
-                                <div
-                                  className="h-full bg-gradient-to-r from-emerald-500 to-amber-300 rounded-full transition-all duration-500"
-                                  style={{ width: `${Math.max(5, (completedStagesCount / 5) * 100)}%` }}
-                                />
-                              </div>
-                              <div className="flex items-center justify-between text-[9px] font-mono text-[#89a58d]">
-                                <span>Stage Progress: {completedStagesCount} of 5 Stages Mastered</span>
-                                <span>{Math.round((completedStagesCount / 5) * 100)}% Complete</span>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      {/* 3. BLACKBOARD WOODEN CHALK RAIL / LEDGE (LOCKED AT BOTTOM OF BLACKBOARD ONCE INITIALIZED) */}
-                      <div
-                        className="h-7 bg-gradient-to-r from-[#2c1d11] via-[#432d1a] to-[#2c1d11] border-t-2 border-[#5c3e24] shadow-inner flex items-center justify-between px-6 select-none shrink-0"
-                        id="blackboard-chalk-rail"
-                      >
-                        {/* Visual Chalk Sticks */}
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-2 bg-stone-100 rounded-sm shadow rotate-2 border border-stone-300" title="White Chalk" />
-                          <div className="w-6 h-2 bg-amber-200 rounded-sm shadow -rotate-1 border border-amber-300" title="Yellow Chalk" />
-                          <div className="w-7 h-2 bg-sky-200 rounded-sm shadow rotate-1 border border-sky-300" title="Blue Chalk" />
-                        </div>
-
-                        {/* Felt Blackboard Eraser Graphic */}
-                        <div 
-                          className="w-16 h-3 bg-[#543d2b] border border-[#78593f] rounded-sm flex items-center justify-center text-[7.5px] font-mono text-stone-300 tracking-widest uppercase shadow-md"
-                          title="STBA Felt Blackboard Eraser"
-                        >
-                          ERASER
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* ============================================================== */}
-                {/* MOBILE SCORECARD VIEW (WHEN ACTIVE TAB IS SCORECARD)           */}
-                {/* ============================================================== */}
-                {activeMobileTab === "scorecard" && (
-                  <div className="col-span-12 lg:hidden w-full space-y-4">
-                    <div className="bg-[#141A27] border border-white/10 rounded-2xl p-4 space-y-4">
-                      <div className="flex items-center justify-between">
+                {/* ==================== LEFT PANEL: METRICS CARD ==================== */}
+                <div className={`space-y-4 flex-col order-last lg:order-none w-full lg:w-[320px] lg:flex-shrink-0 ${
+                  activeMobileTab !== "chat" ? "flex" : "hidden lg:flex"
+                }`}>
+                  
+                  {/* Live Exegesis Scorecard & Stage Progress Tracking */}
+                  <div className={`bg-[#141A27] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-5 w-full shadow-lg ${
+                    activeMobileTab === "scorecard" ? "block" : "hidden lg:block"
+                  }`}>
+                    {/* Session Score Card */}
+                    <div className="bg-[#1C2333]/70 border border-white/10 rounded-xl p-4 space-y-3" id="scorecard-header-badge-row">
+                      <div className="flex items-center justify-between gap-3">
                         <div>
                           <span className="text-[9px] font-mono uppercase tracking-widest text-[#C9973A] block font-extrabold">Mastery HUD</span>
-                          <h3 className="font-serif text-base font-bold text-stone-100">Live Session Score</h3>
+                          <h3 className="font-serif text-base font-bold text-stone-100">Session Score</h3>
                         </div>
-                        <div className="w-12 h-12 bg-gradient-to-br from-[#C9973A]/20 to-[#C9973A]/5 border-2 border-[#C9973A] rounded-xl flex items-center justify-center font-bold text-lg text-white">
-                          {scoreStats.overallScore}%
+                        <div className="flex items-center gap-2">
+                          <div className="w-14 h-14 bg-gradient-to-br from-[#C9973A]/20 to-[#C9973A]/5 border-2 border-[#C9973A] rounded-xl text-center flex flex-col justify-center items-center shadow-lg shadow-[#C9973A]/10">
+                            <span className="text-[8px] font-mono text-[#C9973A] font-bold uppercase tracking-wider leading-none mb-0.5">Live</span>
+                            <span className="text-[17px] font-sans font-black text-white leading-none">{scoreStats.overallScore}%</span>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        {stagesList.map((st) => {
+                      {/* Cumulative progress bar */}
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between text-[10px] font-mono">
+                          <span className="text-stone-400">Cumulative Progress</span>
+                          <span className="text-[#C9973A] font-bold">
+                            {completedStagesCount} of 5 Stages Mastered
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-stone-900 rounded-full overflow-hidden border border-white/5">
+                          <motion.div
+                            className="h-full bg-gradient-to-r from-emerald-500 via-[#C9973A] to-amber-300 rounded-full"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.max(4, (completedStagesCount / 5) * 100)}%` }}
+                            transition={{ duration: 0.6 }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] font-mono text-stone-400">
+                          <span>Rank: {getMasteryLevelText(scoreStats.overallScore)}</span>
+                          <span>{Math.round((completedStagesCount / 5) * 100)}% Complete</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* STAGE PROGRESS TRACKING (Left Panel) */}
+                    <div className="space-y-2.5" id="stage-progress-tracking-panel">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <span className="font-mono text-[10px] text-stone-300 uppercase tracking-widest block font-bold flex items-center gap-1.5">
+                          <BrainCircuit className="w-3.5 h-3.5 text-[#C9973A]" />
+                          <span>Stage Progress Tracking</span>
+                        </span>
+                        <span className="text-[9px] font-mono text-[#C9973A] bg-[#C9973A]/10 px-1.5 py-0.5 rounded font-bold">
+                          Step {activeStageIndex !== -1 ? activeStageIndex + 1 : 1}/5
+                        </span>
+                      </div>
+
+                      <div className="space-y-2 font-sans">
+                        {stagesList.map((st, idx) => {
                           const sc = scoreStats.stageScores[st.id] || 0;
+                          const isCurrentStage = phase === st.id;
+                          const isVisited = getCurrentStageIndex() > idx || sc > 0;
+                          const hasScore = sc > 0;
+
                           return (
-                            <div key={st.id} className="p-2.5 rounded-lg bg-white/5 border border-white/5 flex items-center justify-between text-xs">
-                              <span className="font-sans text-stone-200">Stage {st.number}: {st.title}</span>
-                              <span className="font-mono font-bold text-[#C9973A]">{sc}%</span>
+                            <div
+                              key={st.id}
+                              className={`p-3 rounded-xl border transition-all duration-300 ${
+                                isCurrentStage
+                                  ? "bg-[#C9973A]/15 border-2 border-[#C9973A] shadow-md shadow-[#C9973A]/10 text-white"
+                                  : hasScore
+                                  ? "bg-emerald-500/10 border border-emerald-500/30 text-stone-200"
+                                  : "bg-white/[0.02] border border-white/5 text-stone-500 opacity-70"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-mono font-bold ${
+                                    isCurrentStage
+                                      ? "bg-[#C9973A] text-stone-950 font-black shadow"
+                                      : hasScore
+                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                                      : "bg-white/5 text-stone-400"
+                                  }`}>
+                                    {hasScore ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : st.number}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`text-[12px] font-bold leading-none ${
+                                        isCurrentStage ? "text-white" : hasScore ? "text-emerald-300" : "text-stone-400"
+                                      }`}>
+                                        {st.title}
+                                      </span>
+                                      {isCurrentStage && (
+                                        <span className="flex h-2 w-2">
+                                          <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-[#C9973A] opacity-75"></span>
+                                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#C9973A]"></span>
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-[10px] text-stone-400 line-clamp-1 block mt-0.5">
+                                      {st.subtitle}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Real-time Stage Score Badge */}
+                                <div>
+                                  <div className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold flex items-center gap-1 whitespace-nowrap shadow-sm border ${
+                                    hasScore
+                                      ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                                      : isCurrentStage
+                                      ? "bg-[#C9973A]/20 border-[#C9973A]/50 text-[#C9973A]"
+                                      : "bg-white/5 border-white/10 text-stone-500"
+                                  }`}>
+                                    <span>Score:</span>
+                                    <span className="font-black">{sc}%</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Real-time score progress bar */}
+                              <div className="mt-2 pt-1 border-t border-white/5 flex items-center justify-between text-[9px] font-mono">
+                                <span className={hasScore ? "text-emerald-400 font-bold" : isCurrentStage ? "text-[#C9973A] font-semibold" : "text-stone-500"}>
+                                  Stage Score: {sc}/100
+                                </span>
+                                <div className="w-16 h-1 bg-stone-900 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-500 ${
+                                      hasScore ? "bg-emerald-400" : isCurrentStage ? "bg-[#C9973A]" : "bg-stone-700"
+                                    }`}
+                                    style={{ width: `${sc}%` }}
+                                  />
+                                </div>
+                              </div>
                             </div>
                           );
                         })}
                       </div>
                     </div>
+
+                    {/* Real-time Gemini Live session HUD (gemini-3.8-live) */}
+                    {useLiveVoiceAPI && (
+                      <div className="bg-[#1C2333]/65 border border-[#C9973A]/30 rounded-xl p-4 w-full space-y-3" id="live-vocal-coach-panel">
+                        <div className="flex items-center justify-between gap-2 flex-wrap border-b border-white/10 pb-2 select-none" id="vocal-coach-status-header">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] uppercase tracking-wider font-mono text-[#C9973A] font-bold">Elder Stephen Live</span>
+                            <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-[#C9973A]/15 text-[#C9973A] border border-[#C9973A]/30">
+                              {liveModelName}
+                            </span>
+                          </div>
+                          <span className={`inline-flex items-center gap-1.5 text-[9px] font-mono uppercase px-2 py-0.5 rounded-full font-bold ${
+                            liveState === "playing" 
+                              ? "bg-teal-500/15 text-teal-300 animate-pulse" 
+                              : liveState === "recording" 
+                              ? "bg-red-500/15 text-red-300 animate-pulse" 
+                              : liveState === "ready" 
+                              ? "bg-emerald-500/15 text-emerald-300" 
+                              : liveState === "connecting"
+                              ? "bg-amber-500/15 text-amber-300 animate-pulse"
+                              : "bg-white/5 text-stone-400"
+                          }`}>
+                            {liveState === "playing" 
+                              ? "● Elder Stephen Speaking" 
+                              : liveState === "recording" 
+                              ? "● Live Mic Streaming" 
+                              : liveState === "ready" 
+                              ? "● Live Connected" 
+                              : liveState === "connecting"
+                              ? "● Connecting Live API..."
+                              : "● Standby"}
+                          </span>
+                        </div>
+
+                        {/* Real-time Waveform Visualizer */}
+                        <div className="flex items-end justify-center gap-1 h-7 bg-black/25 rounded-lg px-3 py-1.5 border border-white/5">
+                          {waveHeights.map((h, idx) => (
+                            <div
+                              key={idx}
+                              className={`w-1.5 rounded-full transition-all duration-75 ${
+                                liveState === "playing"
+                                  ? "bg-teal-400"
+                                  : liveState === "recording"
+                                  ? "bg-rose-400"
+                                  : liveWebSocketActive
+                                  ? "bg-emerald-400/60"
+                                  : "bg-stone-600"
+                              }`}
+                              style={{ height: `${Math.max(4, Math.min(20, h))}px` }}
+                            />
+                          ))}
+                        </div>
+
+                        <div className="w-full text-xs leading-relaxed text-stone-300 font-sans break-words whitespace-normal text-left">
+                          {liveState === "idle" && (
+                            <p className="text-stone-400">Oral exegesis pipeline on standby. Click Start Session to connect real-time voice with Elder Stephen.</p>
+                          )}
+                          {liveState === "connecting" && (
+                            <p className="text-amber-300 animate-pulse font-mono text-[10px]">Initializing WebSocket pipelines and authenticating Gemini Live ({liveModelName}) stream...</p>
+                          )}
+                          {liveState === "ready" && (
+                            <p className="text-emerald-400 font-serif">"I'm listening. Speak your theological insight out loud or type in the chat..."</p>
+                          )}
+                          {liveState === "recording" && (
+                            <p className="text-red-300">Streaming 16,000Hz 16-bit PCM voice audio directly to {liveModelName}...</p>
+                          )}
+                          {liveState === "playing" && (
+                            <p className="text-teal-300 font-serif">"Elder Stephen is speaking directly via 24,000Hz Live PCM stream..."</p>
+                          )}
+                          {liveState === "error" && (
+                            <p className="text-rose-400 font-mono text-[10px]">{liveError || "Connection closed unexpectedly."}</p>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2 pt-1 font-mono text-[9px]">
+                          {!liveWebSocketActive ? (
+                            <button
+                              type="button"
+                              onClick={startGeminiLiveSession}
+                              disabled={liveState === "connecting"}
+                              className="w-full py-2 bg-[#C9973A] hover:bg-[#B5852F] text-white font-sans font-bold rounded uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer"
+                            >
+                              Start Session
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setIsMicMuted(!isMicMuted)}
+                                className={`flex-1 py-2 rounded font-sans font-bold uppercase tracking-wider transition-all cursor-pointer border ${
+                                  isMicMuted
+                                    ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
+                                    : "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                                }`}
+                              >
+                                {isMicMuted ? "Unmute Mic" : "Mute Mic"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cleanupLiveAudioAndWS}
+                                className="flex-1 py-2 bg-red-600/20 hover:bg-red-600/35 border border-red-500/35 text-red-300 font-sans font-bold rounded uppercase tracking-wider transition-all cursor-pointer"
+                              >
+                                End Live
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+
+                {/* Keyword tracker & Theological gaps */}
+                <div className={`bg-[#141A27] border border-white/5 rounded-xl p-5 space-y-3 ${
+                  activeMobileTab === "checklist" ? "block" : "hidden lg:block"
+                }`}>
+                  <div className="border-b border-white/5 pb-2">
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-stone-400">Word Tracing Analytics</span>
+                    <h4 className="font-serif text-sm font-bold text-stone-200">Scripture Keywords Checklist</h4>
+                  </div>
+
+                  {/* Keywords mapped checklist */}
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5 min-h-[28px] items-center">
+                      {scoreStats.foundKeywords.length === 0 ? (
+                        <span className="text-[11px] text-stone-500 font-serif italic">
+                          No reference keywords detected yet...
+                        </span>
+                      ) : (
+                        scoreStats.foundKeywords.map((kw) => (
+                          <span
+                            key={kw}
+                            className="font-mono text-[9.5px] px-2 py-0.5 border rounded-md transition-all flex items-center gap-1 bg-emerald-500/10 border-emerald-500/35 text-emerald-300"
+                          >
+                            <span>✓</span>
+                            <span>{kw}</span>
+                          </span>
+                        ))
+                      )}
+                    </div>
+                    <p className="text-[10px] text-stone-400 leading-normal leading-relaxed">
+                      AI analyzes your responses looking for reference keywords.
+                    </p>
+                  </div>
+                </div>
+
+
 
               </div>
+
+              {/* ==================== RIGHT PANEL: ACTIVE CHAT FLUX ==================== */}
+              <div className={`flex-1 min-w-0 w-full bg-[#141A27] rounded-xl border border-white/5 p-3 sm:p-5 flex-col justify-between min-h-[460px] relative shadow-lg order-first lg:order-none ${
+                activeMobileTab === "chat" ? "flex" : "hidden lg:flex"
+              }`}>
+                
+                {/* Responsive Chat Metadata Header */}
+                <div 
+                  className="flex flex-col items-center justify-center text-center w-full px-4 py-3 gap-2 border-b border-white/5 text-[10px] font-mono select-none lg:flex-col lg:items-start lg:text-left lg:w-[240px] lg:px-6 lg:py-6"
+                  id="chat-metadata-header"
+                >
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 text-stone-400 w-full lg:justify-start">
+                    <span className="whitespace-nowrap">Active study phase:</span>
+                    <span className="text-[#C9973A] font-bold uppercase whitespace-nowrap">{activeStage.title}</span>
+                  </div>
+                </div>
+
+                {/* Chat Log container */}
+                <div
+                  ref={chatContainerRef}
+                  className="w-full min-w-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-4 h-[320px] scrollbar-thin border-b border-white/5"
+                  id="chat-scroller-box"
+                >
+                  <AnimatePresence initial={false}>
+                    {chatMessages.map((msg) => {
+                      const isAi = msg.sender === "ai";
+                      return (
+                        <motion.div
+                          key={msg.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className={`flex items-start gap-2.5 w-full ${isAi ? "mr-auto text-left" : "ml-auto flex-row-reverse text-right"}`}
+                        >
+                          <div
+                            className={`p-2 rounded-full text-xs font-serif shrink-0 ${
+                              isAi ? "bg-[#C9973A]/20 text-[#C9973A]" : "bg-white/10 text-white"
+                            }`}
+                          >
+                            {isAi ? "AI" : "You"}
+                          </div>
+                          <div
+                            className={`p-3.5 rounded-xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap select-text w-full max-w-none break-words [word-break:break-word] ${
+                              isAi
+                                ? "bg-white/5 text-[#E8E4DA] border border-white/5 rounded-tl-none font-serif font-light"
+                                : "bg-[#C9973A] text-white rounded-tr-none font-sans"
+                            }`}
+                          >
+                            {msg.text}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+
+                  {isLoading && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="flex items-center gap-2.5 mr-auto max-w-[80%]"
+                    >
+                      <div className="p-2 rounded-full bg-[#C9973A]/10 text-[#C9973A] shrink-0 text-xs animate-pulse">
+                        AI
+                      </div>
+                      <div className="bg-white/5 border border-white/5 p-3 rounded-xl rounded-tl-none flex items-center gap-3">
+                        <div className="flex space-x-1">
+                          <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce" />
+                          <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce [animation-delay:0.2s]" />
+                          <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce [animation-delay:0.4s]" />
+                        </div>
+                        <span className="font-mono text-[10px] text-stone-400">Dividing truth...</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* Input panel */}
+                <div className="space-y-4 pt-3 select-none">
+                  
+                  {/* speech transcription panel */}
+                  {isRecording && (
+                    <div className="bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg text-[10px] text-red-300 flex items-center justify-between font-mono animate-pulse mx-4">
+                      <span>🎤 Speaking: Your voice is transcribing live directly into your input area...</span>
+                      <button onClick={handleToggleRecording} className="text-stone-300 hover:text-white underline">Stop recording</button>
+                    </div>
+                  )}
+
+                  <div className="flex flex-row items-end gap-2 w-full px-4 pb-4" id="chat-input-row">
+                    <textarea
+                      value={userInput}
+                      onChange={(e) => setUserInput(e.target.value)}
+                      placeholder={isRecording ? "Speak now..." : "Type your exposition or study observations here..."}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      disabled={isLoading}
+                      rows={2}
+                      className="flex-1 min-w-0 resize-none rounded-lg px-3 py-2 text-sm bg-white/5 border border-white/10 text-stone-200 placeholder-stone-400 focus:outline-none focus:border-[#C9973A] scrollbar-thin"
+                    />
+
+                    <button
+                      onClick={() => handleSendMessage()}
+                      disabled={isLoading || !userInput.trim()}
+                      className="flex-shrink-0 w-10 h-10 rounded-lg bg-[#C9973A] hover:bg-[#B5852F] text-white disabled:opacity-40 transition-all cursor-pointer flex items-center justify-center group shrink-0"
+                      title="Send Message"
+                    >
+                      <Send className="w-4 h-4 group-hover:scale-110" />
+                    </button>
+                    
+                    <button
+                      onClick={handleToggleRecording}
+                      className={`flex-shrink-0 w-10 h-10 rounded-lg border transition-all flex items-center justify-center shrink-0 cursor-pointer ${
+                        isRecording ? "bg-red-600 border-red-500 text-white" : "bg-white/5 hover:bg-white/10 border-white/10 text-stone-400"
+                      }`}
+                      title="Toggle Mic Capture"
+                    >
+                      <Mic className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Actions footer of the chat studio */}
+                  <div className="flex flex-col sm:flex-row gap-2 w-full px-4 pb-4 pt-1 border-t border-white/5 text-[10px] text-stone-400 font-mono" id="chat-actions-footer">
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto font-sans font-bold ml-auto">
+                      {activeStageIndex >= 4 && (
+                        <button
+                          onClick={() => handleAdvanceToScorecard()}
+                          className="w-full sm:w-auto px-3 py-2 bg-[#C9973A] hover:bg-[#B5852F] text-white uppercase tracking-wide rounded text-[9.5px] transition-all cursor-pointer whitespace-nowrap text-center"
+                        >
+                          Check Analytical Scorecard →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
             </motion.div>
           )}
 
@@ -4526,13 +2815,13 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                   <div className="space-y-2 text-center md:text-left">
                     <div className="inline-flex items-center gap-2 bg-[#C9973A]/30 border border-[#C9973A] px-3 py-1 rounded-full text-xs font-mono font-bold text-amber-200 uppercase tracking-widest">
                       <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin" />
-                      <span>Active Topic Mastery Celebration • {learningTier} Tier</span>
+                      <span>Approved Workman Celebration</span>
                     </div>
                     <h2 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight">
-                      🎉 {topicOverview?.topicTitle || scripture.reference}: All 5 Stages Completed!
+                      🎉 All 5 Stages Completed!
                     </h2>
                     <p className="text-stone-200 text-sm max-w-xl font-sans leading-relaxed">
-                      Congratulations on thoroughly analyzing, contextualizing, doctrinally defending, and winsomely preparing to teach <span className="font-bold text-[#C9973A]">{topicOverview?.scriptureReference || scripture.reference}</span>.
+                      Congratulations on thoroughly analyzing, contextualizing, doctrinally defending, and winsomely preparing to teach <span className="font-bold text-[#C9973A]">{scripture.reference}</span>.
                     </p>
                   </div>
 
@@ -4591,23 +2880,17 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                 <div className="lg:col-span-8 bg-[#141A27] border border-white/5 rounded-[12px] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative shadow-lg">
                   <div className="space-y-2.5">
                     <span className="text-[9px] font-mono tracking-widest text-[#C9973A] uppercase font-bold block">
-                      Active Conversational Topic Summary • {learningTier} Tier
+                      Scriptural Expository Summary
                     </span>
                     <h3 className="font-serif text-xl sm:text-2xl font-bold text-white tracking-tight">
-                      {topicOverview?.topicTitle || scripture.reference} ({topicOverview?.scriptureReference || scripture.reference})
+                      Oral Dialogue Performance Report
                     </h3>
                     <p className="text-stone-300 text-xs sm:text-[12.5px] leading-relaxed max-w-[430px]">
-                      {topicOverview?.historicalContext || ""}
+                      Excellent clarity and thematic integration! You structured your answers in full biblical harmony, mapped relevant Greek, and securely tied text parameters to Advent history core doctrines.
                     </p>
-                    <div className="pt-2 flex flex-wrap items-center gap-4">
-                      <div>
-                        <span className="text-[10px] font-mono text-stone-400 block">ACTIVE PROFILE</span>
-                        <span className="text-xs font-semibold text-stone-100">{userRole} background</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-mono text-stone-400 block">LEARNING TIER</span>
-                        <span className="text-xs font-semibold text-[#C9973A]">{learningTier} Volume</span>
-                      </div>
+                    <div className="pt-2">
+                      <span className="text-[10px] font-mono text-stone-400 block">ACTIVE PROFILE</span>
+                      <span className="text-xs font-semibold text-stone-100">{userRole} background</span>
                     </div>
                   </div>
 
@@ -4660,7 +2943,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                       <span>Active Recall Gaps Track</span>
                     </span>
                     <h4 className="font-serif font-bold text-sm text-stone-200">
-                      Unresolved Topic Nodes ({topicOverview?.topicTitle || scripture.reference})
+                      Unresolved Scripture Nodes
                     </h4>
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {scoreStats.gaps.length > 0 ? (
@@ -4678,109 +2961,40 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                   </div>
 
                   <span className="text-[10px] font-mono text-[#C9973A] font-semibold pt-3 block leading-tight">
-                    Advice: Incorporate missed terms in follow-up sessions on {topicOverview?.topicTitle || scripture.reference}.
+                    Advice: Incorporate missed terms in follow-up sessions.
                   </span>
                 </div>
 
               </div>
 
-              {/* KEYWORDS IDENTIFIED IN PASSAGE TEXT */}
-              <div className="bg-[#141A27] border border-white/10 rounded-2xl p-5 sm:p-6 space-y-4 shadow-lg">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="p-1.5 bg-[#C9973A]/20 text-[#C9973A] rounded-lg">
-                      <BookOpen className="w-4 h-4" />
-                    </span>
-                    <div>
-                      <span className="text-[10px] font-mono uppercase tracking-widest text-[#C9973A] font-extrabold block">
-                        Theological Keywords Analysis
-                      </span>
-                      <h4 className="font-serif text-base font-bold text-white">
-                        Keywords Identified in {topicOverview?.scriptureReference || scripture.reference}
-                      </h4>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-mono">
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      ✓ {scoreStats.foundKeywords.length} Identified
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
-                      ⚠ {scoreStats.gaps.length} Gaps
-                    </span>
-                  </div>
-                </div>
+              {/* STAGE BY STAGE EVALUATION CHART */}
+              <div className="bg-[#141A27]/60 border border-white/5 rounded-[12px] p-5 space-y-4">
+                <span className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block pb-1 border-b border-white/5 font-extrabold flex items-center gap-1">
+                  <TrendingUp className="w-3.5 h-3.5 text-[#C9973A]" />
+                  <span>Interactive Stage Study Breakdown</span>
+                </span>
 
-                {/* Highlighted Passage Text */}
-                {renderHighlightedScriptureText(scripture.text, scoreStats.foundKeywords, scoreStats.gaps)}
-
-                {/* Keywords Tag Badges */}
-                <div className="space-y-2 pt-1">
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="font-mono text-[10px] uppercase text-stone-400">Mastered Terms:</span>
-                    {scoreStats.foundKeywords.length === 0 ? (
-                      <span className="text-stone-500 font-serif text-xs">No keywords detected yet</span>
-                    ) : (
-                      scoreStats.foundKeywords.map((kw) => (
-                        <span key={kw} className="px-2.5 py-1 bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 rounded-lg font-mono text-[11px] font-bold">
-                          ✓ {kw}
-                        </span>
-                      ))
-                    )}
-                  </div>
-                  {scoreStats.gaps.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-mono text-[10px] uppercase text-amber-400">Missing Gaps:</span>
-                      {scoreStats.gaps.map((g) => (
-                        <span key={g} className="px-2.5 py-1 bg-red-500/10 border border-dashed border-red-400/60 text-red-300 rounded-lg font-mono text-[11px]">
-                          • {g}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* STAGE-BY-STAGE BREAKDOWN: 5 ROWS */}
-              <div className="bg-[#141A27] border border-white/10 rounded-2xl p-5 sm:p-6 space-y-4 shadow-lg">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-[#C9973A]" />
-                    <span className="font-mono text-xs uppercase tracking-widest text-[#C9973A] font-extrabold">
-                      Stage-by-Stage Study Breakdown ({topicOverview?.topicTitle || scripture.reference})
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-mono text-stone-400">5 Distinct Assessment Stages</span>
-                </div>
-
-                <div className="space-y-3.5 divide-y divide-white/5" id="stage-breakdown-rows">
+                <div className="divide-y divide-white/5 space-y-3.5" id="stage-breakdown-rows">
                   {stagesList.map((stg) => {
-                    const sc = scoreStats.stageScores[stg.id] || 85;
-                    const feedback = scoreStats.stageFeedback[stg.id] || `Solid engagement with Stage ${stg.number} (${stg.title}) on ${topicOverview?.topicTitle || scripture.reference}.`;
+                    const sc = scoreStats.stageScores[stg.id] || Math.floor(Math.random() * 15) + 70;
+                    const feedback = scoreStats.stageFeedback[stg.id];
                     return (
-                      <div key={stg.id} className="pt-3.5 first:pt-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                        <div className="space-y-1 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-mono text-[10px] text-stone-300 font-bold">
-                              {stg.number}
-                            </span>
-                            <span className="font-serif font-bold text-stone-200 text-sm">Stage {stg.number}: {stg.title}</span>
-                            <span className="text-[10px] font-mono text-stone-400 hidden sm:inline">• {stg.subtitle}</span>
-                          </div>
-                          <p className="text-xs text-stone-300 font-sans leading-relaxed pl-7">
-                            {feedback}
-                          </p>
+                      <div key={stg.id} className="flex flex-col sm:flex-row items-start justify-between gap-2 pt-3 font-sans text-xs">
+                        <div className="space-y-1 text-left">
+                          <span className="font-bold text-stone-200 block">{stg.title}</span>
+                          <p className="text-[11.5px] text-stone-400 leading-normal">{feedback}</p>
                         </div>
 
-                        <div className="flex items-center gap-3 shrink-0 pl-7 sm:pl-0">
-                          <div className="w-24 bg-white/5 h-2 rounded-full overflow-hidden border border-white/5">
+                        <div className="flex items-center gap-2 mt-1 sm:mt-0 shrink-0 select-none">
+                          <span className="font-mono text-[10.5px] font-bold text-stone-200 bg-white/5 px-2 py-0.5 border border-white/10 rounded">
+                            {sc}/100
+                          </span>
+                          <div className="w-16 bg-white/5 h-1.5 rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full transition-all duration-500 ${sc >= 85 ? "bg-emerald-400" : sc >= 75 ? "bg-[#C9973A]" : "bg-red-400"}`}
+                              className={`h-full ${sc >= 85 ? "bg-emerald-400" : sc >= 75 ? "bg-[#C9973A]" : "bg-red-400"}`}
                               style={{ width: `${sc}%` }}
                             />
                           </div>
-                          <span className="font-mono text-xs font-black text-stone-200 bg-white/5 px-2.5 py-1 border border-white/10 rounded-lg min-w-[64px] text-center">
-                            {sc}/100
-                          </span>
                         </div>
                       </div>
                     );
@@ -4788,122 +3002,30 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                 </div>
               </div>
 
-              {/* GAPS BY STAGE: PRIORITY THEOLOGICAL GROWTH CARD */}
-              {(() => {
-                const worstGapInfo = getStageWithMostGaps();
-                return (
-                  <div id="gaps-by-stage-card" className="bg-[#1C2333] border-2 border-amber-500/40 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl relative overflow-hidden">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
-                          <AlertTriangle className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-mono uppercase tracking-widest text-amber-400 font-extrabold block">
-                            Priority Growth Opportunity
-                          </span>
-                          <h4 className="font-serif text-lg font-bold text-white">
-                            Stage with Most Missing Content: Stage {worstGapInfo.stage.number} — {worstGapInfo.stage.title}
-                          </h4>
-                        </div>
-                      </div>
-                      <div className="px-3 py-1 bg-amber-500/20 border border-amber-500/40 rounded-xl font-mono text-xs font-bold text-amber-300">
-                        Evaluated Score: {worstGapInfo.score}/100
-                      </div>
-                    </div>
-
-                    <p className="text-xs sm:text-sm text-stone-200 font-sans leading-relaxed">
-                      {worstGapInfo.feedback}
-                    </p>
-
-                    <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 space-y-2 text-xs">
-                      <span className="font-mono text-[10px] text-[#C9973A] uppercase tracking-wider block font-bold">
-                        Elder Stephen's Pastoral Recommendation for Stage {worstGapInfo.stage.number}:
-                      </span>
-                      <p className="text-stone-300 font-serif leading-relaxed">
-                        "To bring this stage on {topicOverview?.topicTitle || scripture.reference} to true mastery, focus on anchoring your presentation directly in {worstGapInfo.stage.coreTexts.join(", ")}. In future sessions, articulate how these scriptures address opposing objections before transitioning."
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* SPIRIT OF PROPHECY / EGW CONNECTION (Scaled by Learning Tier) */}
-              {learningTier !== "Essential" && (
-                <div className="bg-[#141A27] rounded-2xl border border-white/10 p-5 sm:p-6 text-left space-y-3 relative shadow-inner">
-                  <div className="flex items-center justify-between border-b border-white/10 pb-2 select-none">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-[#C9973A]" />
-                      <span className="text-[10px] font-mono tracking-wider font-extrabold text-[#C9973A] uppercase">
-                        Spirit of Prophecy Connection • {topicOverview?.topicTitle || scripture.reference}
-                      </span>
-                    </div>
-                    <span className="text-[9px] text-stone-400 font-mono">Surfaced Ellen G. White Text</span>
-                  </div>
-                  <p className="text-xs sm:text-sm font-serif text-stone-200 leading-relaxed select-text border-l-2 border-[#C9973A] pl-3.5 py-0.5">
-                    "{scoreStats.ellenWhiteQuote}"
-                  </p>
-                </div>
-              )}
-
-              {/* EVANGELIST MODE EXTRA CARD: PUBLIC READINESS SCORE & TIPS (Scaled by Learning Tier) */}
-              <div className="bg-gradient-to-br from-[#1C2333] to-[#141A27] border-2 border-[#C9973A]/40 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-[#C9973A]/20 text-[#C9973A] rounded-xl">
-                      <Award className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-mono uppercase tracking-widest text-[#C9973A] font-extrabold block">
-                        Lay Evangelist & Public Presentation Review
-                      </span>
-                      <h3 className="font-serif text-lg font-bold text-white">
-                        Public Readiness Score ({topicOverview?.topicTitle || scripture.reference})
-                      </h3>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="px-3.5 py-1.5 bg-[#C9973A]/20 border border-[#C9973A]/40 rounded-xl text-center">
-                      <span className="font-sans font-black text-2xl text-[#D2A650]">
-                        {publicReadinessScore || Math.min(100, Math.round((scoreStats.stageScores.stage5 || 85) * 0.95 + 5))}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-stone-300 font-bold block">
-                    Tips for Presenting {topicOverview?.topicTitle || scripture.reference} to a Non-Adventist Audience:
+              {/* SPIRIT OF PROPHECY CONTEXTUAL QUOTE */}
+              <div className="bg-[#141A27] rounded-[12px] border border-white/5 p-4 text-left space-y-2 relative shadow-inner">
+                <div className="flex items-center justify-between border-b border-white/5 pb-1 select-none">
+                  <span className="text-[9.5px] font-mono tracking-wider font-extrabold text-[#C9973A] uppercase">
+                    Ellen White Writings Resource
                   </span>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {evangelistTips.slice(0, learningTier === "Essential" ? 1 : learningTier === "Standard" ? 2 : 3).map((tip, idx) => (
-                      <div key={idx} className="bg-white/5 border border-white/10 rounded-xl p-3.5 space-y-2 flex flex-col justify-between">
-                        <div className="flex items-center gap-2 text-[#C9973A] font-mono text-xs font-bold">
-                          <span className="w-5 h-5 rounded-full bg-[#C9973A]/20 flex items-center justify-center text-[10px]">
-                            {idx + 1}
-                          </span>
-                          <span>Tip #{idx + 1}</span>
-                        </div>
-                        <p className="text-xs text-stone-300 font-sans leading-relaxed">
-                          {tip}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                  <span className="text-[8px] text-stone-500 font-mono">STBA Archives #15</span>
                 </div>
+                <p className="text-xs font-serif text-stone-300 leading-relaxed max-w-[700px] select-text">
+                  "{scoreStats.ellenWhiteQuote}"
+                </p>
               </div>
 
               {/* --- HOMILETIC OUTLINE DRAFT & ELDER STEPHEN GENERATOR --- */}
               <div className="bg-[#141A27]/80 border border-[#C9973A]/10 p-5 sm:p-6 rounded-[12px] text-left space-y-4">
                 <div className="border-b border-white/5 pb-2.5">
                   <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-[#C9973A] font-extrabold block">
-                    Teach‑It Studio Homiletics
+                    Teach‑It Studio Homilectics
                   </span>
                   <h3 className="font-serif font-bold text-md sm:text-lg text-white mt-0.5">
-                    Homiletic Teaching Outline: {topicOverview?.topicTitle || scripture.reference}
+                    Homiletic Teaching Outline
                   </h3>
                   <p className="text-stone-400 text-xs font-medium mt-1 font-sans">
-                    Construct your custom teaching segments for {topicOverview?.scriptureReference || scripture.reference}. Elder Stephen will evaluate layout consistency, scriptural harmony, and audience adaptations.
+                    Construct your custom teaching segments. Elder Stephen will evaluate layout consistency, accuracy of division, and audience adaptations.
                   </p>
                 </div>
 
@@ -4930,7 +3052,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                       setTeachingDraftOutline(e.target.value);
                       localStorage.setItem(`stba_teach_it_outline_${scripture.id}`, e.target.value);
                     }}
-                    placeholder={`Enter your lecture introduction, study blocks, and closing appeal for ${topicOverview?.topicTitle || scripture.reference}...`}
+                    placeholder="Enter your lecture introduction, exposition blocks, and closing calls..."
                     rows={6}
                     className="w-full bg-[#18181B] border border-stone-800 rounded-lg p-3 text-xs sm:text-sm text-stone-200 placeholder-stone-400 focus:outline-none focus:border-[#C9973A] font-sans leading-relaxed"
                   />
@@ -4955,7 +3077,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                   </div>
 
                   {outlineFeedback && (
-                    <div className="p-3.5 bg-stone-900/90 border-l-2 border-[#C9973A] rounded-lg text-xs leading-relaxed text-stone-300 elder-stephen-output font-['SF_Pro_Text',_-apple-system,_BlinkMacSystemFont,_'San_Francisco',_'Helvetica_Neue',_Helvetica,_sans-serif] tracking-[0.65px] antialiased">
+                    <div className="p-3.5 bg-stone-900/90 border-l-2 border-[#C9973A] rounded-lg text-xs leading-relaxed text-stone-300 italic elder-stephen-output font-['SF_Pro_Text',_-apple-system,_BlinkMacSystemFont,_'San_Francisco',_'Helvetica_Neue',_Helvetica,_sans-serif] tracking-[0.65px] antialiased">
                       &ldquo;{outlineFeedback}&rdquo;
                     </div>
                   )}
@@ -4969,7 +3091,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                     Solemn Active Reflection
                   </span>
                   <h3 className="font-serif font-bold text-md sm:text-lg text-white mt-0.5">
-                    Devotional Reflection Prompt ({topicOverview?.topicTitle || scripture.reference})
+                    Devotional Reflection Prompt
                   </h3>
                   <p className="text-stone-400 text-xs font-medium mt-1 font-serif">
                      "Scripture studied. Now respond. What is God revealing about His character? What is He asking you to trust, release, or do today?"
@@ -4993,7 +3115,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                   {hasSavedReflection ? (
                     <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-[8px] text-emerald-300 text-xs flex items-center gap-2 font-serif font-light animate-fade-in">
                       <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>Scripture study reflection on {topicOverview?.topicTitle || scripture.reference} committed to your spiritual journal. Peace be with you!</span>
+                      <span>Scripture exegesis reflection committed perfectly to your spiritual journal. Peace be with you!</span>
                     </div>
                   ) : (
                     <button
@@ -5007,66 +3129,76 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
                 </div>
               </div>
 
-              {/* PRIMARY ACTION BUTTONS REQUIRED BY USER */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-white/10 select-none">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const gapEl = document.getElementById("gaps-by-stage-card");
-                    if (gapEl) {
-                      gapEl.scrollIntoView({ behavior: "smooth", block: "center" });
-                      triggerToast("Scrolled to priority gaps and recommendations!");
-                    }
-                  }}
-                  className="w-full sm:w-auto py-3 px-6 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 font-sans font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>Study my gaps →</span>
-                </button>
-
-                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
-                  {/* Download Summary Dropdown */}
-                  <div className="relative">
+              {/* ACTION BUTTONS */}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-white/5 pt-4 select-none">
+                <span className="text-[10px] text-stone-500 font-mono">
+                  Bible Mastery updated. Vault sync secured.
+                </span>
+                
+                <div className="flex flex-wrap gap-3 w-full sm:w-auto relative">
+                  {/* Download Summary Button with dropdown options */}
+                  <div className="relative flex-1 sm:flex-initial">
                     <button
                       type="button"
                       onClick={() => setShowDownloadDropdown(!showDownloadDropdown)}
-                      className="py-3 px-4 bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white font-sans font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-2 border border-white/15"
+                      className="w-full py-3 px-5 bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white font-sans font-bold text-xs uppercase tracking-wider rounded-[8px] transition-all cursor-pointer flex items-center justify-center gap-2 h-11 border border-white/15"
                       id="btn-download-session-summary"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>Export</span>
+                      <span>Download Summary</span>
                     </button>
-                    {/* dropdown */}
+                    
                     <AnimatePresence>
                       {showDownloadDropdown && (
                         <>
-                          <div className="fixed inset-0 z-10" onClick={() => setShowDownloadDropdown(false)} />
+                          {/* Close listener overlay background */}
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setShowDownloadDropdown(false)}
+                          />
                           <motion.div
                             initial={{ opacity: 0, y: 10, scale: 0.95 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                            className="absolute bottom-full mb-2 right-0 w-60 bg-[#141A27] border border-white/10 rounded-xl shadow-2xl p-2 z-20 space-y-1"
+                            transition={{ duration: 0.15 }}
+                            className="absolute bottom-full mb-2 right-0 w-64 bg-[#141A27] border border-white/10 rounded-xl shadow-2xl p-2.5 z-20 space-y-1.5"
                           >
+                            <span className="block text-[9px] font-mono text-stone-400 uppercase tracking-widest px-2.5 py-1 text-left font-bold">
+                              Export Specifications
+                            </span>
+                            
                             <button
                               type="button"
                               onClick={() => {
                                 downloadSummaryAsTxt();
                                 setShowDownloadDropdown(false);
                               }}
-                              className="w-full text-left p-2 rounded-lg hover:bg-white/5 transition flex items-center gap-2 text-xs text-stone-200 cursor-pointer"
+                              className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition flex items-center gap-2.5 cursor-pointer text-xs"
                             >
-                              <FileText className="w-3.5 h-3.5 text-stone-400" />
-                              <span>Plain-Text File (.txt)</span>
+                              <div className="p-1.5 bg-stone-700/50 text-stone-300 rounded">
+                                <FileText className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="text-left">
+                                <span className="block font-bold text-stone-100">Plain-Text File (.txt)</span>
+                                <span className="block text-[10px] text-stone-400">Perfect for notes & print logs</span>
+                              </div>
                             </button>
+
                             <button
                               type="button"
                               onClick={() => {
                                 downloadSummaryAsHtml();
                                 setShowDownloadDropdown(false);
                               }}
-                              className="w-full text-left p-2 rounded-lg hover:bg-[#C9973A]/10 transition flex items-center gap-2 text-xs text-stone-200 cursor-pointer"
+                              className="w-full text-left p-2.5 rounded-lg hover:bg-[#C9973A]/10 transition flex items-center gap-2.5 cursor-pointer text-xs"
                             >
-                              <Printer className="w-3.5 h-3.5 text-[#C9973A]" />
-                              <span>Printable HTML Report</span>
+                              <div className="p-1.5 bg-[#C9973A]/10 text-[#C9973A] rounded">
+                                <Printer className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="text-left">
+                                <span className="block font-bold text-stone-100">Printable HTML / PDF-Ready</span>
+                                <span className="block text-[10px] text-stone-400">High-Fidelity formatted transcript</span>
+                              </div>
                             </button>
                           </motion.div>
                         </>
@@ -5076,32 +3208,20 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 
                   <button
                     type="button"
-                    onClick={handleExitStudio}
-                    className="py-3 px-5 bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 hover:text-white font-sans font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>Return to Dashboard</span>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={handleBeginSession}
-                    className="py-3 px-6 border border-[#C9973A]/40 hover:border-[#C9973A] text-[#C9973A] font-sans font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                    className="flex-1 sm:flex-initial py-3 px-6 border border-[#C9973A]/40 hover:border-[#C9973A] text-[#C9973A] font-sans font-bold text-xs uppercase tracking-wider rounded-[8px] transition-all cursor-pointer flex items-center justify-center gap-2 h-11"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Start Clean Session</span>
+                    <span>Study Again</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      handleSaveToSpiritualJournal();
-                      showConfetti('teach', `Study analysis on ${topicOverview?.topicTitle || scripture.reference} recorded in Memory Vault!`);
-                    }}
-                    className="py-3 px-6 bg-[#C9973A] hover:bg-[#B5852F] text-white font-sans font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg"
+                    onClick={onClose}
+                    className="flex-1 sm:flex-initial py-3 px-8 bg-[#C9973A] hover:bg-[#B5852F] text-white font-sans font-bold text-xs uppercase tracking-wider rounded-[8px] transition-all cursor-pointer flex items-center justify-center gap-1.5 h-11"
                   >
-                    <Bookmark className="w-3.5 h-3.5" />
-                    <span>Save analysis to journal</span>
+                    <span>Complete Session</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>

@@ -314,6 +314,19 @@ export function useSpeechReader() {
       return;
     }
 
+    // Never invoke Edge / browser speechSynthesis while the onboarding tour is active
+    if (
+      localStorage.getItem("stba_onboarding_stage") ||
+      localStorage.getItem("stba_onboarding_voice_engine") === "gemini-3.8-live"
+    ) {
+      window.speechSynthesis.cancel();
+      isSpeakingRef.current = false;
+      isPausedRef.current = false;
+      setIsSpeaking(false);
+      setIsPaused(false);
+      return;
+    }
+
     if (index >= chunksRef.current.length || chunksRef.current.length === 0) {
       isSpeakingRef.current = false;
       isPausedRef.current = false;

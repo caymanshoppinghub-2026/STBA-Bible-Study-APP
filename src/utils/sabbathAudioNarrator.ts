@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { apiFetch } from "../lib/apiFetch";
+
 // Mapping of biblical book abbreviations to their full spoken phonetic names
 const BIBLE_BOOKS: Record<string, string> = {
   // Old Testament
@@ -504,7 +506,7 @@ export async function requestAvaLessonNarration(
   lessonText: string
 ): Promise<{ success: boolean; narrationText: string; audioBase64?: string }> {
   try {
-    const res = await fetch("/api/sabbath/read-lesson-aloud", {
+    const res = await apiFetch("/api/sabbath/read-lesson-aloud", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

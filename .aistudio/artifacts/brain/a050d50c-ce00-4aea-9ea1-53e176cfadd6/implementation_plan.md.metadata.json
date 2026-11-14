@@ -1,6 +1,0 @@
-{
-  "summary": "Revised implementation plan incorporating explicit numerical latency budgets (TTFT < 800ms, pre-flight overhead < 10ms, UI feedback < 50ms), deterministic offline fallback behaviors for the subscription paywall and entitlement state, and strict mobile usability touch target geometry (>= 44px x 44px on mobile, >= 40px x 40px on desktop).",
-  "updatedAt": "2026-11-05T03:05:21.581611194Z",
-  "requestFeedback": true,
-  "userFacing": true
-}

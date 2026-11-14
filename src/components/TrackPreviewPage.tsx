@@ -557,7 +557,7 @@ export const TrackPreviewPage: React.FC = () => {
         const { data, error } = await supabase
           .from("doctrine_tracks")
           .select("*")
-          .eq("id", trackId)
+          .eq("track_id", trackId)
           .maybeSingle();
 
         if (data) {
@@ -1068,7 +1068,7 @@ ${scriptureOutlines}
           console.error("Failed to save note to Supabase from TrackPreviewPage:", err);
         });
 
-        // Save outline, key_references, and Teach-It summary into notebook_pages linked to doctrine_tracks + track_progress
+        // Save study page into notebook_pages using only valid schema columns (id, user_id, title, content, updated_at)
         ensureSupabaseAuth().then(async (sbUser) => {
           if (sbUser) {
             try {
@@ -1077,12 +1077,8 @@ ${scriptureOutlines}
                 .upsert({
                   id: getDeterministicUUID(newNote.id),
                   user_id: sbUser.id,
-                  track_id: trackId,
                   title: newNote.title,
                   content: newNote.content,
-                  outline: dbTrack.outline,
-                  key_references: dbTrack.key_references,
-                  teach_it_summary: teachEvaluation,
                   updated_at: new Date().toISOString()
                 }, { onConflict: "id" });
               if (pageError) {

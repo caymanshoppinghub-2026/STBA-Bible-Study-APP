@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { apiFetch } from "../lib/apiFetch";
 import {
   Mic,
   MicOff,
@@ -28,6 +29,7 @@ import {
 import { Scripture } from "../types";
 import { SCRIPTURE_DATABASE } from "../data/scriptureDb";
 import { getElderStephenVoice } from "./stba/RightPaneTools";
+import { stitchDictatedFragments, recombineFragmentedTranscript, getAdaptivePauseBufferMs } from "../utils/dictationBuffer";
 
 // Set of scriptures for rapid on-the-go review
 const WALK_PRESET_VERSES: Scripture[] = [
@@ -161,21 +163,41 @@ export const WalkAndTalk: React.FC = () => {
     setSpeechError(null);
     setEvaluatedScore(null);
 
-    // Speed up standard Chrome web speech recognition or fallback 
-    const SpeechRecognition = (window as any).isSpeechRecognition || (window as any).webkitSpeechRecognition;
+    // Speed up standard Chrome web speech recognition with pause buffering
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (SpeechRecognition) {
       try {
         const recognition = new SpeechRecognition();
         recognition.lang = "en-US";
-        recognition.interimResults = false;
+        recognition.continuous = true;
+        recognition.interimResults = true;
         recognition.maxAlternatives = 1;
+
+        let accumulatedSpeech = "";
+        let pauseBufferTimer: any = null;
+        let hasDispatchedEvaluation = false;
+
+        const finalizeAndEvaluate = (raw: string) => {
+          if (hasDispatchedEvaluation) return;
+          const unified = recombineFragmentedTranscript(raw);
+          if (!unified) return;
+          hasDispatchedEvaluation = true;
+          try { recognition.stop(); } catch (_) {}
+          setIsListening(false);
+          setVerbalTranscript(unified);
+          evaluateVerbalRecall(unified);
+        };
 
         recognition.onstart = () => {
           setIsListening(true);
         };
 
         recognition.onerror = (e: any) => {
+          if (e.error === "no-speech" && accumulatedSpeech.trim()) {
+            finalizeAndEvaluate(accumulatedSpeech);
+            return;
+          }
           console.warn("Speech engine notice (graceful capture):", e);
           setSpeechError("Speech engine delayed. Launching simulation fallback...");
           setIsListening(false);
@@ -183,13 +205,39 @@ export const WalkAndTalk: React.FC = () => {
         };
 
         recognition.onend = () => {
-          setIsListening(false);
+          if (pauseBufferTimer) clearTimeout(pauseBufferTimer);
+          if (accumulatedSpeech.trim() && !hasDispatchedEvaluation) {
+            finalizeAndEvaluate(accumulatedSpeech);
+          } else {
+            setIsListening(false);
+          }
         };
 
         recognition.onresult = (event: any) => {
-          const resultText = event.results[0][0].transcript;
-          setVerbalTranscript(resultText);
-          evaluateVerbalRecall(resultText);
+          let finalSegment = "";
+          let interimSegment = "";
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalSegment = stitchDictatedFragments(finalSegment, event.results[i][0].transcript);
+            } else {
+              interimSegment += event.results[i][0].transcript;
+            }
+          }
+          if (finalSegment) {
+            accumulatedSpeech = stitchDictatedFragments(accumulatedSpeech, finalSegment);
+          }
+          const currentPreview = interimSegment.trim()
+            ? stitchDictatedFragments(accumulatedSpeech, interimSegment.trim())
+            : accumulatedSpeech;
+
+          if (currentPreview) {
+            setVerbalTranscript(currentPreview);
+            if (pauseBufferTimer) clearTimeout(pauseBufferTimer);
+            const waitMs = getAdaptivePauseBufferMs(currentPreview);
+            pauseBufferTimer = setTimeout(() => {
+              finalizeAndEvaluate(accumulatedSpeech || currentPreview);
+            }, waitMs);
+          }
         };
 
         recognition.start();
@@ -226,7 +274,7 @@ export const WalkAndTalk: React.FC = () => {
     setIsEvaluating(true);
     setAiFeedback("");
     try {
-      const res = await fetch("/api/study/evaluate-verbal", {
+      const res = await apiFetch("/api/study/evaluate-verbal", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

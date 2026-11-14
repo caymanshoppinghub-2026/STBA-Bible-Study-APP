@@ -37,7 +37,7 @@ export const Footer: React.FC = () => {
   };
 
   return (
-    <footer className="bg-[#041336] text-stone-100 font-sans border-t border-stone-900/60 transition-all duration-300 relative overflow-hidden" id="stba-global-footer">
+    <footer className="bg-[#041336] text-stone-100 font-lato border-t border-stone-900/60 transition-all duration-300 relative overflow-hidden" id="stba-global-footer">
       {/* Decorative gradient overlay */}
       <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#C9973A]/40 via-amber-500/20 to-[#C9973A]/40" />
       <div className="absolute bottom-0 right-0 w-80 h-80 bg-[#C9973A]/5 rounded-full blur-3xl pointer-events-none" />
@@ -162,7 +162,7 @@ export const Footer: React.FC = () => {
               <span className="text-[9px] font-mono tracking-wider text-[#C9973A] bg-[#C9973A]/10 px-2 py-0.5 rounded font-extrabold uppercase inline-block">
                 Sacred Confidentiality
               </span>
-              <p className="text-[11px] text-stone-400 leading-relaxed font-sans line-clamp-3">
+              <p className="text-[11px] text-stone-400 leading-relaxed font-lato line-clamp-3">
                 At Study To Be Approved™, all active recall parameters, reflections, and study metrics are encrypted end-to-end.
               </p>
               <button
@@ -181,7 +181,7 @@ export const Footer: React.FC = () => {
               Contact & Socials
             </h4>
             
-            <div className="space-y-4 text-xs font-sans text-stone-400">
+            <div className="space-y-4 text-xs font-lato text-stone-400">
               <div className="space-y-1.5">
                 <span className="text-[10px] font-mono text-stone-500 block uppercase tracking-wider font-bold">
                   Support & Help Center
@@ -286,7 +286,7 @@ export const Footer: React.FC = () => {
               <p className="text-xs font-mono text-stone-400 font-bold leading-normal">
                 Copyright &copy; {new Date().getFullYear()} Study To Be Approved™ (STBA). All rights reserved.
               </p>
-              <p className="text-[10px] text-stone-500 font-sans max-w-xl">
+              <p className="text-[10px] text-stone-500 font-lato max-w-xl">
                 Pioneering cognitive-science-driven theology software. All clinical spacing parameters, calibration matrices, and memory profiles are subject to encryption standardizations.
               </p>
             </div>
@@ -332,8 +332,8 @@ export const Footer: React.FC = () => {
               </div>
  
               {/* Body Content containing the exact requested short paragraph */}
-              <div className="space-y-4 text-xs sm:text-sm text-stone-700 leading-relaxed font-sans pr-1">
-                <p className="font-medium">
+              <div className="space-y-4 text-xs sm:text-sm text-stone-700 leading-relaxed font-lato pr-1">
+                <p className="font-medium font-lato">
                   {modalTitle === "Terms & Conditions" ? (
                     "By accessing or using Study To Be Approved™ (“STBA”), you agree to the following terms, which govern all study tools, cognitive‑recall systems, theological resources, and interactive features provided through our platform. These terms exist to protect your learning journey, uphold doctrinal integrity, and maintain the highest standards of security and stewardship."
                   ) : modalTitle === "About Us" ? (
@@ -359,7 +359,7 @@ export const Footer: React.FC = () => {
                     <h5 className="font-mono text-[10px] font-extrabold tracking-wider uppercase text-[#DFC57B]">
                       {modalTitle === "Terms & Conditions" ? "Purpose of the Platform" : modalTitle === "About Us" ? "Every Feature" : modalTitle === "Our Mission" ? "We Exist" : modalTitle === "Our Vision" ? "Futuristic AI technology" : "ENC-LEVEL ZERO EXPOSURE"}
                     </h5>
-                    <p className="text-[11px] text-stone-300 leading-normal font-sans">
+                    <p className="text-[11px] text-stone-300 leading-normal font-lato">
                       {modalTitle === "Terms & Conditions" ? (
                         "STBA is designed to strengthen biblical literacy, doctrinal clarity, and long‑term scriptural retention through cognitive‑science‑driven study tools. All features—including active recall engines, mastery tracking, and theological research modules—exist to support serious, faithful engagement with Scripture."
                       ) : modalTitle === "About Us" ? (

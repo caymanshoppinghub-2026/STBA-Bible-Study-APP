@@ -546,12 +546,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Soft upward moving description */}
         <motion.p
+          id="hero-subtitle-description"
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 1.1, ease: "easeOut" }}
-          className="mt-6 text-sm text-stone-100 max-w-2xl font-lato font-normal leading-relaxed z-10 drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
+          className="mt-6 text-[18px] text-stone-100 max-w-2xl font-lato font-normal leading-relaxed z-10 drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
         >
-          Move beyond simply reading Scripture; start retaining it for life by hiding it deep within your heart. STBA is a thoughtfully designed, scientifically informed, powerful AI Bible study system that helps believers internalize God’s Word with clarity, confidence, and lasting recall.
+          Move beyond simply reading Scripture; start understanding &amp; retaining it for life by hiding it deep within your heart. STBA is a thoughtfully designed, scientifically informed, powerful AI Bible study system that helps believers internalize God’s Word with clarity, confidence, and lasting recall.
         </motion.p>
 
         {/* Dual Actions CTAs */}

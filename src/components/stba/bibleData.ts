@@ -635,43 +635,46 @@ export function getFullChapterVerses(refOrKey: string, reportTranslations?: any[
     }
   }
 
-  // 3. Smart alias checking
+  // 3. Smart alias checking (only match when the requested chapter matches or no chapter was supplied)
+  const chapterMatch = clean.match(/^(?:[1-3]\s*)?[A-Za-z.]+\s*(\d+)/i);
+  const requestedChapter = chapterMatch ? parseInt(chapterMatch[1], 10) : null;
+
   if (stripped.startsWith("heb") || stripped.startsWith("hebrews")) {
-    if (stripped.includes("9")) return FULL_CHAPTER_BIBLES["Hebrews 9"];
-    return FULL_CHAPTER_BIBLES["Hebrews 8"];
+    if (requestedChapter === 9) return FULL_CHAPTER_BIBLES["Hebrews 9"];
+    if (requestedChapter === 8 || requestedChapter === null) return FULL_CHAPTER_BIBLES["Hebrews 8"];
   }
-  if (stripped.startsWith("rev") || stripped.startsWith("revelation")) {
+  if ((stripped.startsWith("rev") || stripped.startsWith("revelation")) && (requestedChapter === 14 || requestedChapter === null)) {
     return FULL_CHAPTER_BIBLES["Revelation 14"];
   }
-  if (stripped.startsWith("joh") || stripped.startsWith("john") || stripped.startsWith("jn")) {
+  if ((stripped.startsWith("joh") || stripped.startsWith("john") || stripped.startsWith("jn")) && (requestedChapter === 3 || requestedChapter === null)) {
     return FULL_CHAPTER_BIBLES["John 3"];
   }
-  if (stripped.startsWith("psa") || stripped.startsWith("psalm") || stripped.startsWith("ps")) {
+  if ((stripped.startsWith("psa") || stripped.startsWith("psalm") || stripped.startsWith("ps")) && (requestedChapter === 23 || requestedChapter === null)) {
     return FULL_CHAPTER_BIBLES["Psalms 23"];
   }
-  if (stripped.startsWith("rom") || stripped.startsWith("romans")) {
+  if ((stripped.startsWith("rom") || stripped.startsWith("romans")) && (requestedChapter === 12 || requestedChapter === null)) {
     return FULL_CHAPTER_BIBLES["Romans 12"];
   }
-  if (stripped.startsWith("gen") || stripped.startsWith("genesis")) {
+  if ((stripped.startsWith("gen") || stripped.startsWith("genesis")) && (requestedChapter === 1 || requestedChapter === null)) {
     return FULL_CHAPTER_BIBLES["Genesis 1"];
   }
-  if (stripped.startsWith("isa") || stripped.startsWith("isaiah")) {
+  if ((stripped.startsWith("isa") || stripped.startsWith("isaiah")) && (requestedChapter === 53 || requestedChapter === null)) {
     return FULL_CHAPTER_BIBLES["Isaiah 53"];
   }
-  if (stripped.startsWith("dan") || stripped.startsWith("daniel")) {
+  if ((stripped.startsWith("dan") || stripped.startsWith("daniel")) && (requestedChapter === 8 || requestedChapter === null)) {
     return FULL_CHAPTER_BIBLES["Daniel 8"];
   }
-  if (stripped.includes("1cor") || stripped.includes("1corinthians") || stripped.includes("corinthians")) {
+  if ((stripped.includes("1cor") || stripped.includes("1corinthians") || stripped.includes("corinthians")) && (requestedChapter === 13 || requestedChapter === null)) {
     return FULL_CHAPTER_BIBLES["1 Corinthians 13"];
   }
-  if (stripped.startsWith("ex") || stripped.startsWith("exodus")) {
+  if ((stripped.startsWith("ex") || stripped.startsWith("exodus")) && (requestedChapter === 20 || requestedChapter === null)) {
     return FULL_CHAPTER_BIBLES["Exodus 20"];
   }
-  if (stripped.includes("2tim") || stripped.includes("2timothy") || stripped.includes("timothy")) {
+  if ((stripped.includes("2tim") || stripped.includes("2timothy") || stripped.includes("timothy")) && (requestedChapter === 2 || requestedChapter === null)) {
     return FULL_CHAPTER_BIBLES["2 Timothy 2"];
   }
 
-  // Fallback to report or generic verses
+  // Fallback to exact report/preset verses (only if reference actually matches)
   return getParallelVerses(refOrKey, reportTranslations);
 }
 
@@ -706,9 +709,14 @@ export async function fetchChapterVersesAsync(refOrKey: string): Promise<Paralle
   // 3. Fallback to network fetch if not locally cached
   try {
     const encoded = encodeURIComponent(clean);
-    const resp = await fetch(`https://bible-api.com/${encoded}?translation=kjv`);
+    const resp = await fetch(`https://bible-api.com/${encoded}?translation=kjv`, {
+      signal: AbortSignal.timeout(6000)
+    });
     if (resp.ok) {
-      const data = await resp.json();
+      const raw = await resp.text();
+      const trimmed = (raw || "").trim();
+      if (!trimmed || trimmed.charAt(0) === "<") return null;
+      const data = JSON.parse(trimmed);
       if (data && data.verses && Array.isArray(data.verses) && data.verses.length > 0) {
         const loaded: ParallelVerse[] = data.verses.map((v: any) => ({
           verseNumber: v.verse,

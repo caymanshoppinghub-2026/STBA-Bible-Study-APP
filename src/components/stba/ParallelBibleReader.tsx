@@ -11,6 +11,7 @@ import { ViewModeToggle, ViewMode } from "./ViewModeToggle";
 import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
 import { stbaStorage } from "../../lib/storage/indexedDbClient";
 import { TieredHighlightDropdown, getHighlightInlineStyle } from "./HighlightDropdownMenu";
+import { apiFetch } from "../../lib/apiFetch";
 
 interface ParallelBibleReaderProps {
   reference: string;
@@ -91,7 +92,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
   const { user } = useApp();
   const [verses, setVerses] = useState<ParallelVerse[]>([]);
   const [allHighlights, setAllHighlights] = useState<HighlightItem[]>([]);
-  const [selectedVersions, setSelectedVersions] = useState<string[]>(["NKJV"]);
+  const [selectedVersions, setSelectedVersions] = useState<string[]>(["KJV"]);
   const [selectedTextData, setSelectedTextData] = useState<{
     text: string;
     verseRef: string;
@@ -186,13 +187,26 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
     }
   }, [reference, translationsFromReport, customVerses]);
 
+  // Smoothly locate and scroll to the active verse when selected via Study Deeper or Daily Syllabus
+  useEffect(() => {
+    if (activeVerseIndex !== null && verses.length > 0) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`bible-verse-${activeVerseIndex}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [activeVerseIndex, verses]);
+
   const toggleVersion = (version: string) => {
     setSelectedVersions((prev) => {
       if (prev.includes(version)) {
         if (prev.length === 1) return prev;
         return prev.filter((v) => v !== version);
       } else {
-        const logicalOrder = ["NKJV", "KJV", "ESV", "NASB"];
+        const logicalOrder = ["KJV", "NKJV", "ESV", "NASB"];
         const next = [...prev, version];
         return logicalOrder.filter((v) => next.includes(v));
       }
@@ -549,7 +563,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
 
     try {
       const textToSay = `The pronunciation is ${nameObj.name}. ${nameObj.name}.`;
-      const response = await fetch("/api/study/narrate", {
+      const response = await apiFetch("/api/study/narrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: textToSay, voice: pronounceVoice })
@@ -732,16 +746,13 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
           }`}>
             {/* Left Portion: Scriptural Context & Identity Details */}
             <div className="space-y-1.5 flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                <h2 className="font-serif text-[15px] sm:text-[17px] md:text-lg font-black tracking-tight text-[#C9973A] uppercase">
-                  {currentTopic}
-                </h2>
-                {isTopicMode && (
+              {isTopicMode && (
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 font-bold border border-amber-500/30">
                     {verses.length} Scripture Passages
                   </span>
-                )}
-              </div>
+                </div>
+              )}
 
               {isTopicMode && (
                 <p className="text-xs text-stone-500 dark:text-stone-400 font-sans flex items-center gap-1.5">
@@ -758,9 +769,9 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
               )}
             </div>
 
-            {/* Right Portion: Readability Tuning Slider & Parallel Version Switches, and Search inputs below them */}
+            {/* Right Portion: Parallel Version Switches, and Search inputs below them */}
             <div className="flex flex-col gap-3 shrink-0 self-stretch md:self-start items-start md:items-end">
-              {/* Row 1: Readability tuning and Bible Buttons */}
+              {/* Row 1: Collapse Toggle and Bible Buttons */}
               <div className="flex flex-wrap items-center gap-3 self-stretch md:self-auto justify-start md:justify-end">
                 {/* Workspace Tools Collapse Toggle Button (Desktop Only) */}
                 <button
@@ -779,26 +790,9 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                   )}
                 </button>
 
-                {/* Font scaling ergonomics panel */}
-                <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${
-                  theme === "dark" ? "bg-[#1C212B] border-gray-800" : "bg-white border-stone-200"
-                }`}>
-                  <span className="text-[10px] font-mono text-gray-400 font-extrabold">&alpha;A</span>
-                  <input 
-                    type="range" 
-                    min="11" 
-                    max="26" 
-                    value={currentFontSize}
-                    onChange={(e) => setCurrentFontSize(parseInt(e.target.value))}
-                    className="w-16 sm:w-24 h-1 bg-gray-300 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500" 
-                    title="Readability Font Scaling"
-                  />
-                  <span className="text-[10px] font-mono text-gray-400 font-extrabold">{currentFontSize}px</span>
-                </div>
-
                 {/* Translation selects picker check buttons */}
                 <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-                  {["NKJV", "KJV", "ESV", "NASB"].map((version) => {
+                  {["KJV", "NKJV", "ESV", "NASB"].map((version) => {
                     const isSelected = selectedVersions.includes(version);
                     return (
                       <button
@@ -847,7 +841,9 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && handleLoadExegesis) {
-                        handleLoadExegesis(queryRef, queryTopic);
+                        e.preventDefault();
+                        setLastActiveSearchField && setLastActiveSearchField('ref');
+                        handleLoadExegesis(queryRef, "");
                       }
                     }}
                     placeholder="e.g. Genesis or John 1:3"
@@ -884,7 +880,9 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && handleLoadExegesis) {
-                        handleLoadExegesis(queryRef, queryTopic);
+                        e.preventDefault();
+                        setLastActiveSearchField && setLastActiveSearchField('topic');
+                        handleLoadExegesis("", queryTopic);
                       }
                     }}
                     placeholder="Topic (e.g. grace, faith)..."
@@ -957,8 +955,25 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
           ))}
         </div>
         
-        {/* Navigation Arrow Controls */}
-        <div className="flex items-center gap-1.5 px-3 shrink-0">
+        {/* Font Size Adjuster & Navigation Arrow Controls */}
+        <div className="flex items-center gap-2 px-3 py-1 shrink-0">
+          {/* Font scaling ergonomics panel positioned directly next to up/down verse navigation arrows */}
+          <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border text-xs ${
+            theme === "dark" ? "bg-[#1C212B] border-gray-800" : "bg-white border-stone-200"
+          }`}>
+            <span className="text-[10px] font-mono text-gray-400 font-extrabold">&alpha;A</span>
+            <input 
+              type="range" 
+              min="11" 
+              max="26" 
+              value={currentFontSize}
+              onChange={(e) => setCurrentFontSize(parseInt(e.target.value))}
+              className="w-16 sm:w-24 h-1 bg-gray-300 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500" 
+              title="Readability Font Scaling"
+            />
+            <span className="text-[10px] font-mono text-gray-400 font-extrabold">{currentFontSize}px</span>
+          </div>
+
           <button 
             type="button" 
             onClick={handlePrev}

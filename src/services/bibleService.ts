@@ -4,6 +4,7 @@
  */
 
 import { stbaStorage } from "../lib/storage/indexedDbClient.ts";
+import { apiFetch, safeParseResponseJson } from "../lib/apiFetch.ts";
 
 interface TranslationTextMap {
   [version: string]: string;
@@ -321,9 +322,9 @@ export class BibleService {
         const encodedRef = encodeURIComponent(cleanRef);
         const origin = window.location.origin || "";
         const apiUrl = origin ? `${origin}/api/bible?ref=${encodedRef}&version=${cleanVer}` : `/api/bible?ref=${encodedRef}&version=${cleanVer}`;
-        const localResponse = await fetch(apiUrl);
+        const localResponse = await apiFetch(apiUrl);
         if (localResponse.ok) {
-          const localData = await localResponse.json();
+          const localData = await safeParseResponseJson<any>(localResponse);
           if (localData && (localData.text || (Array.isArray(localData.verses) && localData.verses.length > 0))) {
             const rawText = localData.text || "";
             const verses = Array.isArray(localData.verses) && localData.verses.length > 0
@@ -346,9 +347,11 @@ export class BibleService {
     try {
       const apiTrans = cleanVer === "KJV" ? "kjv" : "web";
       const encodedApiRef = encodeURIComponent(apiRef || cleanRef);
-      const response = await fetch(`https://bible-api.com/${encodedApiRef}?translation=${apiTrans}`);
+      const response = await fetch(`https://bible-api.com/${encodedApiRef}?translation=${apiTrans}`, {
+        signal: AbortSignal.timeout(6000)
+      });
       if (response.ok) {
-        const data = await response.json();
+        const data = await safeParseResponseJson<any>(response);
         if (data && (data.text || (Array.isArray(data.verses) && data.verses.length > 0))) {
           const cleanedText = (data.text || "").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
           let verses: VerseItem[] = [];
@@ -391,9 +394,11 @@ export class BibleService {
             partRef = `${prefix}${partRef}`;
           }
           const apiTrans = cleanVer === "KJV" ? "kjv" : "web";
-          const subRes = await fetch(`https://bible-api.com/${encodeURIComponent(partRef)}?translation=${apiTrans}`);
+          const subRes = await fetch(`https://bible-api.com/${encodeURIComponent(partRef)}?translation=${apiTrans}`, {
+            signal: AbortSignal.timeout(6000)
+          });
           if (subRes.ok) {
-            const subData = await subRes.json();
+            const subData = await safeParseResponseJson<any>(subRes);
             if (Array.isArray(subData.verses) && subData.verses.length > 0) {
               for (const v of subData.verses) {
                 allVerses.push({

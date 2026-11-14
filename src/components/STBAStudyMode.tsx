@@ -17,17 +17,20 @@ import {
 } from "./stba/RightPaneTools";
 import { useApp } from "../context/AppContext";
 import { useElderStephen } from "../context/ElderStephenContext";
+import { apiFetch, apiFetchJson, safeParseResponseJson } from "../lib/apiFetch";
 import { ElderStephenMemoryEngine } from "../lib/elderStephenEngine";
 import { StorageManagerModal } from "./stba/StorageManagerModal";
 import { stbaStorage } from "../lib/storage/indexedDbClient";
-import { PRESET_BIBLES } from "./stba/bibleData";
+import { PRESET_BIBLES, getFullChapterVerses, fetchChapterVersesAsync } from "./stba/bibleData";
 import { BIBLE_PRESETS } from "../services/bibleService";
 import { PRELOADED_SDABC_DATA } from "./stba/SDABibleCommentary";
 import { panelSyncBus } from "../lib/storage/panelSyncChannel";
+import { useSabbathSchoolStore } from "../store/useSabbathSchoolStore";
 
 export function STBAStudyMode() {
   const { user, showConfetti } = useApp();
   const { setStudyMode, setCurrentPassage, setCurrentTopic, recordStudyStep } = useElderStephen();
+  const { setSelectedDayIndex } = useSabbathSchoolStore();
 
   // Theme state: default to Light Mode
   const [theme, setTheme] = useState<"light" | "dark">((() => {
@@ -177,10 +180,17 @@ export function STBAStudyMode() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/study/debug-status")
-      .then((r) => r.json())
-      .then((data) => setDebugStatus(data))
-      .catch((e) => console.warn("Debug status failed", e));
+    let cancelled = false;
+    apiFetchJson("/api/study/debug-status")
+      .then((res) => {
+        if (!cancelled && res.ok && res.data && typeof res.data === "object") {
+          setDebugStatus(res.data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -192,6 +202,7 @@ export function STBAStudyMode() {
   const [addedNoteText, setAddedNoteText] = useState("");
   const [addedNoteRef, setAddedNoteRef] = useState("");
   const [stephenPendingPrompt, setStephenPendingPrompt] = useState("");
+  const [stephenAutoStartLive, setStephenAutoStartLive] = useState(false);
 
   const handleAddNoteFromText = (text: string, refNotes: string) => {
     setAddedNoteText(text);
@@ -203,6 +214,16 @@ export function STBAStudyMode() {
     setStephenPendingPrompt(promptText);
     setActiveRightTab("stephen");
     setRightPanelCollapsed(false);
+  };
+
+  const handleLaunchElderStephenInteractive = () => {
+    setActiveRightTab("stephen");
+    if (viewMode === "bible") {
+      setViewMode("split");
+    } else {
+      setRightPanelCollapsed(false);
+    }
+    setStephenAutoStartLive(true);
   };
 
   const handleWordStudyTrigger = (word: string) => {
@@ -291,14 +312,17 @@ export function STBAStudyMode() {
     setSynthesizingVerseRef(cleanRef);
 
     try {
-      const response = await fetch("/api/study/exegesis-report", {
+      const response = await apiFetch("/api/study/exegesis-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reference: cleanRef, topic: cleanTopic })
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data = await safeParseResponseJson<any>(response);
+        if (!data || data.ok === false) {
+          throw new Error(data?.error || "Non-JSON exegesis response");
+        }
         setReport(data);
         setActiveStepIndex(0);
         showConfetti('search');
@@ -409,29 +433,108 @@ export function STBAStudyMode() {
     };
   }, [isResizing]);
 
+  // Client-side resilient fallback for scripture passages if backend is unreachable or slow
+  const resolvePassageClientFallback = async (targetRef: string) => {
+    const clean = targetRef.trim();
+    const lookup = parseScriptureLookup(clean);
+    const canonical = lookup ? lookup.canonicalRef : clean;
+
+    // 1. Check exact PRESET_BIBLES match
+    if (PRESET_BIBLES[canonical]) {
+      return {
+        valid: true,
+        canonicalReference: canonical,
+        verses: PRESET_BIBLES[canonical].map((v) => ({ ...v, reference: canonical }))
+      };
+    }
+
+    // 2. Check bible-api.com directly from browser
+    try {
+      const apiRes = await fetch(`https://bible-api.com/${encodeURIComponent(canonical)}?translation=kjv`, {
+        signal: AbortSignal.timeout(6000)
+      });
+      if (apiRes.ok) {
+        const apiData = await safeParseResponseJson<any>(apiRes);
+        if (apiData && Array.isArray(apiData.verses) && apiData.verses.length > 0) {
+          const refLabel = apiData.reference || canonical;
+          return {
+            valid: true,
+            canonicalReference: refLabel,
+            verses: apiData.verses.map((v: any) => {
+              const txt = (v.text || "").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+              return {
+                verseNumber: v.verse,
+                reference: refLabel,
+                text: { KJV: txt, NKJV: txt, ESV: txt, NASB: txt }
+              };
+            })
+          };
+        }
+      }
+    } catch (_) {}
+
+    // 3. Check local chapter presets / IndexedDB cache
+    if (lookup) {
+      const chapterKey = `${lookup.book} ${lookup.chapter}`;
+      const chapterVerses = (await fetchChapterVersesAsync(chapterKey)) || getFullChapterVerses(chapterKey);
+      if (chapterVerses && chapterVerses.length > 0) {
+        const filtered = chapterVerses.filter(
+          (v) => v.verseNumber >= lookup.startVerse && v.verseNumber <= lookup.endVerse
+        );
+        const finalVerses = (filtered.length > 0 ? filtered : chapterVerses).map((v) => ({
+          ...v,
+          reference: canonical
+        }));
+        return {
+          valid: true,
+          canonicalReference: canonical,
+          verses: finalVerses
+        };
+      }
+    }
+
+    return null;
+  };
+
   // Fetch passage from reference dynamically with KJV, NKJV, ESV, and NASB
   const triggerFetchPassage = async (ref: string) => {
     if (!ref.trim()) return;
+    const lookup = parseScriptureLookup(ref.trim());
+    const targetRef = lookup ? lookup.canonicalRef : ref.trim();
     try {
-      lastFetchedRef.current = ref.toLowerCase().trim();
-      const response = await fetch("/api/study/fetch-passage", {
+      lastFetchedRef.current = targetRef.toLowerCase().trim();
+      const response = await apiFetch("/api/study/fetch-passage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference: ref })
+        body: JSON.stringify({ reference: targetRef })
       });
       if (!response.ok) {
         throw new Error("Failed to fetch custom passage.");
       }
-      const data = await response.json();
-      if (data.valid) {
+      const data = await safeParseResponseJson<any>(response);
+      if (data && data.valid && Array.isArray(data.verses) && data.verses.length > 0) {
         setCustomVerses(data.verses);
         setCustomReference(data.canonicalReference);
         setErrorMsg("");
+        return;
+      }
+      const fallback = await resolvePassageClientFallback(targetRef);
+      if (fallback) {
+        setCustomVerses(fallback.verses);
+        setCustomReference(fallback.canonicalReference);
+        setErrorMsg("");
       } else {
-        setErrorMsg(data.error || "Invalid scripture reference.");
+        setErrorMsg(data?.error || "Invalid scripture reference.");
       }
     } catch {
-      setErrorMsg("Error parsing Bible reference.");
+      const fallback = await resolvePassageClientFallback(targetRef);
+      if (fallback) {
+        setCustomVerses(fallback.verses);
+        setCustomReference(fallback.canonicalReference);
+        setErrorMsg("");
+      } else {
+        setErrorMsg("Error parsing Bible reference.");
+      }
     }
   };
 
@@ -461,46 +564,59 @@ export function STBAStudyMode() {
     if (!newRef.trim()) return;
     try {
       lastFetchedRef.current = newRef.toLowerCase().trim();
-      const response = await fetch("/api/study/fetch-passage", {
+      const response = await apiFetch("/api/study/fetch-passage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reference: newRef })
       });
+      let data: any = null;
       if (response.ok) {
-        const data = await response.json();
-        if (data.valid) {
-          setCustomVerses(data.verses);
-          setCustomReference(data.canonicalReference);
-          
-          setReport(prev => {
-            if (!prev) {
-              return {
-                reference: data.canonicalReference,
-                topic: "Custom Scripture Study",
-                step1: { summary: "", translations: data.verses },
-                step2: { genre: "Covenant Sanctuary Truth" }
-              };
-            }
+        data = await safeParseResponseJson<any>(response);
+      }
+      if (!data || !data.valid) {
+        data = await resolvePassageClientFallback(newRef);
+      }
+      if (data && data.valid) {
+        setCustomVerses(data.verses);
+        setCustomReference(data.canonicalReference);
+        
+        setReport(prev => {
+          if (!prev) {
             return {
-              ...prev,
               reference: data.canonicalReference,
-              step1: {
-                ...prev.step1,
-                translations: data.verses
-              }
+              topic: "Custom Scripture Study",
+              step1: { summary: "", translations: data.verses },
+              step2: { genre: "Covenant Sanctuary Truth" }
             };
-          });
+          }
+          return {
+            ...prev,
+            reference: data.canonicalReference,
+            step1: {
+              ...prev.step1,
+              translations: data.verses
+            }
+          };
+        });
 
-          setActiveVerseIndex(newVerseNum);
-          setRightPanelCollapsed(false);
-          setErrorMsg("");
-        } else {
-          setErrorMsg(data.error || "Could not load scripture passage.");
-        }
+        setActiveVerseIndex(newVerseNum);
+        setRightPanelCollapsed(false);
+        setErrorMsg("");
+      } else {
+        setErrorMsg(data?.error || "Could not load scripture passage.");
       }
     } catch (err) {
-      console.warn("Navigation fetch failed:", err);
-      setErrorMsg("Error navigating scripture reference.");
+      const fallback = await resolvePassageClientFallback(newRef);
+      if (fallback) {
+        setCustomVerses(fallback.verses);
+        setCustomReference(fallback.canonicalReference);
+        setActiveVerseIndex(newVerseNum);
+        setRightPanelCollapsed(false);
+        setErrorMsg("");
+      } else {
+        console.warn("Navigation fetch failed:", err);
+        setErrorMsg("Error navigating scripture reference.");
+      }
     }
   };
 
@@ -516,13 +632,11 @@ export function STBAStudyMode() {
       setLoading(true);
       setErrorMsg("");
       setActiveTopicSearch(cleanTopic);
-      setReport(null);
       setActiveVerseIndex(null); // No verse selected initially!
-      setLeftPaneWidth(50); // Center the analysis panel split during topic searches
     }
 
     try {
-      const response = await fetch("/api/study/topic-theme", {
+      const response = await apiFetch("/api/study/topic-theme", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: cleanTopic, page, limit: 12 })
@@ -530,8 +644,8 @@ export function STBAStudyMode() {
       if (!response.ok) {
         throw new Error("Failed to search Bible registry.");
       }
-      const data = await response.json();
-      if (data.valid && Array.isArray(data.verses) && data.verses.length > 0) {
+      const data = await safeParseResponseJson<any>(response);
+      if (data && data.valid && Array.isArray(data.verses) && data.verses.length > 0) {
         if (append) {
           setCustomVerses(prev => {
             const prevList = prev || [];
@@ -549,7 +663,7 @@ export function STBAStudyMode() {
         setErrorMsg("");
       } else {
         if (!append) {
-          setErrorMsg(data.error || `No verses found for topic "${cleanTopic}". Try a different keyword.`);
+          setErrorMsg(data?.error || `No verses found for topic "${cleanTopic}". Try a different keyword.`);
         }
         setHasMoreTopicVerses(false);
       }
@@ -580,27 +694,26 @@ export function STBAStudyMode() {
     // 1. Search Field Priority:
     // When both a Bible text and a topic are entered, prioritize the most recently used search field!
     let searchMode: 'ref' | 'topic' = 'ref';
+    const lookup = trimmedRef ? parseScriptureLookup(trimmedRef) : null;
 
     if (trimmedRef && trimmedTopic) {
-      searchMode = lastActiveSearchField;
+      if (lastActiveSearchField === 'ref') {
+        searchMode = lookup ? 'ref' : 'topic';
+      } else {
+        searchMode = 'topic';
+      }
     } else if (trimmedTopic && !trimmedRef) {
       searchMode = 'topic';
     } else if (trimmedRef && !trimmedTopic) {
       // Check if trimmedRef is an actual scripture reference (e.g. Genesis, John 1:3, John 3:16-20)
-      const lookup = parseScriptureLookup(trimmedRef);
-      if (lookup) {
-        searchMode = 'ref';
-      } else {
-        // User typed a topical word like "Grace" or "Faith" into the reference field
-        searchMode = 'topic';
-      }
+      searchMode = lookup ? 'ref' : 'topic';
     } else {
       setErrorMsg("Please provide a scripture reference or search topic.");
       return;
     }
 
     if (searchMode === 'topic') {
-      const topicVal = trimmedTopic || trimmedRef;
+      const topicVal = (lastActiveSearchField === 'ref' && !lookup && trimmedRef) ? trimmedRef : (trimmedTopic || trimmedRef);
       setQueryTopic(topicVal);
       setTopicPage(1);
       setHasMoreTopicVerses(false);
@@ -613,46 +726,71 @@ export function STBAStudyMode() {
     // - Vague reference ('Genesis') -> defaults to Genesis 1:1 and loads first 20 verses
     // - Specific reference ('John 1:3') -> displays that exact verse
     // - Range ('John 3:16-20') -> displays all verses in the range
-    const lookup = parseScriptureLookup(trimmedRef);
     const targetRef = lookup ? lookup.canonicalRef : trimmedRef;
 
     setLoading(true);
     setErrorMsg("");
     setActiveTopicSearch(null);
 
+    const applyPassageResult = (passageData: { canonicalReference: string; verses: any[] }) => {
+      setCustomVerses(passageData.verses);
+      setCustomReference(passageData.canonicalReference);
+
+      const pendingVerseStr = localStorage.getItem("stba_pending_verse_number");
+      if (pendingVerseStr) {
+        localStorage.removeItem("stba_pending_verse_number");
+      }
+      const pendingVerseNum = pendingVerseStr ? Number(pendingVerseStr) : NaN;
+      const targetVerseNum = !Number.isNaN(pendingVerseNum) && pendingVerseNum > 0
+        ? pendingVerseNum
+        : (lookup?.startVerse || passageData.verses[0]?.verseNumber || null);
+
+      if (targetVerseNum !== null) {
+        setActiveVerseIndex(targetVerseNum);
+        if (lookup?.isSingleVerse && passageData.verses.length === 1) {
+          triggerBackgroundTheologicalSynthesis(passageData.canonicalReference, trimmedTopic || "Scripture Study");
+        }
+      } else {
+        setActiveVerseIndex(null);
+      }
+
+      showConfetti('search');
+    };
+
     try {
-      const passageRes = await fetch("/api/study/fetch-passage", {
+      const passageRes = await apiFetch("/api/study/fetch-passage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reference: targetRef })
       });
 
       if (passageRes.ok) {
-        const passageData = await passageRes.json();
-        if (passageData.valid) {
-          setCustomVerses(passageData.verses);
-          setCustomReference(passageData.canonicalReference);
-
-          // If the user specified an exact single verse (e.g. 'John 1:3'), select that verse and launch synthesis
-          if (lookup?.isSingleVerse && passageData.verses.length === 1) {
-            const vNum = passageData.verses[0].verseNumber;
-            setActiveVerseIndex(vNum);
-            triggerBackgroundTheologicalSynthesis(passageData.canonicalReference, trimmedTopic || "Scripture Study");
-          } else {
-            // For vague references ('Genesis') or ranges ('John 3:16-20'), do not lock or activate synthesis yet
-            // Wait for user to click on a specific verse to activate synthesis
-            setActiveVerseIndex(null);
-          }
-
-          showConfetti('search');
+        const passageData = await safeParseResponseJson<any>(passageRes);
+        if (passageData && passageData.valid && Array.isArray(passageData.verses) && passageData.verses.length > 0) {
+          applyPassageResult(passageData);
+          return;
+        }
+        const fallback = await resolvePassageClientFallback(targetRef);
+        if (fallback) {
+          applyPassageResult(fallback);
         } else {
-          setErrorMsg(passageData.error || "Could not parse scripture reference.");
+          setErrorMsg(passageData?.error || "Could not parse scripture reference.");
         }
       } else {
-        setErrorMsg("Failed to fetch scripture passage.");
+        const fallback = await resolvePassageClientFallback(targetRef);
+        if (fallback) {
+          applyPassageResult(fallback);
+        } else {
+          setErrorMsg("Failed to fetch scripture passage.");
+        }
       }
     } catch (err) {
-      setErrorMsg("Error loading scripture passage.");
+      const fallback = await resolvePassageClientFallback(targetRef);
+      if (fallback) {
+        applyPassageResult(fallback);
+      } else {
+        setErrorMsg("Error loading scripture passage.");
+      }
     } finally {
       setLoading(false);
     }
@@ -683,7 +821,7 @@ export function STBAStudyMode() {
     setChatLoading(true);
 
     try {
-      const response = await fetch("/api/study/exegesis-chat", {
+      const response = await apiFetch("/api/study/exegesis-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -699,7 +837,10 @@ export function STBAStudyMode() {
 
       if (!response.ok) throw new Error("Dialogue failed");
 
-      const resJson = await response.json();
+      const resJson = await safeParseResponseJson<any>(response);
+      if (!resJson || typeof resJson.reply !== "string") {
+        throw new Error(resJson?.error || "Invalid dialogue payload");
+      }
       setStepChats(prev => {
         const copy = [...prev];
         copy[activeStepIndex] = [...updatedChats, { sender: "ai", text: resJson.reply }];
@@ -790,12 +931,21 @@ export function STBAStudyMode() {
     // Read URL search query parameters if available
     const searchParams = new URLSearchParams(location.search || window.location.hash.split("?")[1] || "");
     const urlRef = searchParams.get("ref");
-    const urlVersion = searchParams.get("version");
     const urlTool = searchParams.get("tool");
+    const urlDay = searchParams.get("day");
 
     const pendingRef = urlRef || localStorage.getItem("stba_pending_search_ref");
     const pendingTopic = localStorage.getItem("stba_pending_search_topic") || "";
     const pendingTool = urlTool || localStorage.getItem("stba_pending_search_tool");
+    const pendingDay = urlDay ?? localStorage.getItem("stba_pending_day_index");
+
+    if (pendingDay !== null && pendingDay !== undefined && pendingDay !== "") {
+      localStorage.removeItem("stba_pending_day_index");
+      const parsedDay = Number(pendingDay);
+      if (!Number.isNaN(parsedDay) && parsedDay >= 0 && parsedDay < 7) {
+        setSelectedDayIndex(parsedDay);
+      }
+    }
 
     if (pendingRef) {
       localStorage.removeItem("stba_pending_search_ref");
@@ -812,9 +962,14 @@ export function STBAStudyMode() {
       setStepChats(Array(7).fill([]));
       setActiveVerseIndex(null);
       
-      // If tool is specified (e.g. "visual" from Study Deeper in Sabbath School), activate that tab
-      const targetToolTab = (pendingTool === "visual" || urlTool === "visual") ? "visual" : (pendingTool || "stephen");
+      // If tool is specified (e.g. "syllabus" or "visual" from Study Deeper in Sabbath School), activate that tab
+      const targetToolTab = (pendingTool === "visual" || urlTool === "visual")
+        ? "visual"
+        : (pendingTool === "syllabus" || urlTool === "syllabus")
+        ? "syllabus"
+        : (pendingTool || "syllabus");
       setActiveRightTab(targetToolTab as any);
+      setViewMode("split");
       setRightPanelCollapsed(false);
       
       localStorage.setItem(`stba_queryRef_${userKey}`, pendingRef);
@@ -827,8 +982,14 @@ export function STBAStudyMode() {
 
       // Auto load the exegesis study workspace & trigger automatic search
       setTimeout(() => {
+        setLastActiveSearchField("ref");
         handleLoadExegesis(pendingRef, pendingTopic);
-      }, 150);
+      }, 80);
+    } else if (pendingTool === "syllabus" || urlTool === "syllabus") {
+      localStorage.removeItem("stba_pending_search_tool");
+      setActiveRightTab("syllabus");
+      setViewMode("split");
+      setRightPanelCollapsed(false);
     } else {
       const savedHeaderCollapsed = localStorage.getItem(`stba_globalHeaderCollapsed_${userKey}`);
       if (savedHeaderCollapsed !== null) {
@@ -836,6 +997,30 @@ export function STBAStudyMode() {
       }
     }
   }, [user, location.search, location.key]);
+
+  // Listen for direct Study Deeper custom events while already in STBAStudyMode
+  useEffect(() => {
+    const handleStudyDeeperEvent = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (!detail) return;
+      if (typeof detail.dayIndex === "number" && detail.dayIndex >= 0 && detail.dayIndex < 7) {
+        setSelectedDayIndex(detail.dayIndex);
+      }
+      if (typeof detail.verseNumber === "number" && detail.verseNumber > 0) {
+        localStorage.setItem("stba_pending_verse_number", String(detail.verseNumber));
+      }
+      setActiveRightTab("syllabus");
+      setViewMode("split");
+      setRightPanelCollapsed(false);
+      if (detail.reference) {
+        setQueryRef(detail.reference);
+        setLastActiveSearchField("ref");
+        handleLoadExegesis(detail.reference, detail.topic || "");
+      }
+    };
+    window.addEventListener("stba-open-study-deeper", handleStudyDeeperEvent);
+    return () => window.removeEventListener("stba-open-study-deeper", handleStudyDeeperEvent);
+  }, []);
 
   const TOOL_TABS = [
     { id: "csms", label: "CSMS Guide", icon: Compass },
@@ -845,7 +1030,7 @@ export function STBAStudyMode() {
     { id: "xref", label: "Cross-References", icon: Layers },
     { id: "visual", label: "Bible Reader", icon: Volume2 },
     { id: "review", label: " SDA Commentary", icon: BookOpen },
-    { id: "syllabus", label: "Weekly Syllabus", icon: BookMarked },
+    { id: "syllabus", label: "Daily Syllabus", icon: BookMarked },
   ];
 
   return (
@@ -865,8 +1050,26 @@ export function STBAStudyMode() {
           </h1>
         </div>
 
-        {/* Right workspace accessories toggles (Theme, Storage & Sync, ViewModeToggle, Expand/Collapse Toggle) */}
+        {/* Right workspace accessories toggles (Elder Stephen Interactive, Theme, Storage & Sync, ViewModeToggle, Expand/Collapse Toggle) */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Elder Stephen Interactive Live Session Quick Button */}
+          <button
+            id="btn-workspace-elder-stephen-interactive"
+            onClick={handleLaunchElderStephenInteractive}
+            className={`px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 shrink-0 font-mono text-xs font-bold shadow-2xs ${
+              activeRightTab === "stephen" && viewMode !== "bible"
+                ? "bg-[#C9973A] border-[#C9973A] text-white"
+                : theme === "dark"
+                  ? "bg-[#1E2530] border-[#C9973A]/50 text-[#F3CF65] hover:border-[#C9973A] hover:bg-[#252E3D]"
+                  : "bg-amber-50 border-[#C9973A] text-[#8C6219] hover:bg-amber-100"
+            }`}
+            title="Start Live Interactive Voice & Exegesis Session with Elder Stephen (gemini-3.8-live)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#C9973A] animate-pulse shrink-0" />
+            <span className="hidden sm:inline">Elder Stephen Interactive</span>
+            <span className="sm:hidden">Interactive</span>
+          </button>
+
           {/* Client Storage & Offline Sync Engine */}
           <button
             onClick={() => setStorageModalOpen(true)}
@@ -932,10 +1135,7 @@ export function STBAStudyMode() {
           </div>
 
           {/* Tool Buttons: Single Horizontal Row with Gold Trim and Smooth 2-3px Lift Hover Effect */}
-          <div
-            className="flex flex-row flex-nowrap items-center justify-start gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar w-full max-w-7xl py-1 px-3 scroll-smooth touch-pan-x"
-            style={{ overscrollBehaviorX: "none", touchAction: "pan-x" }}
-          >
+          <div className="flex flex-row flex-nowrap items-center justify-start gap-2 sm:gap-2.5 overflow-x-auto no-scrollbar w-full max-w-7xl py-1 px-3 scroll-smooth">
             {TOOL_TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeRightTab === tab.id && viewMode !== "bible";
@@ -1059,7 +1259,7 @@ export function STBAStudyMode() {
           </div>
         )}
 
-        {/* Right tools dynamic selection / analysis panel (Centered during topic searches) */}
+        {/* Right tools dynamic selection panel */}
         {viewMode !== "bible" && (
           <div 
             style={
@@ -1072,15 +1272,13 @@ export function STBAStudyMode() {
             className={`w-full flex flex-col overflow-hidden select-none transition-all duration-150 border-none ${
               viewMode === "tools" ? "h-full" : "md:h-full"
             } ${
-              activeTopicSearch ? "items-center justify-center mx-auto" : ""
-            } ${
               theme === "dark" ? "bg-[#161B22]" : "bg-[#FCFAF7]"
             }`}
           >
             {/* Background Theological Synthesis Live Status Indicator */}
             {isExegesisSynthesizing && (
-              <div className="w-full px-4 py-2.5 bg-gradient-to-r from-amber-500/15 via-[#C9973A]/25 to-amber-500/15 border-b border-amber-500/30 flex items-center justify-center gap-2 shrink-0 select-none shadow-xs text-center">
-                <div className="flex items-center justify-center gap-2 text-xs font-mono text-amber-500 dark:text-amber-400 font-bold">
+              <div className="px-4 py-2.5 bg-gradient-to-r from-amber-500/15 via-[#C9973A]/25 to-amber-500/15 border-b border-amber-500/30 flex items-center justify-between gap-2 shrink-0 select-none shadow-xs">
+                <div className="flex items-center gap-2 text-xs font-mono text-amber-500 dark:text-amber-400 font-bold">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C9973A] shrink-0" />
                   <span>Synthesizing 7-step theological exegesis for <strong className="text-white dark:text-amber-300 font-extrabold">{synthesizingVerseRef}</strong> in background...</span>
                 </div>
@@ -1090,9 +1288,9 @@ export function STBAStudyMode() {
               </div>
             )}
 
-            {/* Topic Search Active - Centered Analysis Prompt */}
+            {/* Topic Search Active - Prompt user to click a verse */}
             {activeTopicSearch && !report && !isExegesisSynthesizing && (
-              <div className="w-full px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/25 flex items-center justify-center gap-2 text-xs text-amber-600 dark:text-amber-400 font-sans select-none shrink-0 text-center">
+              <div className="px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/25 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 font-sans select-none shrink-0">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                 <span>
                   Topic <strong>"{activeTopicSearch}"</strong> active ({customVerses?.length || 0} verses loaded). Click any verse row on the left to activate 7-step theological exegesis.
@@ -1100,7 +1298,7 @@ export function STBAStudyMode() {
               </div>
             )}
 
-            <div className={`flex-1 w-full overflow-hidden relative ${activeTopicSearch ? "flex flex-col items-center justify-center mx-auto" : ""}`}>
+            <div className="flex-1 overflow-hidden relative">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeRightTab}
@@ -1108,7 +1306,7 @@ export function STBAStudyMode() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.12 }}
-                  className={`w-full h-full overflow-hidden ${activeTopicSearch ? "mx-auto max-w-4xl flex flex-col justify-center" : ""}`}
+                  className="w-full h-full overflow-hidden"
                 >
                   {activeRightTab === "csms" && (
                     <CSMSActiveRecall
@@ -1144,6 +1342,8 @@ export function STBAStudyMode() {
                       clearStephenPendingPrompt={() => setStephenPendingPrompt("")}
                       currentPassageRef={report?.reference || queryRef || customReference || ""}
                       onNavigateTab={(tab) => setActiveRightTab(tab as any)}
+                      autoStartLive={stephenAutoStartLive}
+                      onLiveStarted={() => setStephenAutoStartLive(false)}
                     />
                   )}
 
@@ -1248,8 +1448,16 @@ export function STBAStudyMode() {
                       setChatInputs={setChatInputs}
                       stepChats={stepChats}
                       handleSendChat={handleSendGuidedChat}
-                      onReferenceChange={(ref) => handleLoadExegesis(ref, "")}
+                      onReferenceChange={(ref) => {
+                        setQueryRef(ref);
+                        setLastActiveSearchField("ref");
+                        if (viewMode === "tools") {
+                          setViewMode("split");
+                        }
+                        handleLoadExegesis(ref, "");
+                      }}
                       theme={theme}
+                      currentPassageRef={customReference || report?.reference || queryRef}
                     />
                   )}
                 </motion.div>
