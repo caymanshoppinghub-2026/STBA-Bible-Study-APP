@@ -338,3 +338,85 @@ export function decodeAndCleanGeminiPcm(
 
   return trimmed;
 }
+
+/**
+ * Resamples an input Float32Array from any hardware AudioContext sample rate
+ * (e.g., 48000 Hz, 44100 Hz, or 16000 Hz) to 16000 Hz mono with anti-aliasing
+ * box-averaging so Gemini Live VAD and speech recognition receive clean 16kHz audio.
+ */
+export function resampleFloat32To16kHz(
+  input: Float32Array,
+  inputSampleRate: number = 16000
+): Float32Array {
+  if (!input || input.length === 0) {
+    return new Float32Array(0);
+  }
+  const targetRate = 16000;
+  if (!inputSampleRate || Math.abs(inputSampleRate - targetRate) <= 50) {
+    return input;
+  }
+
+  const ratio = inputSampleRate / targetRate;
+  const outputLength = Math.max(1, Math.round(input.length / ratio));
+  const output = new Float32Array(outputLength);
+
+  if (ratio > 1) {
+    // Downsampling (e.g. 48kHz -> 16kHz or 44.1kHz -> 16kHz) with box filter
+    for (let i = 0; i < outputLength; i++) {
+      const start = i * ratio;
+      const end = Math.min(input.length, (i + 1) * ratio);
+      const startIdx = Math.floor(start);
+      const endIdx = Math.ceil(end);
+      let sum = 0;
+      let weightSum = 0;
+      for (let j = startIdx; j < endIdx && j < input.length; j++) {
+        const wStart = Math.max(start, j);
+        const wEnd = Math.min(end, j + 1);
+        const weight = Math.max(0, wEnd - wStart);
+        sum += input[j] * weight;
+        weightSum += weight;
+      }
+      output[i] = weightSum > 0 ? sum / weightSum : input[Math.min(startIdx, input.length - 1)];
+    }
+  } else {
+    // Upsampling via linear interpolation
+    for (let i = 0; i < outputLength; i++) {
+      const srcPos = i * ratio;
+      const idx0 = Math.floor(srcPos);
+      const idx1 = Math.min(input.length - 1, idx0 + 1);
+      const frac = srcPos - idx0;
+      output[i] = input[idx0] * (1 - frac) + input[idx1] * frac;
+    }
+  }
+
+  return output;
+}
+
+/**
+ * Converts a Float32Array of microphone samples at `inputSampleRate` into
+ * a Base64-encoded 16-bit signed little-endian 16kHz mono PCM payload
+ * (`audio/pcm;rate=16000`) for Gemini Live `sendRealtimeInput`.
+ */
+export function encodeFloat32To16kHzPcmBase64(
+  input: Float32Array,
+  inputSampleRate: number = 16000
+): string {
+  const resampled = resampleFloat32To16kHz(input, inputSampleRate);
+  const buffer = new ArrayBuffer(resampled.length * 2);
+  const view = new DataView(buffer);
+  for (let i = 0; i < resampled.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, resampled[i]));
+    view.setInt16(i * 2, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+  }
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.byteLength; i += chunkSize) {
+    binary += String.fromCharCode.apply(
+      null,
+      Array.from(bytes.subarray(i, Math.min(i + chunkSize, bytes.byteLength)))
+    );
+  }
+  return window.btoa(binary);
+}
+

@@ -9131,6 +9131,8 @@ wss.on("connection", async (clientWs: WebSocket, request: any) => {
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let clientClosed = false;
   let sessionPromiseRef: Promise<any> | null = null;
+  let hasLoggedFirstAudioChunk = false;
+  const pendingClientInputs: any[] = [];
 
   let resolveInitialSetup: (() => void) | null = null;
   const initialSetupReady = new Promise<void>((resolve) => {
@@ -9138,7 +9140,50 @@ wss.on("connection", async (clientWs: WebSocket, request: any) => {
     setTimeout(resolve, 120);
   });
 
-  // Register client message & close listeners immediately so early setup packets are never missed
+  const dispatchInputToGeminiLive = (activeSession: any, parsed: any) => {
+    if (!activeSession || clientClosed) return;
+    try {
+      const audioBase64 =
+        typeof parsed.audio === "string"
+          ? parsed.audio
+          : typeof parsed.audio?.data === "string"
+          ? parsed.audio.data
+          : typeof parsed.realtimeInput?.audio?.data === "string"
+          ? parsed.realtimeInput.audio.data
+          : typeof parsed.realtimeInput?.mediaChunks?.[0]?.data === "string"
+          ? parsed.realtimeInput.mediaChunks[0].data
+          : null;
+
+      if (audioBase64) {
+        if (!hasLoggedFirstAudioChunk) {
+          hasLoggedFirstAudioChunk = true;
+          console.log("[STBA Live DEV] Receiving 16kHz PCM audio stream from user microphone...");
+        }
+        activeSession.sendRealtimeInput({
+          audio: {
+            data: audioBase64,
+            mimeType: "audio/pcm;rate=16000"
+          }
+        });
+      }
+
+      if (parsed.audioStreamEnd || parsed.realtimeInput?.audioStreamEnd) {
+        activeSession.sendRealtimeInput({
+          audioStreamEnd: true
+        });
+      }
+
+      if (typeof parsed.text === "string" && parsed.text.trim()) {
+        activeSession.sendRealtimeInput({
+          text: parsed.text
+        });
+      }
+    } catch (err) {
+      console.warn("[STBA DEV LOG] Failed to forward input to Gemini Live session:", err);
+    }
+  };
+
+  // Register client message & close listeners immediately so early setup or input packets are never missed
   clientWs.on("message", (data: any) => {
     try {
       const parsed = JSON.parse(data.toString());
@@ -9168,25 +9213,22 @@ wss.on("connection", async (clientWs: WebSocket, request: any) => {
         }
         return;
       }
-      if (!sessionPromiseRef) return;
-      sessionPromiseRef.then((activeSession) => {
-        if (!activeSession || clientClosed) return;
-        if (parsed.audio) {
-          activeSession.sendRealtimeInput({
-            audio: {
-              data: parsed.audio,
-              mimeType: "audio/pcm;rate=16000"
-            }
+
+      if (session) {
+        dispatchInputToGeminiLive(session, parsed);
+      } else if (sessionPromiseRef) {
+        sessionPromiseRef
+          .then((activeSession) => {
+            dispatchInputToGeminiLive(activeSession, parsed);
+          })
+          .catch((err) => {
+            console.warn("[STBA DEV LOG] Failed to forward queued input to Gemini Live session:", err);
           });
+      } else {
+        if (pendingClientInputs.length < 100) {
+          pendingClientInputs.push(parsed);
         }
-        if (parsed.text) {
-          activeSession.sendRealtimeInput({
-            text: parsed.text
-          });
-        }
-      }).catch((err) => {
-        console.warn("[STBA DEV LOG] Failed to forward input to Gemini Live session:", err);
-      });
+      }
     } catch (e: any) {
       console.error("[STBA DEV LOG] WebSocket message extraction exception:", e);
     }
@@ -9194,6 +9236,7 @@ wss.on("connection", async (clientWs: WebSocket, request: any) => {
 
   clientWs.on("close", () => {
     clientClosed = true;
+    pendingClientInputs.length = 0;
     if (heartbeatTimer) {
       clearInterval(heartbeatTimer);
       heartbeatTimer = null;
@@ -9459,6 +9502,12 @@ SEVENTH-DAY ADVENTIST HISTORICAL METHOD & EXEGESIS MENTOR PERSONA:
       return;
     }
     console.log("[STBA DEV LOG] Connected to Gemini 3.8 Live Session (gemini-3.8-live)!");
+    if (pendingClientInputs.length > 0) {
+      const queued = pendingClientInputs.splice(0, pendingClientInputs.length);
+      for (const item of queued) {
+        dispatchInputToGeminiLive(session, item);
+      }
+    }
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.send(JSON.stringify({ ready: true, model: "gemini-3.8-live" }));
     }

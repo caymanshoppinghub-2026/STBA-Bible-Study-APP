@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
-import { decodeAndCleanGeminiPcm } from "../utils/cleanGeminiAudio";
+import { decodeAndCleanGeminiPcm, encodeFloat32To16kHzPcmBase64 } from "../utils/cleanGeminiAudio";
 import {
   X,
   Mic,
@@ -603,7 +603,9 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       const sessionRunId = ++liveSessionRunIdRef.current;
       setLiveState("connecting");
       setLiveError(null);
+      isElderSpeakingRef.current = false;
       initializeAudioContext();
+      startMicCapture();
       
       const isHttps = window.location.protocol === "https:";
       const protocol = isHttps ? "wss:" : "ws:";
@@ -812,7 +814,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 
             if (msg.userTranscript) {
               const spoken = msg.userTranscript.trim();
-              if (spoken && !isElderSpeakingRef.current) {
+              if (spoken) {
                 endLiveReplyAccumulation();
                 setChatMessages((prev) => {
                   const last = prev[prev.length - 1];
@@ -855,6 +857,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
               endLiveReplyAccumulation();
               if (activeNodesRef.current.length === 0) {
                 setLiveState("ready");
+                isElderSpeakingRef.current = false;
               }
             }
 
@@ -871,6 +874,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
               console.log("[STBA Live Voice Debug] Interrupt requested.");
               clearPlaybackQueue();
               endLiveReplyAccumulation();
+              isElderSpeakingRef.current = false;
               setLiveState("ready");
             }
             
@@ -901,7 +905,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
         };
       };
 
-      if (hasCustomEdgeFunction && wsUrl) {
+      if (SUPABASE_EDGE_FUNCTION_URL && hasCustomEdgeFunction && wsUrl) {
         openTeachLiveSocket(wsUrl, true, 0);
       } else {
         openTeachLiveSocket(localLiveWsUrl, false, 0);
@@ -916,16 +920,20 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   const initializeAudioContext = () => {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!inputAudioCtxRef.current) {
-      inputAudioCtxRef.current = new AudioCtx({ sampleRate: 16000 });
+      try {
+        inputAudioCtxRef.current = new AudioCtx({ sampleRate: 16000 });
+      } catch {
+        inputAudioCtxRef.current = new AudioCtx();
+      }
     }
     if (inputAudioCtxRef.current.state === "suspended") {
-      inputAudioCtxRef.current.resume();
+      inputAudioCtxRef.current.resume().catch(() => {});
     }
     if (!outputAudioCtxRef.current) {
       outputAudioCtxRef.current = new AudioCtx({ sampleRate: 24000 });
     }
     if (outputAudioCtxRef.current.state === "suspended") {
-      outputAudioCtxRef.current.resume();
+      outputAudioCtxRef.current.resume().catch(() => {});
     }
     nextStartTimeRef.current = 0;
   };
@@ -933,6 +941,10 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   const startMicCapture = async () => {
     try {
       initializeAudioContext();
+      if (micStreamRef.current && micStreamRef.current.active && processorRef.current) {
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
@@ -945,7 +957,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       micStreamRef.current = stream;
 
       const source = inputAudioCtxRef.current!.createMediaStreamSource(stream);
-      const processor = inputAudioCtxRef.current!.createScriptProcessor(4096, 1, 1);
+      const processor = inputAudioCtxRef.current!.createScriptProcessor(2048, 1, 1);
       processorRef.current = processor;
 
       source.connect(processor);
@@ -953,32 +965,55 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 
       processor.onaudioprocess = (e) => {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-        if (isMicMutedRef.current || isElderSpeakingRef.current) return;
+        if (isMicMutedRef.current) return;
+
+        // Self-healing watchdog: unlock isElderSpeakingRef once scheduled audio playback has completed
+        if (
+          isElderSpeakingRef.current &&
+          activeNodesRef.current.length === 0 &&
+          (!outputAudioCtxRef.current ||
+            outputAudioCtxRef.current.currentTime >= nextStartTimeRef.current - 0.05)
+        ) {
+          isElderSpeakingRef.current = false;
+        }
         
         const floatSamples = e.inputBuffer.getChannelData(0);
+        const actualSampleRate = e.inputBuffer.sampleRate || inputAudioCtxRef.current?.sampleRate || 16000;
         
         let sum = 0;
         for (let i = 0; i < floatSamples.length; i++) {
           sum += floatSamples[i] * floatSamples[i];
         }
         const rms = Math.sqrt(sum / floatSamples.length);
+
+        const isUserBargingIn = rms > 0.085;
+        const shouldSuppressEcho = isElderSpeakingRef.current && !isUserBargingIn;
         
-        if (rms > 0.015) {
-          if (liveStateRef.current !== "playing") {
-            setLiveState("recording");
+        if (!shouldSuppressEcho) {
+          if (rms > 0.015) {
+            if (liveStateRef.current !== "playing") {
+              setLiveState("recording");
+            }
+            setWaveHeights((prev) => prev.map(() => Math.max(6, Math.floor(rms * 150))));
+          } else {
+            if (liveStateRef.current === "recording") {
+              setLiveState("ready");
+            }
+            setWaveHeights((prev) => prev.map(() => Math.max(6, Math.floor(Math.random() * 4) + 4)));
           }
-          setWaveHeights((prev) => prev.map(() => Math.max(6, Math.floor(rms * 150))));
-        } else {
-          if (liveStateRef.current === "recording") {
-            setLiveState("ready");
-          }
-          setWaveHeights((prev) => prev.map(() => Math.max(6, Math.floor(Math.random() * 4) + 4)));
         }
 
-        const pcmBuffer = floatTo16BitPCM(floatSamples);
-        const base64 = arrayBufferToBase64(pcmBuffer);
+        const samplesToSend = shouldSuppressEcho
+          ? new Float32Array(floatSamples.length)
+          : floatSamples;
+        const base64 = encodeFloat32To16kHzPcmBase64(samplesToSend, actualSampleRate);
         
-        wsRef.current.send(JSON.stringify({ audio: base64 }));
+        wsRef.current.send(
+          JSON.stringify({
+            audio: base64,
+            mimeType: "audio/pcm;rate=16000"
+          })
+        );
       };
 
     } catch (err: any) {

@@ -26,7 +26,7 @@ import {
   type StudyContextQueryParams
 } from "../../lib/supabase";
 import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from "../../lib/apiFetch";
-import { decodeAndCleanGeminiPcm, sanitizeVerbatimSpeechText } from "../../utils/cleanGeminiAudio";
+import { decodeAndCleanGeminiPcm, encodeFloat32To16kHzPcmBase64, sanitizeVerbatimSpeechText } from "../../utils/cleanGeminiAudio";
 import { saveNoteToSupabase, deleteNoteFromSupabase, fetchCategoriesFromSupabase, checkCategoriesTable, fetchNotesFromSupabase, checkSupabaseConnection } from "../../lib/notebookSync";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
@@ -670,58 +670,37 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   const lastElderSpeechEndTimeRef = useRef<number>(0);
   const recentElderSpeechRef = useRef<string[]>([]);
 
-  // Robust echo detector to guarantee Elder Stephen's audio is NEVER recorded as user response
+  // Robust echo detector to guarantee Elder Stephen's speaker audio is not recorded as user response
+  // while never falsely suppressing genuine user speech on the same Bible passage.
   const isEchoOfElderStephen = (candidateText: string): boolean => {
     if (!candidateText || !candidateText.trim()) return true;
-    if (isElderSpeakingRef.current) return true;
-    if (Date.now() - lastElderSpeechEndTimeRef.current < 600) return true;
 
     const cleanCand = candidateText.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (cleanCand.length < 3) return true;
+    if (cleanCand.length < 2) return true;
 
-    const allElderTexts = [
-      ...recentElderSpeechRef.current,
+    // Only check for direct verbatim acoustic bleed while Elder Stephen is actively speaking
+    // or within 800ms after playback finishes
+    const isWithinPlaybackWindow =
+      isElderSpeakingRef.current || Date.now() - lastElderSpeechEndTimeRef.current < 800;
+    if (!isWithinPlaybackWindow) {
+      return false;
+    }
+
+    const recentTurnTexts = [
+      currentLiveReplyTextRef.current,
       latestLiveResponse,
-      activeDisplayResponse,
-      ...(messages.filter(m => m.sender === "elder").slice(-3).map(m => m.text))
+      ...recentElderSpeechRef.current.slice(0, 2)
     ].filter(Boolean);
 
-    for (const elderText of allElderTexts) {
+    for (const elderText of recentTurnTexts) {
       const cleanElder = elderText.toLowerCase().replace(/[^a-z0-9]/g, "");
-      if (cleanElder.length > 0) {
-        if (cleanElder.includes(cleanCand) || cleanCand.includes(cleanElder)) {
-          return true;
-        }
-      }
-      const candWords = candidateText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-      if (candWords.length >= 2) {
-        const matches = candWords.filter(w => elderText.toLowerCase().includes(w));
-        if (matches.length / candWords.length >= 0.5) {
+      if (cleanElder.length >= 12 && cleanCand.length >= 10) {
+        if (cleanElder.includes(cleanCand)) {
           return true;
         }
       }
     }
     return false;
-  };
-
-  // Audio Helper Utilities for PCM streaming & base64
-  const floatTo16BitPCM = (input: Float32Array): ArrayBuffer => {
-    const output = new DataView(new ArrayBuffer(input.length * 2));
-    for (let i = 0; i < input.length; i++) {
-      const s = Math.max(-1, Math.min(1, input[i]));
-      output.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-    }
-    return output.buffer;
-  };
-
-  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
   };
 
   const clearPlaybackQueue = () => {
@@ -778,12 +757,11 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
           setLiveState("ready");
           setWaveHeights([8, 12, 16, 10, 14, 8, 12, 8]);
           lastElderSpeechEndTimeRef.current = Date.now();
-          // 400ms echo decay buffer before allowing user microphone input
           setTimeout(() => {
             if (activeNodesRef.current.length === 0) {
               isElderSpeakingRef.current = false;
             }
-          }, 400);
+          }, 250);
         }
       };
     } catch (err) {
@@ -804,7 +782,8 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     const fullText = formatProperElderSpacing(currentLiveReplyTextRef.current);
     setLatestLiveResponse(fullText);
     setIsLiveNoteSaved(false);
-    isElderSpeakingRef.current = true;
+    // Note: Do NOT set isElderSpeakingRef.current = true here because text transcripts often arrive
+    // after the final audio chunk has finished playing, which would lock the microphone indefinitely.
     recentElderSpeechRef.current = [fullText, ...recentElderSpeechRef.current.filter(t => t !== fullText).slice(0, 5)];
 
     setMessages(prev => {
@@ -842,11 +821,20 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     try {
       if (!inputAudioCtxRef.current) {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        inputAudioCtxRef.current = new AudioCtx({ sampleRate: 16000 });
+        try {
+          inputAudioCtxRef.current = new AudioCtx({ sampleRate: 16000 });
+        } catch {
+          inputAudioCtxRef.current = new AudioCtx();
+        }
       }
       const ctx = inputAudioCtxRef.current;
       if (ctx.state === "suspended") {
-        await ctx.resume();
+        await ctx.resume().catch(() => {});
+      }
+
+      // If microphone stream and processor are already active, just ensure AudioContext is running
+      if (micStreamRef.current && micStreamRef.current.active && processorRef.current) {
+        return;
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -865,37 +853,65 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
-        if (isMicMutedRef.current || isElderSpeakingRef.current) {
-          // Half-duplex echo barrier: do not send audio while Elder Stephen is playing
+        if (isMicMutedRef.current) {
           return;
         }
-        const inputData = e.inputBuffer.getChannelData(0);
 
-        // Calculate RMS for live visualizer
+        // Self-healing watchdog: if no output nodes are playing and scheduled playback has elapsed,
+        // ensure isElderSpeakingRef is immediately unlocked so user speech is never blocked.
+        if (
+          isElderSpeakingRef.current &&
+          activeNodesRef.current.length === 0 &&
+          (!outputAudioCtxRef.current ||
+            outputAudioCtxRef.current.currentTime >= nextStartTimeRef.current - 0.05)
+        ) {
+          isElderSpeakingRef.current = false;
+        }
+
+        const inputData = e.inputBuffer.getChannelData(0);
+        const actualSampleRate = e.inputBuffer.sampleRate || ctx.sampleRate || 16000;
+
+        // Calculate RMS for live visualizer & barge-in detection
         let sum = 0;
         for (let i = 0; i < inputData.length; i++) {
           sum += inputData[i] * inputData[i];
         }
         const rms = Math.sqrt(sum / inputData.length);
-        const heights = Array.from({ length: 8 }, (_, i) => {
-          const factor = Math.sin((i / 8) * Math.PI) * 0.8 + 0.2;
-          return Math.min(22, Math.max(4, Math.round(rms * 180 * factor)));
-        });
-        setWaveHeights(heights);
 
-        if (rms > 0.018) {
-          if (liveStateRef.current !== "recording" && liveStateRef.current !== "playing") {
-            setLiveState("recording");
+        const isUserBargingIn = rms > 0.085;
+        const shouldSuppressEcho = isElderSpeakingRef.current && !isUserBargingIn;
+
+        if (!shouldSuppressEcho) {
+          const heights = Array.from({ length: 8 }, (_, i) => {
+            const factor = Math.sin((i / 8) * Math.PI) * 0.8 + 0.2;
+            return Math.min(22, Math.max(4, Math.round(rms * 180 * factor)));
+          });
+          setWaveHeights(heights);
+
+          if (rms > 0.015) {
+            if (liveStateRef.current !== "recording" && liveStateRef.current !== "playing") {
+              setLiveState("recording");
+            }
+          } else if (liveStateRef.current === "recording") {
+            setLiveState("ready");
           }
-        } else if (liveStateRef.current === "recording") {
-          setLiveState("ready");
         }
 
-        // Send 16-bit 16kHz PCM chunk over WebSocket to gemini-3.8-live
+        // Send continuous 16-bit 16kHz PCM stream over WebSocket to gemini-3.8-live.
+        // During Elder Stephen's playback (when user isn't barging in), send silent PCM frames
+        // so Gemini Live's server-side VAD stream clock remains continuous and immediately
+        // detects when the user starts speaking!
         if (liveWsRef.current && liveWsRef.current.readyState === WebSocket.OPEN) {
-          const pcmBuffer = floatTo16BitPCM(inputData);
-          const base64Audio = arrayBufferToBase64(pcmBuffer);
-          liveWsRef.current.send(JSON.stringify({ audio: base64Audio }));
+          const samplesToSend = shouldSuppressEcho
+            ? new Float32Array(inputData.length)
+            : inputData;
+          const base64Audio = encodeFloat32To16kHzPcmBase64(samplesToSend, actualSampleRate);
+          liveWsRef.current.send(
+            JSON.stringify({
+              audio: base64Audio,
+              mimeType: "audio/pcm;rate=16000"
+            })
+          );
         }
       };
 
@@ -1226,6 +1242,18 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     setLiveError(null);
     setLiveState("connecting");
     setIsDynamicLiveActive(true);
+    isElderSpeakingRef.current = false;
+
+    // Pre-initialize output & input AudioContexts and start microphone capture immediately
+    // within the user's synchronous click gesture so browser autoplay/mic permissions succeed.
+    if (!outputAudioCtxRef.current) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      outputAudioCtxRef.current = new AudioContextClass({ sampleRate: 24000 });
+    }
+    if (outputAudioCtxRef.current.state === "suspended") {
+      outputAudioCtxRef.current.resume().catch(() => {});
+    }
+    startMicCapture();
     
     const userName = userProfile?.name || "Disciple";
     const fullPassageText = (report?.text || "").trim();
@@ -1432,7 +1460,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
             if (msg.userTranscript) {
               const userSpeech = msg.userTranscript.trim();
               if (userSpeech) {
-                if (isElderSpeakingRef.current || isEchoOfElderStephen(userSpeech)) {
+                if (isEchoOfElderStephen(userSpeech)) {
                   console.log("[STBA Echo Suppressed on WS userTranscript]:", userSpeech);
                   return;
                 }
@@ -1484,12 +1512,14 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
               endLiveReplyAccumulation();
               if (activeNodesRef.current.length === 0) {
                 setLiveState("ready");
+                isElderSpeakingRef.current = false;
               }
             }
 
             if (msg.interrupted) {
               clearPlaybackQueue();
               endLiveReplyAccumulation();
+              isElderSpeakingRef.current = false;
               setLiveState("ready");
             }
 
@@ -1532,7 +1562,8 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       }
     };
 
-    if (hasCustomEdgeFunction && wsUrl) {
+    // Connect directly to the local Gemini 3.8 Live gateway (/api/study/live) unless an explicit custom edge relay override is set
+    if (SUPABASE_EDGE_FUNCTION_URL && hasCustomEdgeFunction && wsUrl) {
       connectLiveSocket(wsUrl, true, 0);
     } else {
       connectLiveSocket(localLiveWsUrl, false, 0);
