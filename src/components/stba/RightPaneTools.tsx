@@ -26,6 +26,7 @@ import {
   type StudyContextQueryParams
 } from "../../lib/supabase";
 import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from "../../lib/apiFetch";
+import { decodeAndCleanGeminiPcm, sanitizeVerbatimSpeechText } from "../../utils/cleanGeminiAudio";
 import { saveNoteToSupabase, deleteNoteFromSupabase, fetchCategoriesFromSupabase, checkCategoriesTable, fetchNotesFromSupabase, checkSupabaseConnection } from "../../lib/notebookSync";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
@@ -748,17 +749,11 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
         ctx.resume();
       }
 
-      const binaryStr = window.atob(base64Audio);
-      const len = binaryStr.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      const int16Array = new Int16Array(bytes.buffer);
-      const float32Array = new Float32Array(int16Array.length);
-      for (let i = 0; i < int16Array.length; i++) {
-        float32Array[i] = int16Array[i] / 32768.0;
-      }
+      const float32Array = decodeAndCleanGeminiPcm(base64Audio, {
+        sampleRate: 24000,
+        isStreamingChunk: true
+      });
+      if (float32Array.length === 0) return;
 
       const buffer = ctx.createBuffer(1, float32Array.length, 24000);
       buffer.getChannelData(0).set(float32Array);
@@ -6274,7 +6269,7 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
     setPlayingName(null);
 
     try {
-      const textToSay = `The pronunciation is ${nameObj.name}. ${nameObj.name}.`;
+      const textToSay = sanitizeVerbatimSpeechText(`The pronunciation is ${nameObj.name}. ${nameObj.name}.`);
       const response = await apiFetch("/api/study/narrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -6285,21 +6280,10 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
       const data = await safeParseResponseJson<any>(response);
 
       if (data && data.success && data.audio) {
-        const binaryString = window.atob(data.audio);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        const arrayBuffer = bytes.buffer;
-
-        const int16Array = new Int16Array(arrayBuffer);
-        const float32Array = new Float32Array(int16Array.length);
-        for (let i = 0; i < int16Array.length; i++) {
-          float32Array[i] = int16Array[i] / 32768.0;
-        }
-
         const sampleRate = 24000;
+        const float32Array = decodeAndCleanGeminiPcm(data.audio, { sampleRate });
+        if (float32Array.length === 0) throw new Error("Empty audio");
+
         const ctx = activeAudioCtxRef.current || new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate });
         activeAudioCtxRef.current = ctx;
 

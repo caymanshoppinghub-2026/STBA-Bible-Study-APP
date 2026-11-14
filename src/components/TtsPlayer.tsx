@@ -3,6 +3,7 @@ import { Play, Pause, RotateCcw, Volume2, Loader2, Sliders, Check, Globe, Sparkl
 import { useMediaInitialization } from "./MediaInitializationProvider";
 import { getElderStephenVoice, filterEdgeNaturalVoices } from "./stba/RightPaneTools";
 import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from "../lib/apiFetch";
+import { decodeAndCleanGeminiPcm, sanitizeVerbatimSpeechText } from "../utils/cleanGeminiAudio";
 
 // Global in-memory TTS cache declared on the global scope or window
 const globalTtsCache: Record<string, string> = {};
@@ -16,15 +17,9 @@ export const preCacheSpeechAudios = async (texts: string[], voice: string = "Puc
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
   const cache = (window as any).__STBA_TTS_CACHE__ || globalTtsCache;
   for (const text of texts) {
-    const cleaned = text
-      .replace(/\*\*|###|##|#|\*/g, "")
-      .replace(/[\[\]]/g, "")
-      .replace(/DrA:/g, "")
-      .replace(/Elder Stephen:/g, "")
-      .replace(/Dr. Adams/g, "Doctor Adams")
-      .trim();
+    const cleaned = sanitizeVerbatimSpeechText(text);
     if (!cleaned) continue;
-    const cacheKey = `${cleaned}_${voice}`;
+    const cacheKey = `v2_${cleaned}_${voice}`;
     if (!cache[cacheKey]) {
       try {
         const response = await apiFetch("/api/study/narrate", {
@@ -156,14 +151,8 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({
 
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  // Clean the text to avoid spelling bracketed metadata, asterisks, markdown syntax etc.
-  const cleanedText = text
-    .replace(/\*\*|###|##|#|\*/g, "")
-    .replace(/[\[\]]/g, "")
-    .replace(/DrA:/g, "")
-    .replace(/Elder Stephen:/g, "")
-    .replace(/Dr. Adams/g, "Doctor Adams")
-    .trim();
+  // Clean the text to avoid preliminary instructions, bracketed metadata, asterisks, markdown syntax etc.
+  const cleanedText = sanitizeVerbatimSpeechText(text);
 
   // Create formatted utterance instance with reliable callbacks and logging
   const createUtterance = () => {
@@ -260,7 +249,7 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({
           } catch {}
         }
 
-        const cacheKey = `${cleanedText}_${currentVoice}`;
+        const cacheKey = `v2_${cleanedText}_${currentVoice}`;
         const cachedBase64 = (window as any).__STBA_TTS_CACHE__?.[cacheKey];
         
         let base64Audio = cachedBase64;
@@ -299,24 +288,13 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({
         if (base64Audio) {
           if (!active) return;
           
-          // Decode raw base64 PCM into Int16Array
-          const binaryString = window.atob(base64Audio);
-          const len = binaryString.length;
-          const bytes = new Uint8Array(len);
-          for (let i = 0; i < len; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          const arrayBuffer = bytes.buffer;
-
-          // Convert 16-bit signed PCM to 32-bit floating point PCM
-          const int16Array = new Int16Array(arrayBuffer);
-          const float32Array = new Float32Array(int16Array.length);
-          for (let i = 0; i < int16Array.length; i++) {
-            float32Array[i] = int16Array[i] / 32768.0;
+          const sampleRate = 24000;
+          const float32Array = decodeAndCleanGeminiPcm(base64Audio, { sampleRate });
+          if (float32Array.length === 0) {
+            throw new Error("Empty cleaned audio buffer");
           }
 
           // Setup AudioContext
-          const sampleRate = 24000;
           const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate });
           audioContextRef.current = ctx;
 

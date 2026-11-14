@@ -11,7 +11,8 @@ import { ViewModeToggle, ViewMode } from "./ViewModeToggle";
 import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
 import { stbaStorage } from "../../lib/storage/indexedDbClient";
 import { TieredHighlightDropdown, getHighlightInlineStyle } from "./HighlightDropdownMenu";
-import { apiFetch } from "../../lib/apiFetch";
+import { apiFetch, safeParseResponseJson } from "../../lib/apiFetch";
+import { decodeAndCleanGeminiPcm, sanitizeVerbatimSpeechText } from "../../utils/cleanGeminiAudio";
 
 interface ParallelBibleReaderProps {
   reference: string;
@@ -562,7 +563,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
     setPronouncingPlaying(false);
 
     try {
-      const textToSay = `The pronunciation is ${nameObj.name}. ${nameObj.name}.`;
+      const textToSay = sanitizeVerbatimSpeechText(`The pronunciation is ${nameObj.name}. ${nameObj.name}.`);
       const response = await apiFetch("/api/study/narrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -570,27 +571,14 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
       });
 
       if (!response.ok) throw new Error("TTS API failed");
-      const data = await response.json();
+      const data = await safeParseResponseJson<any>(response);
 
-      if (data.success && data.audio) {
-        // Decode raw base64 PCM into Int16Array
-        const binaryString = window.atob(data.audio);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        const arrayBuffer = bytes.buffer;
-
-        // Convert 16-bit signed PCM to 32-bit floating point PCM
-        const int16Array = new Int16Array(arrayBuffer);
-        const float32Array = new Float32Array(int16Array.length);
-        for (let i = 0; i < int16Array.length; i++) {
-          float32Array[i] = int16Array[i] / 32768.0;
-        }
+      if (data?.success && data?.audio) {
+        const sampleRate = 24000;
+        const float32Array = decodeAndCleanGeminiPcm(data.audio, { sampleRate });
+        if (float32Array.length === 0) throw new Error("Empty audio");
 
         // Setup AudioContext
-        const sampleRate = 24000;
         const ctx = nameAudioCtxRef.current || new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate });
         nameAudioCtxRef.current = ctx;
 

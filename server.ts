@@ -2495,10 +2495,254 @@ Return strictly JSON matching this structure:
 let ttsQuotaExceededUntil = 0;
 let ttsUnavailableUntil = 0;
 
+/**
+ * Strips any preliminary instructions, speaker prefixes, bracketed stage directions,
+ * vocal burst tags, and trailing ellipses/dashes so Gemini TTS speaks ONLY the exact intended text.
+ */
+function sanitizeServerVerbatimSpeechText(rawText: string): string {
+  if (!rawText || typeof rawText !== "string") return "";
+  let cleaned = rawText
+    .replace(/^you are elder stephen[^:]*:\s*/i, "")
+    .replace(/^read this (?:guidance|text|passage|scripture)[^:]*:\s*/i, "")
+    .replace(/^speak only the exact[^:]*:\s*/i, "")
+    .replace(/^\[?\s*system instruction[^\]]*\]?:?\s*/gi, "")
+    .replace(/^begin reading:\s*/i, "")
+    .replace(/^(?:Elder Stephen|Elder Stevens|Dr\.?\s*Adams|DrA|Ava|Narrator):\s*/gim, "")
+    .replace(/<(?:breath|sigh|laugh|gasp|pant|yawn|cough|throat-clear|shh+)>/gi, " ")
+    .replace(/\|[a-z]+\|/gi, " ")
+    .replace(/\*\*|###|##|#|\*|`/g, "")
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/Dr\.\s*Adams/g, "Doctor Adams")
+    .replace(/\.{2,}/g, ".")
+    .replace(/\s*—\s*/g, ", ")
+    .replace(/\bshh+\b[.!?]*/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (cleaned && !/[.!?]["']?$/.test(cleaned)) {
+    cleaned += ".";
+  }
+  return cleaned;
+}
+
+/**
+ * Strips any 44-byte RIFF/WAV header and trims trailing sound effects, breaths,
+ * or sibilant 'shh' noises from a 24kHz 16-bit mono base64 audio payload.
+ */
+function cleanServerGeminiPcmBase64(base64Audio: string, sampleRate = 24000): string {
+  try {
+    const rawBuf = Buffer.from(base64Audio, "base64");
+    if (rawBuf.length < 100) return base64Audio;
+
+    let pcmBuf = rawBuf;
+    // Detect RIFF/WAVE header from unary Gemini 3.8 TTS output
+    if (
+      rawBuf.length > 44 &&
+      rawBuf.toString("ascii", 0, 4) === "RIFF" &&
+      rawBuf.toString("ascii", 8, 12) === "WAVE"
+    ) {
+      let offset = 12;
+      let foundData = false;
+      while (offset + 8 <= rawBuf.length) {
+        const chunkId = rawBuf.toString("ascii", offset, offset + 4);
+        const chunkSize = rawBuf.readUInt32LE(offset + 4);
+        const dataStart = offset + 8;
+        if (chunkId === "data") {
+          const safeEnd =
+            chunkSize > 0 && dataStart + chunkSize <= rawBuf.length
+              ? dataStart + chunkSize
+              : rawBuf.length;
+          const evenLen = (safeEnd - dataStart) & ~1;
+          pcmBuf = rawBuf.subarray(dataStart, dataStart + evenLen);
+          foundData = true;
+          break;
+        }
+        if (chunkSize <= 0 || dataStart + chunkSize > rawBuf.length) break;
+        offset = dataStart + chunkSize + (chunkSize & 1);
+      }
+      if (!foundData) {
+        const evenLen = (rawBuf.length - 44) & ~1;
+        pcmBuf = rawBuf.subarray(44, 44 + evenLen);
+      }
+    } else {
+      pcmBuf = rawBuf.subarray(0, rawBuf.length & ~1);
+    }
+
+    const sampleCount = pcmBuf.length >> 1;
+    const frameSize = Math.floor(sampleRate * 0.01); // 10ms frames (240 samples at 24kHz)
+    const numFrames = Math.floor(sampleCount / frameSize);
+    if (numFrames < 8) {
+      return pcmBuf.toString("base64");
+    }
+
+    const samples = new Float32Array(sampleCount);
+    let mean = 0;
+    for (let i = 0; i < sampleCount; i++) {
+      const v = pcmBuf.readInt16LE(i * 2) / 32768.0;
+      samples[i] = v;
+      mean += v;
+    }
+    mean /= sampleCount;
+    if (Math.abs(mean) > 0.0001) {
+      for (let i = 0; i < sampleCount; i++) {
+        samples[i] -= mean;
+      }
+    }
+
+    const rms = new Float32Array(numFrames);
+    const zcr = new Float32Array(numFrames);
+    const hfRatio = new Float32Array(numFrames);
+
+    for (let f = 0; f < numFrames; f++) {
+      const base = f * frameSize;
+      let sumSq = 0;
+      let diffSq = 0;
+      let crossings = 0;
+      let prev = samples[base];
+      for (let i = 0; i < frameSize; i++) {
+        const cur = samples[base + i];
+        sumSq += cur * cur;
+        const diff = cur - prev;
+        diffSq += diff * diff;
+        if ((cur >= 0 && prev < 0) || (cur < 0 && prev >= 0)) crossings++;
+        prev = cur;
+      }
+      rms[f] = Math.sqrt(sumSq / frameSize);
+      zcr[f] = crossings / frameSize;
+      hfRatio[f] = sumSq > 1e-9 ? diffSq / sumSq : 0;
+    }
+
+    const activeRms: number[] = [];
+    for (let f = 0; f < numFrames; f++) {
+      if (rms[f] > 0.004) activeRms.push(rms[f]);
+    }
+    activeRms.sort((a, b) => a - b);
+    const voicedRefRms =
+      activeRms.length > 0
+        ? activeRms[Math.min(activeRms.length - 1, Math.floor(activeRms.length * 0.85))]
+        : 0.05;
+
+    const silenceThreshold = Math.max(0.0035, voicedRefRms * 0.04);
+    const voicedThreshold = Math.max(0.011, voicedRefRms * 0.14);
+
+    let startFrame = 0;
+    while (startFrame < numFrames - 4 && rms[startFrame] < silenceThreshold) {
+      startFrame++;
+    }
+    startFrame = Math.max(0, startFrame - 1);
+
+    let endFrame = numFrames - 1;
+    while (endFrame > startFrame + 4 && rms[endFrame] < silenceThreshold) {
+      endFrame--;
+    }
+
+    // Detect and strip detached trailing sound effects, breaths, or 'shh' bursts in final 900ms
+    const searchWindowFrames = Math.min(90, endFrame - startFrame - 10);
+    if (searchWindowFrames > 12) {
+      const windowStart = endFrame - searchWindowFrames;
+      let gapEnd = -1;
+      let gapStart = -1;
+      for (let f = endFrame - 2; f >= windowStart; f--) {
+        if (rms[f] < silenceThreshold * 1.75) {
+          if (gapEnd === -1) gapEnd = f;
+          gapStart = f;
+        } else if (gapEnd !== -1) {
+          if (gapEnd - gapStart + 1 >= 4) break;
+          gapEnd = -1;
+          gapStart = -1;
+        }
+      }
+      if (gapEnd !== -1 && gapStart !== -1 && gapEnd - gapStart + 1 >= 4) {
+        const burstFrames = endFrame - gapEnd;
+        if (burstFrames > 0 && burstFrames <= 55) {
+          let burstSumRms = 0;
+          let burstMaxRms = 0;
+          let burstSumZcr = 0;
+          let burstSumHf = 0;
+          for (let f = gapEnd + 1; f <= endFrame; f++) {
+            burstSumRms += rms[f];
+            if (rms[f] > burstMaxRms) burstMaxRms = rms[f];
+            burstSumZcr += zcr[f];
+            burstSumHf += hfRatio[f];
+          }
+          const avgZcr = burstSumZcr / burstFrames;
+          const avgHf = burstSumHf / burstFrames;
+          const avgRms = burstSumRms / burstFrames;
+          if (
+            avgZcr > 0.16 ||
+            avgHf > 0.42 ||
+            burstMaxRms < voicedRefRms * 0.55 ||
+            avgRms < voicedRefRms * 0.3
+          ) {
+            endFrame = gapStart;
+            while (endFrame > startFrame + 4 && rms[endFrame] < silenceThreshold * 1.5) {
+              endFrame--;
+            }
+          }
+        }
+      }
+    }
+
+    // Strip attached trailing 'shh' / sibilant hiss / breath decay at the end of the final word
+    const maxAttachedTailFrames = Math.min(60, endFrame - startFrame - 6);
+    let strippedAttached = 0;
+    while (endFrame > startFrame + 6 && strippedAttached < maxAttachedTailFrames) {
+      const isHighFreqSibilantOrShh =
+        (zcr[endFrame] > 0.18 || hfRatio[endFrame] > 0.45) &&
+        rms[endFrame] < voicedRefRms * 0.48;
+      const isLowEnergyBreathTail = rms[endFrame] < voicedThreshold * 0.72;
+      if (isHighFreqSibilantOrShh || isLowEnergyBreathTail) {
+        endFrame--;
+        strippedAttached++;
+      } else {
+        break;
+      }
+    }
+
+    if (
+      endFrame + 1 < numFrames &&
+      zcr[endFrame + 1] < 0.17 &&
+      hfRatio[endFrame + 1] < 0.42 &&
+      rms[endFrame + 1] < voicedRefRms * 0.35
+    ) {
+      endFrame = Math.min(numFrames - 1, endFrame + 1);
+    }
+
+    const startSample = startFrame * frameSize;
+    const endSample = Math.min(sampleCount, (endFrame + 1) * frameSize);
+    if (endSample <= startSample) {
+      return pcmBuf.toString("base64");
+    }
+
+    const outSampleCount = endSample - startSample;
+    const fadeInSamples = Math.min(Math.floor(sampleRate * 0.008), Math.floor(outSampleCount / 4));
+    const fadeOutSamples = Math.min(Math.floor(sampleRate * 0.03), Math.floor(outSampleCount / 3));
+    const fadeOutStart = outSampleCount - fadeOutSamples;
+
+    const outBuf = Buffer.allocUnsafe(outSampleCount * 2);
+    for (let i = 0; i < outSampleCount; i++) {
+      let s = samples[startSample + i];
+      if (i < fadeInSamples) {
+        s *= 0.5 * (1 - Math.cos((Math.PI * i) / fadeInSamples));
+      } else if (i >= fadeOutStart) {
+        const k = i - fadeOutStart;
+        s *= 0.5 * (1 + Math.cos((Math.PI * k) / fadeOutSamples));
+      }
+      const clamped = Math.max(-1, Math.min(1, s));
+      outBuf.writeInt16LE(Math.round(clamped * 32767), i * 2);
+    }
+
+    return outBuf.toString("base64");
+  } catch {
+    return base64Audio;
+  }
+}
+
 // AI Scripture Narration TTS Endpoint
 app.post("/api/study/narrate", async (req, res) => {
   const { text, voice } = req.body;
-  if (!text) {
+  const verbatimText = sanitizeServerVerbatimSpeechText(text);
+  if (!verbatimText) {
     return res.status(400).json({ error: "Text is required for narration." });
   }
 
@@ -2538,9 +2782,19 @@ app.post("/api/study/narrate", async (req, res) => {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
+      // Pass ONLY the exact intended verbatimText in parts[0].text without any preliminary instructions
       const response = await aiClient.models.generateContent({
         model: "gemini-3.8-flash-lite-tts",
-        contents: [{ parts: [{ text: `You are Elder Stephen, a warm, pastoral, calm, and wise spiritual mentor. Read this guidance clearly, confidently, and reverently with standard pacing and normal speed: ${text}` }] }],
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: verbatimText
+              }
+            ]
+          }
+        ],
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -2552,11 +2806,12 @@ app.post("/api/study/narrate", async (req, res) => {
         }
       });
 
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
+      const rawBase64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (rawBase64Audio) {
+        const cleanedBase64Audio = cleanServerGeminiPcmBase64(rawBase64Audio);
         return res.json({
           success: true,
-          audio: base64Audio
+          audio: cleanedBase64Audio
         });
       } else {
         throw new Error("No inline audio parts found in Gemini TTS response.");
@@ -6162,9 +6417,10 @@ ${rawText}`;
     let base64Audio: string | undefined = undefined;
     if (Date.now() >= ttsQuotaExceededUntil && Date.now() >= ttsUnavailableUntil) {
       try {
+        const cleanAvaText = sanitizeServerVerbatimSpeechText(narrationText.slice(0, 800));
         const audioResponse = await aiClient.models.generateContent({
           model: "gemini-3.8-flash-lite-tts",
-          contents: [{ parts: [{ text: narrationText.slice(0, 800) }] }],
+          contents: [{ role: "user", parts: [{ text: cleanAvaText }] }],
           config: {
             responseModalities: [Modality.AUDIO],
             speechConfig: {
@@ -6174,7 +6430,10 @@ ${rawText}`;
             }
           }
         });
-        base64Audio = audioResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        const rawAvaAudio = audioResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (rawAvaAudio) {
+          base64Audio = cleanServerGeminiPcmBase64(rawAvaAudio);
+        }
       } catch (ttsErr) {
         // Fallback gracefully to Web Speech
       }
@@ -9014,7 +9273,8 @@ CRITICAL MANDATE: PROACTIVE GREETING & AUTOMATIC STAGE PROGRESSION (NO USER INIT
 Overall Requirements:
 • Ensure the entire flow feels like a natural and intuitive journey through the stages.
 • Keep ${userName} engaged and reassured that they’re progressing with each step.
-• Maintain a friendly, supportive tone while guiding ${userName} forward.`;
+• Maintain a friendly, supportive tone while guiding ${userName} forward.
+• Speak ONLY the exact intended spoken response directly to ${userName} without reading any preliminary instructions or stage directions out loud, and finish every sentence cleanly without any trailing sound effects, sighs, or 'shh' noises.`;
   } else {
     liveSystemInstruction = `You are Elder Stephen, an exegetical, Seventh-day Adventist historical method mentor for live interactive Bible study in the "Study To Be Approved" (STBA) Bible Study system.
 
@@ -9030,7 +9290,8 @@ SEVENTH-DAY ADVENTIST HISTORICAL METHOD & EXEGESIS MENTOR PERSONA:
 3. **Interactive Flow (Interactive, Not Rigid)**: When ${userName} shares a thought or asks a question, respond with affirming and guiding language (e.g., "That's a great observation! Let's look at how this passage is connected to another verse in context." or "Amen! Notice how Paul connects this phrase...").
 4. **Conversational Rhythm**: Keep each spoken response warm, natural, and concise (1–3 focused sentences or a brief conversational thought) so that ${userName} can easily reply and build the dialogue together. Avoid long lectures or rigid monologues.
 5. **Direct Conversational Start**: When Interactive Mode starts, greet ${userName} warmly, acknowledge the passage (${scriptureRef || "God's Word"}), and invite them directly into the discussion with a thoughtful, gentle question about what they notice in the text.
-6. **Maintain Active Ongoing Conversation**: Continue interacting for as long as ${userName} remains engaged in discussion, without any automatic timeouts, conclusions, or artificial pauses. Always stay responsive and invite ongoing back-and-forth dialogue.`;
+6. **Maintain Active Ongoing Conversation**: Continue interacting for as long as ${userName} remains engaged in discussion, without any automatic timeouts, conclusions, or artificial pauses. Always stay responsive and invite ongoing back-and-forth dialogue.
+7. **Clean Voice Output**: Speak ONLY the exact intended spoken response without any preliminary instructions or stage directions, and end every sentence cleanly without any trailing sound effects, sighs, or 'shh' noises.`;
   }
 
   const sessionPromise = aiClient.live.connect({

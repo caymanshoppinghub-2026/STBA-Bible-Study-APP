@@ -23,6 +23,7 @@ import {
 import { useApp } from "../context/AppContext";
 import { TtsPlayer, preCacheSpeechAudios } from "./TtsPlayer";
 import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from "../lib/apiFetch";
+import { decodeAndCleanGeminiPcm, sanitizeVerbatimSpeechText } from "../utils/cleanGeminiAudio";
 import { ELDER_STEVEN_PORTRAIT_URL, STBA_LOGO_URL } from "../assets/branding";
 
 type OnboardingStage =
@@ -333,13 +334,7 @@ export const TourOverlay: React.FC = () => {
 
       if (isMuted || typeof window === "undefined") return;
 
-      const cleaned = text
-        .replace(/\*\*|###|##|#|\*/g, "")
-        .replace(/[\[\]]/g, "")
-        .replace(/DrA:/g, "")
-        .replace(/Elder Stephen:/g, "")
-        .replace(/Dr. Adams/g, "Doctor Adams")
-        .trim();
+      const cleaned = sanitizeVerbatimSpeechText(text);
 
       if (!cleaned) return;
 
@@ -349,7 +344,7 @@ export const TourOverlay: React.FC = () => {
 
       const savedVoice = localStorage.getItem("stba_ai_voice");
       const voice = !savedVoice || savedVoice === "Charon" ? "Puck" : savedVoice;
-      const cacheKey = `${cleaned}_${voice}`;
+      const cacheKey = `v2_${cleaned}_${voice}`;
       const cache = (window as any).__STBA_TTS_CACHE__ || {};
 
       try {
@@ -399,20 +394,14 @@ export const TourOverlay: React.FC = () => {
 
         if (!base64Audio || reqId !== geminiSpeechReqIdRef.current) return;
 
-        // Decode 24kHz 16-bit signed PCM from Gemini Live 3.8 TTS
-        const binaryString = window.atob(base64Audio);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        const int16Array = new Int16Array(bytes.buffer);
-        const float32Array = new Float32Array(int16Array.length);
-        for (let i = 0; i < int16Array.length; i++) {
-          float32Array[i] = int16Array[i] / 32768.0;
+        // Decode 24kHz 16-bit PCM, strip WAV headers, and remove trailing sound effects / 'shh' noises
+        const sampleRate = 24000;
+        const float32Array = decodeAndCleanGeminiPcm(base64Audio, { sampleRate });
+        if (float32Array.length === 0) {
+          setIsSpeakingGreeting(false);
+          return;
         }
 
-        const sampleRate = 24000;
         const ctx =
           geminiAudioCtxRef.current ||
           new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate });

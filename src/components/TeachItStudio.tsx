@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
+import { decodeAndCleanGeminiPcm } from "../utils/cleanGeminiAudio";
 import {
   X,
   Mic,
@@ -535,22 +536,13 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       if (ctx.state === "suspended") {
         ctx.resume();
       }
-      const binaryString = window.atob(base64Audio);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      
-      const dataView = new DataView(bytes.buffer);
-      const samplesCount = len / 2;
-      const floatSamples = new Float32Array(samplesCount);
-      for (let i = 0; i < samplesCount; i++) {
-        const intSample = dataView.getInt16(i * 2, true);
-        floatSamples[i] = intSample / 32768;
-      }
-      
-      const buffer = ctx.createBuffer(1, samplesCount, 24000);
+      const floatSamples = decodeAndCleanGeminiPcm(base64Audio, {
+        sampleRate: 24000,
+        isStreamingChunk: true
+      });
+      if (floatSamples.length === 0) return;
+
+      const buffer = ctx.createBuffer(1, floatSamples.length, 24000);
       buffer.copyToChannel(floatSamples, 0);
       
       const sourceNode = ctx.createBufferSource();
