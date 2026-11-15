@@ -54,6 +54,20 @@ interface ConfettiParticle {
   rotate: number;
 }
 
+// Master Pre-Recorded Audio Files for Instantaneous 0ms Tour Playback
+const TOUR_AUDIO_MAP: Record<string, string> = {
+  welcome_modal: "/audio/tour/welcome.mp3",
+  "cluster-ai-mentor": "/audio/tour/cluster_mentor.mp3",
+  "cluster-study-modes": "/audio/tour/cluster_study_modes.mp3",
+  "cluster-navigation-drawer": "/audio/tour/cluster_navigation.mp3",
+  "cluster-profile-transition": "/audio/tour/cluster_profile_transition.mp3",
+  "profile-avatar-pause": "/audio/tour/profile_avatar.mp3",
+  "profile-scribal-journal": "/audio/tour/profile_journal.mp3",
+  "profile-mastery-analytics": "/audio/tour/profile_analytics.mp3",
+  "profile-exit-to-dashboard": "/audio/tour/profile_exit.mp3",
+  study_tracks_conclusion: "/audio/tour/conclusion.mp3"
+};
+
 export const TourOverlay: React.FC = () => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -84,6 +98,18 @@ export const TourOverlay: React.FC = () => {
   const geminiAudioCtxRef = useRef<AudioContext | null>(null);
   const geminiAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const geminiSpeechReqIdRef = useRef<number>(0);
+  const tourAudioElRef = useRef<HTMLAudioElement | null>(null);
+
+  // Proactively pre-cache and buffer all 10 tour master audio files as soon as user opens session
+  useEffect(() => {
+    Object.values(TOUR_AUDIO_MAP).forEach((url) => {
+      try {
+        const audio = new Audio();
+        audio.preload = "auto";
+        audio.src = url;
+      } catch {}
+    });
+  }, []);
 
   // Enforce Gemini Live 3.8 voice settings while tour is active
   useEffect(() => {
@@ -313,6 +339,13 @@ export const TourOverlay: React.FC = () => {
 
   const stopSpeech = useCallback(() => {
     geminiSpeechReqIdRef.current += 1;
+    if (tourAudioElRef.current) {
+      try {
+        tourAudioElRef.current.pause();
+        tourAudioElRef.current.currentTime = 0;
+      } catch {}
+      tourAudioElRef.current = null;
+    }
     if (geminiAudioSourceRef.current) {
       geminiAudioSourceRef.current.onended = null;
       try {
@@ -328,13 +361,45 @@ export const TourOverlay: React.FC = () => {
     setIsSpeakingGreeting(false);
   }, []);
 
+  const fallbackToAndrewSpeech = useCallback((textToSpeak: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(textToSpeak);
+      utt.rate = 0.95;
+      utt.pitch = 0.95;
+      const voices = window.speechSynthesis.getVoices();
+      const andrewVoice =
+        voices.find(
+          (v) =>
+            v.name.toLowerCase().includes("andrew") &&
+            v.name.toLowerCase().includes("natural")
+        ) ||
+        voices.find((v) => v.name.toLowerCase().includes("andrew")) ||
+        voices.find(
+          (v) =>
+            v.lang.startsWith("en") &&
+            v.name.toLowerCase().includes("natural") &&
+            !v.name.toLowerCase().includes("female") &&
+            !v.name.toLowerCase().includes("zira")
+        ) ||
+        voices[0];
+      if (andrewVoice) {
+        utt.voice = andrewVoice;
+      }
+      utt.onend = () => setIsSpeakingGreeting(false);
+      utt.onerror = () => setIsSpeakingGreeting(false);
+      setIsSpeakingGreeting(true);
+      window.speechSynthesis.speak(utt);
+    } catch {}
+  }, []);
+
   /**
-   * Speaks tour narration exclusively using the Gemini Live 3.8 voice engine,
-   * strictly avoiding the Edge / browser Web Speech API (`window.speechSynthesis`)
-   * for the entire duration of the onboarding tour.
+   * Speaks tour narration with instantaneous 0ms audio playback using
+   * pre-recorded master snippets, cached Gemini Live audio, or Microsoft Andrew Natural fallback.
    */
   const speakText = useCallback(
-    async (text: string) => {
+    async (text: string, audioFileUrl?: string) => {
       // Ensure any stray browser speechSynthesis is immediately silenced
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         try {
@@ -345,12 +410,32 @@ export const TourOverlay: React.FC = () => {
       if (isMuted || typeof window === "undefined") return;
 
       const cleaned = sanitizeVerbatimSpeechText(text);
-
       if (!cleaned) return;
 
-      // Cancel any previous in-flight Gemini tour narration before starting the new step
+      // Cancel any previous in-flight tour narration before starting the new step
       stopSpeech();
       const reqId = geminiSpeechReqIdRef.current;
+
+      // 1. Instantaneous 0ms Master Pre-Recorded Audio File Playback
+      if (audioFileUrl) {
+        try {
+          const audio = new Audio(audioFileUrl);
+          tourAudioElRef.current = audio;
+          audio.onplay = () => setIsSpeakingGreeting(true);
+          audio.onended = () => {
+            setIsSpeakingGreeting(false);
+            tourAudioElRef.current = null;
+          };
+          audio.onerror = () => {
+            tourAudioElRef.current = null;
+            fallbackToAndrewSpeech(cleaned);
+          };
+          await audio.play();
+          return;
+        } catch {
+          // If browser policy intercepted autoplay, smoothly fall through
+        }
+      }
 
       const savedVoice = localStorage.getItem("stba_ai_voice");
       const voice = savedVoice && savedVoice !== "Puck" ? savedVoice : "Charon";
@@ -595,8 +680,8 @@ export const TourOverlay: React.FC = () => {
     localStorage.setItem("stba_onboarding_stage", "welcome_modal");
     triggerCelebrationConfetti();
     setTimeout(() => {
-      speakText(welcomeGreetingText);
-    }, 350);
+      speakText(welcomeGreetingText, TOUR_AUDIO_MAP.welcome_modal);
+    }, 250);
   }, [cleanupHighlight, speakText, triggerCelebrationConfetti, welcomeGreetingText]);
 
   const startDashboardClusterTour = useCallback(() => {
@@ -648,7 +733,7 @@ export const TourOverlay: React.FC = () => {
         tracksCard.classList.add("tour-highlight");
         currentTargetRef.current = tracksCard;
       }
-      speakText(tracksConclusionSpeech);
+      speakText(tracksConclusionSpeech, TOUR_AUDIO_MAP.study_tracks_conclusion);
     }, 450);
   }, [cleanupHighlight, navigate, pathname, speakText, stopSpeech, tracksConclusionSpeech]);
 
@@ -827,8 +912,9 @@ export const TourOverlay: React.FC = () => {
       stepObj.onEnter();
     }
 
-    // Instantly trigger voice narration from memory / cache with 0ms delay
-    speakText(`${stepObj.title}. ${stepObj.body}`);
+    // Instantly trigger voice narration from master audio snippet with 0ms delay
+    const stepAudioUrl = TOUR_AUDIO_MAP[stepObj.id];
+    speakText(`${stepObj.title}. ${stepObj.body}`, stepAudioUrl);
 
     const timer = setTimeout(() => {
       const element = stepObj.targetSelector();
