@@ -494,28 +494,8 @@ export const TourOverlay: React.FC = () => {
               sessionStorage.setItem(`stba_tts_${cacheKey}`, base64Audio);
             } catch {}
           } else {
-            // If Gemini 3.8 is temporarily offline or quota-limited, smoothly speak via natural speech synthesis
-            if (typeof window !== "undefined" && "speechSynthesis" in window) {
-              const utt = new SpeechSynthesisUtterance(cleaned);
-              utt.rate = 0.95;
-              utt.pitch = 0.95;
-              const voices = window.speechSynthesis.getVoices();
-              const preferredVoice =
-                voices.find(
-                  (v) =>
-                    v.name.includes("Natural") ||
-                    v.name.includes("Andrew") ||
-                    v.name.includes("Male") ||
-                    v.name.includes("Guy")
-                ) || voices[0];
-              if (preferredVoice) utt.voice = preferredVoice;
-              utt.onend = () => setIsSpeakingGreeting(false);
-              utt.onerror = () => setIsSpeakingGreeting(false);
-              setIsSpeakingGreeting(true);
-              window.speechSynthesis.speak(utt);
-              return;
-            }
-            setIsSpeakingGreeting(false);
+            // Fallback to Microsoft Andrew Natural language speech synthesis
+            fallbackToAndrewSpeech(cleaned);
             return;
           }
         }
@@ -770,7 +750,8 @@ export const TourOverlay: React.FC = () => {
     }
 
     if (pathname === "/dashboard") {
-      if (savedStage === "welcome_modal" || (isNewUser && !v3Done && !savedStage)) {
+      // ONLY automatically launch the onboarding tour for newly signed up users
+      if (isNewUser && (savedStage === "welcome_modal" || (!v3Done && !savedStage))) {
         const timer = setTimeout(() => {
           launchWelcomeModal();
         }, 400);

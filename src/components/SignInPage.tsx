@@ -130,16 +130,16 @@ export const SignInPage: React.FC = () => {
         await ensureInitialUserTrackProgress(authUser.id, activeUser.firstTrack || "fundamental-beliefs");
       }
 
-      // Bypass Onboarding by removing the walkthrough state triggers
+      // Bypass Onboarding for returning users by marking completed and clearing stage triggers
       localStorage.removeItem("stba_onboarding_explain_first");
-
-      // Trigger the AI Mentor greeting welcoming the user back
-      localStorage.setItem("stba_welcome_back_stephen", "true");
+      localStorage.removeItem("stba_onboarding_pending");
+      localStorage.removeItem("stba_onboarding_stage");
+      localStorage.setItem("stba_onboarding_v3_completed", "true");
+      localStorage.setItem("stba_tour_completed", "true");
+      localStorage.setItem("stba_profile_tour_completed", "true");
       localStorage.setItem("stba_is_new_user", "false");
 
-      // Reset tour and welcome for the new session
-      localStorage.removeItem("stba_tour_completed");
-      sessionStorage.removeItem("stba_session_tour_completed");
+      sessionStorage.setItem("stba_session_tour_completed", "true");
       sessionStorage.removeItem("stba_session_welcomed");
       sessionStorage.removeItem("stba_session_welcomed_spoken");
 
