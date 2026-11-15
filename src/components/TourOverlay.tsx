@@ -132,7 +132,7 @@ export const TourOverlay: React.FC = () => {
     {
       id: "cluster-study-modes",
       clusterBadge: "Cluster 2 • Core Study Modes",
-      title: "Seven Study Engines & Zeroed Progress",
+      title: "Seven Study Modes for Mastery",
       body: "All seven STBA study modes are unified into a single launchpad right above your Spiritual Learning Journey gauges:",
       bullets: [
         "Exegesis & Doctrine: Bible Study Mode, Study Tracks, and Doctrine Navigator.",
