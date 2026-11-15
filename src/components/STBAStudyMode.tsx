@@ -1288,15 +1288,7 @@ export function STBAStudyMode() {
               </div>
             )}
 
-            {/* Topic Search Active - Prompt user to click a verse */}
-            {activeTopicSearch && !report && !isExegesisSynthesizing && (
-              <div className="px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/25 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 font-sans select-none shrink-0">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                <span>
-                  Topic <strong>"{activeTopicSearch}"</strong> active ({customVerses?.length || 0} verses loaded). Click any verse row on the left to activate 7-step theological exegesis.
-                </span>
-              </div>
-            )}
+            {/* Topic Search Active information block removed from UI per user specification while preserving all underlying activeTopicSearch logic and background synthesis */}
 
             <div className="flex-1 overflow-hidden relative">
               <AnimatePresence mode="wait">

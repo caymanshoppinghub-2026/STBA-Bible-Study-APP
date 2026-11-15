@@ -727,164 +727,162 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
         const briefSummary = report?.step1?.summary || report?.introduction || "Systematic verification of original language dictionary roots and covenant parallel references.";
 
         return (
-          <div className={`px-4 py-4 border-b flex flex-col md:flex-row md:items-start justify-between gap-4 select-none transition-all duration-150 ${
+          <div className={`px-4 py-3 border-b flex flex-col gap-2.5 select-none transition-all duration-150 ${
             theme === "dark" 
               ? "bg-[#141922] border-[#21262D]" 
               : "bg-[#FDFAF5] border-[#E8E2D5]"
           }`}>
-            {/* Left Portion: Scriptural Context & Identity Details */}
-            <div className="space-y-1.5 flex-1 min-w-0">
-              {isTopicMode && (
-                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 font-bold border border-amber-500/30">
-                    {verses.length} Scripture Passages
+            {/* Top Row: Scripture Input, Topic Search, Search Button, and Bible Version Buttons in a single horizontal row */}
+            <div className="flex flex-wrap items-center justify-start md:justify-end gap-2 sm:gap-2.5 w-full">
+              {/* Scripture Reference Input */}
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={queryRef}
+                  onChange={(e) => {
+                    setQueryRef && setQueryRef(e.target.value);
+                    setLastActiveSearchField && setLastActiveSearchField('ref');
+                  }}
+                  onFocus={() => {
+                    setLastActiveSearchField && setLastActiveSearchField('ref');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && handleLoadExegesis) {
+                      e.preventDefault();
+                      setLastActiveSearchField && setLastActiveSearchField('ref');
+                      handleLoadExegesis(queryRef, "");
+                    }
+                  }}
+                  placeholder="e.g. Genesis or John 1:3"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className={`px-2.5 py-1.5 text-xs rounded outline-none w-32 sm:w-36 md:w-40 font-serif border transition-all ${
+                    queryRef && queryTopic && lastActiveSearchField === 'ref'
+                      ? "border-[#C9973A] ring-1 ring-[#C9973A] shadow-[0_0_8px_rgba(201,151,58,0.3)]"
+                      : theme === "dark" ? "bg-[#161B22] border-[#30363D] text-white" : "bg-white border-gray-300 text-gray-800"
+                  } ${theme === "dark" ? "bg-[#161B22] text-white" : "bg-white text-gray-800"}`}
+                />
+                {queryRef && queryTopic && lastActiveSearchField === 'ref' && (
+                  <span 
+                    className="absolute -top-2 right-1.5 bg-[#C9973A] text-white font-mono text-[8px] px-1 py-0.2 rounded font-bold uppercase tracking-tight pointer-events-none shadow-xs"
+                    title="Prioritized search field (most recently edited)"
+                  >
+                    Priority
                   </span>
-                </div>
-              )}
+                )}
+              </div>
 
-              {isTopicMode && (
-                <p className="text-xs text-stone-500 dark:text-stone-400 font-sans flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span>Click any verse below to activate 7-step theological synthesis in the background.</span>
-                </p>
-              )}
-
-              {isExegesisSynthesizing && (
-                <div className="flex items-center gap-2 text-xs font-mono text-amber-500 dark:text-amber-400 font-bold animate-pulse">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C9973A] shrink-0" />
-                  <span>Synthesizing exegesis for {synthesizingVerseRef || "selected verse"} in background...</span>
-                </div>
-              )}
-            </div>
-
-            {/* Right Portion: Scripture Input, Topic Search, Search Button, and Bible Version Buttons in a single unified horizontal row */}
-            <div className="flex flex-col gap-1.5 shrink-0 self-stretch md:self-start items-start md:items-end">
-              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 self-stretch md:self-auto justify-start md:justify-end">
-                {/* Scripture Reference Input */}
-                <div className="relative flex items-center">
-                  <input
-                    type="text"
-                    value={queryRef}
-                    onChange={(e) => {
-                      setQueryRef && setQueryRef(e.target.value);
-                      setLastActiveSearchField && setLastActiveSearchField('ref');
-                    }}
-                    onFocus={() => {
-                      setLastActiveSearchField && setLastActiveSearchField('ref');
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && handleLoadExegesis) {
-                        e.preventDefault();
-                        setLastActiveSearchField && setLastActiveSearchField('ref');
-                        handleLoadExegesis(queryRef, "");
-                      }
-                    }}
-                    placeholder="e.g. Genesis or John 1:3"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className={`px-2.5 py-1.5 text-xs rounded outline-none w-32 sm:w-36 md:w-40 font-serif border transition-all ${
-                      queryRef && queryTopic && lastActiveSearchField === 'ref'
-                        ? "border-[#C9973A] ring-1 ring-[#C9973A] shadow-[0_0_8px_rgba(201,151,58,0.3)]"
-                        : theme === "dark" ? "bg-[#161B22] border-[#30363D] text-white" : "bg-white border-gray-300 text-gray-800"
-                    } ${theme === "dark" ? "bg-[#161B22] text-white" : "bg-white text-gray-800"}`}
-                  />
-                  {queryRef && queryTopic && lastActiveSearchField === 'ref' && (
-                    <span 
-                      className="absolute -top-2 right-1.5 bg-[#C9973A] text-white font-mono text-[8px] px-1 py-0.2 rounded font-bold uppercase tracking-tight pointer-events-none shadow-xs"
-                      title="Prioritized search field (most recently edited)"
-                    >
-                      Priority
-                    </span>
-                  )}
-                </div>
-
-                {/* Topic / Keyword Search Input */}
-                <div className="relative flex items-center">
-                  <input
-                    type="text"
-                    value={queryTopic}
-                    onChange={(e) => {
-                      setQueryTopic && setQueryTopic(e.target.value);
+              {/* Topic / Keyword Search Input */}
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={queryTopic}
+                  onChange={(e) => {
+                    setQueryTopic && setQueryTopic(e.target.value);
+                    setLastActiveSearchField && setLastActiveSearchField('topic');
+                  }}
+                  onFocus={() => {
+                    setLastActiveSearchField && setLastActiveSearchField('topic');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && handleLoadExegesis) {
+                      e.preventDefault();
                       setLastActiveSearchField && setLastActiveSearchField('topic');
-                    }}
-                    onFocus={() => {
-                      setLastActiveSearchField && setLastActiveSearchField('topic');
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && handleLoadExegesis) {
-                        e.preventDefault();
-                        setLastActiveSearchField && setLastActiveSearchField('topic');
-                        handleLoadExegesis("", queryTopic);
-                      }
-                    }}
-                    placeholder="Topic (e.g. grace, faith)..."
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className={`px-2.5 py-1.5 text-xs rounded outline-none w-36 sm:w-44 md:w-48 font-sans border transition-all ${
-                      queryRef && queryTopic && lastActiveSearchField === 'topic'
-                        ? "border-[#C9973A] ring-1 ring-[#C9973A] shadow-[0_0_8px_rgba(201,151,58,0.3)]"
-                        : theme === "dark" ? "bg-[#161B22] border-[#30363D] text-white" : "bg-white border-gray-300 text-gray-800"
-                    } ${theme === "dark" ? "bg-[#161B22] text-white" : "bg-white text-gray-800"}`}
-                  />
-                  {queryRef && queryTopic && lastActiveSearchField === 'topic' && (
-                    <span 
-                      className="absolute -top-2 right-1.5 bg-[#C9973A] text-white font-mono text-[8px] px-1 py-0.2 rounded font-bold uppercase tracking-tight pointer-events-none shadow-xs"
-                      title="Prioritized search field (most recently edited)"
+                      handleLoadExegesis("", queryTopic);
+                    }
+                  }}
+                  placeholder="Topic (e.g. grace, faith)..."
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className={`px-2.5 py-1.5 text-xs rounded outline-none w-36 sm:w-44 md:w-48 font-sans border transition-all ${
+                    queryRef && queryTopic && lastActiveSearchField === 'topic'
+                      ? "border-[#C9973A] ring-1 ring-[#C9973A] shadow-[0_0_8px_rgba(201,151,58,0.3)]"
+                      : theme === "dark" ? "bg-[#161B22] border-[#30363D] text-white" : "bg-white border-gray-300 text-gray-800"
+                  } ${theme === "dark" ? "bg-[#161B22] text-white" : "bg-white text-gray-800"}`}
+                />
+                {queryRef && queryTopic && lastActiveSearchField === 'topic' && (
+                  <span 
+                    className="absolute -top-2 right-1.5 bg-[#C9973A] text-white font-mono text-[8px] px-1 py-0.2 rounded font-bold uppercase tracking-tight pointer-events-none shadow-xs"
+                    title="Prioritized search field (most recently edited)"
+                  >
+                    Priority
+                  </span>
+                )}
+              </div>
+
+              {/* Search Button */}
+              <button
+                onClick={() => handleLoadExegesis && handleLoadExegesis(queryRef, queryTopic)}
+                disabled={loading}
+                className="bg-[#C9973A] hover:bg-[#B2822B] text-white px-3 py-1.5 text-xs rounded font-mono font-bold tracking-wide transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                title={
+                  queryRef && queryTopic 
+                    ? `Searching by ${lastActiveSearchField === 'topic' ? 'Topic ("' + queryTopic + '")' : 'Scripture ("' + queryRef + '")'} (most recently edited)` 
+                    : "Search Scripture or Topic"
+                }
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                Search
+              </button>
+
+              {/* Translation selects picker check buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                {["KJV", "NKJV", "ESV", "NASB"].map((version) => {
+                  const isSelected = selectedVersions.includes(version);
+                  return (
+                    <button
+                      key={version}
+                      onClick={() => toggleVersion(version)}
+                      className={`px-2.5 sm:px-3 py-1.5 text-xs font-mono font-bold tracking-wider transition-all rounded cursor-pointer border outline-none focus:outline-none focus:ring-0 ${
+                        isSelected
+                          ? theme === "dark"
+                            ? "text-[#C9A86A] bg-[#C9A86A]/10 border-[#C9A86A]"
+                            : "text-[#C9A86A] bg-[#C9A86A]/15 border-[#C9A86A]"
+                          : theme === "dark"
+                            ? "text-gray-300 bg-transparent border-transparent hover:text-[#C9A86A] hover:bg-[#C9A86A]/5 hover:border-[#C9A86A]/20 hover:shadow-[0_0_8px_rgba(201,168,106,0.25)]"
+                            : "text-gray-700 bg-transparent border-transparent hover:text-[#C9A86A] hover:bg-[#C9A86A]/5 hover:border-[#C9A86A]/20 hover:shadow-[0_0_8px_rgba(201,168,106,0.25)]"
+                      }`}
                     >
-                      Priority
-                    </span>
-                  )}
-                </div>
-
-                {/* Search Button */}
-                <button
-                  onClick={() => handleLoadExegesis && handleLoadExegesis(queryRef, queryTopic)}
-                  disabled={loading}
-                  className="bg-[#C9973A] hover:bg-[#B2822B] text-white px-3 py-1.5 text-xs rounded font-mono font-bold tracking-wide transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
-                  title={
-                    queryRef && queryTopic 
-                      ? `Searching by ${lastActiveSearchField === 'topic' ? 'Topic ("' + queryTopic + '")' : 'Scripture ("' + queryRef + '")'} (most recently edited)` 
-                      : "Search Scripture or Topic"
-                  }
-                >
-                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                  Search
-                </button>
-
-                {/* Translation selects picker check buttons */}
-                <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-                  {["KJV", "NKJV", "ESV", "NASB"].map((version) => {
-                    const isSelected = selectedVersions.includes(version);
-                    return (
-                      <button
-                        key={version}
-                        onClick={() => toggleVersion(version)}
-                        className={`px-2.5 sm:px-3 py-1.5 text-xs font-mono font-bold tracking-wider transition-all rounded cursor-pointer border outline-none focus:outline-none focus:ring-0 ${
-                          isSelected
-                            ? theme === "dark"
-                              ? "text-[#C9A86A] bg-[#C9A86A]/10 border-[#C9A86A]"
-                              : "text-[#C9A86A] bg-[#C9A86A]/15 border-[#C9A86A]"
-                            : theme === "dark"
-                              ? "text-gray-300 bg-transparent border-transparent hover:text-[#C9A86A] hover:bg-[#C9A86A]/5 hover:border-[#C9A86A]/20 hover:shadow-[0_0_8px_rgba(201,168,106,0.25)]"
-                              : "text-gray-700 bg-transparent border-transparent hover:text-[#C9A86A] hover:bg-[#C9A86A]/5 hover:border-[#C9A86A]/20 hover:shadow-[0_0_8px_rgba(201,168,106,0.25)]"
-                        }`}
-                      >
-                        {version}
-                      </button>
-                    );
-                  })}
-                </div>
+                      {version}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Error Message (if any) */}
               {errorMsg && (
-                <span className="text-red-500 font-mono text-[11px] animate-pulse self-start md:self-end">
+                <span className="text-red-500 font-mono text-[11px] animate-pulse self-center">
                   *{errorMsg}
                 </span>
               )}
             </div>
+
+            {/* Bottom Row: Topic search passage count and related details stacked horizontally along the bottom */}
+            {(isTopicMode || isExegesisSynthesizing) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1.5 border-t border-current/10 w-full">
+                {isTopicMode && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 font-bold border border-amber-500/30 whitespace-nowrap shrink-0">
+                    {verses.length} Scripture Passages
+                  </span>
+                )}
+
+                {isTopicMode && (
+                  <p className="text-xs text-stone-500 dark:text-stone-400 font-sans flex items-center gap-1.5 min-w-0">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>Click any verse below to activate 7-step theological synthesis in the background.</span>
+                  </p>
+                )}
+
+                {isExegesisSynthesizing && (
+                  <div className="flex items-center gap-2 text-xs font-mono text-amber-500 dark:text-amber-400 font-bold animate-pulse">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C9973A] shrink-0" />
+                    <span>Synthesizing exegesis for {synthesizingVerseRef || "selected verse"} in background...</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       })()}
