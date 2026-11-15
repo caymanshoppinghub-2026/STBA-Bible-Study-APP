@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d3060"/>
+      <stop offset="50%" stop-color="#081b36"/>
+      <stop offset="100%" stop-color="#040e1d"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF0A8"/>
+      <stop offset="40%" stop-color="#F3CF65"/>
+      <stop offset="75%" stop-color="#E5B842"/>
+      <stop offset="100%" stop-color="#C9973A"/>
+    </linearGradient>
+    <filter id="goldGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  
+  <!-- Outer Rounded Shield / Tile Background -->
+  <rect width="512" height="512" rx="108" fill="url(#bgGrad)"/>
+  
+  <!-- Golden Border Ring -->
+  <circle cx="256" cy="256" r="226" fill="none" stroke="url(#goldGrad)" stroke-width="6" opacity="0.85"/>
+  <circle cx="256" cy="256" r="214" fill="none" stroke="url(#goldGrad)" stroke-width="2" stroke-dasharray="8 6" opacity="0.6"/>
+
+  <!-- Holy Scriptures Open Bible Symbol -->
+  <g transform="translate(256, 230) scale(1.35)" filter="url(#goldGlow)">
+    <!-- Left Page -->
+    <path d="M -90,-40 C -45,-55 -15,-45 0,-30 L 0,55 C -15,40 -45,30 -90,45 Z" fill="#F8FAFC" stroke="url(#goldGrad)" stroke-width="4"/>
+    <!-- Right Page -->
+    <path d="M 90,-40 C 45,-55 15,-45 0,-30 L 0,55 C 15,40 45,30 90,45 Z" fill="#F8FAFC" stroke="url(#goldGrad)" stroke-width="4"/>
+    
+    <!-- Spine and Center Binding -->
+    <path d="M 0,-30 L 0,58" stroke="url(#goldGrad)" stroke-width="5" stroke-linecap="round"/>
+    
+    <!-- Text Lines left page -->
+    <line x1="-70" y1="-20" x2="-20" y2="-20" stroke="#0d3060" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+    <line x1="-70" y1="-5" x2="-20" y2="-5" stroke="#0d3060" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+    <line x1="-70" y1="10" x2="-20" y2="10" stroke="#0d3060" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+    <line x1="-70" y1="25" x2="-35" y2="25" stroke="#0d3060" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+
+    <!-- Text Lines right page -->
+    <line x1="20" y1="-20" x2="70" y2="-20" stroke="#0d3060" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+    <line x1="20" y1="-5" x2="70" y2="-5" stroke="#0d3060" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+    <line x1="20" y1="10" x2="70" y2="10" stroke="#0d3060" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+    <line x1="20" y1="25" x2="55" y2="25" stroke="#0d3060" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+
+    <!-- Three Angels / Radiance Rays Above Bible -->
+    <path d="M 0,-42 L 0,-68 M -25,-40 L -45,-60 M 25,-40 L 45,-60" stroke="url(#goldGrad)" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- STBA Brand Text -->
+  <text x="256" y="380" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="34" font-weight="900" fill="url(#goldGrad)" text-anchor="middle" letter-spacing="4">
+    STBA
+  </text>
+  <text x="256" y="415" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="14" font-weight="600" fill="#94A3B8" text-anchor="middle" letter-spacing="3">
+    SCRIPTURE MASTERY
+  </text>
+</svg>
