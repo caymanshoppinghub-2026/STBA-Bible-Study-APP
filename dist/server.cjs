@@ -7546,11 +7546,51 @@ function cleanServerGeminiPcmBase64(base64Audio, sampleRate = 24e3) {
     return base64Audio;
   }
 }
+var TOUR_TTS_CACHE_FILE = import_path2.default.join(process.cwd(), "data", "tour_audio_cache.json");
+var serverTtsCache = /* @__PURE__ */ new Map();
+function loadServerTtsCache() {
+  try {
+    if (import_fs2.default.existsSync(TOUR_TTS_CACHE_FILE)) {
+      const raw = import_fs2.default.readFileSync(TOUR_TTS_CACHE_FILE, "utf-8");
+      const data = JSON.parse(raw);
+      for (const [k, v] of Object.entries(data)) {
+        if (typeof v === "string" && v.length > 50) {
+          serverTtsCache.set(k, v);
+        }
+      }
+      console.log(`[TTS Cache] Loaded ${serverTtsCache.size} persistent audio entries from disk.`);
+    }
+  } catch (err) {
+    console.warn("[TTS Cache] Could not load audio cache from disk:", err);
+  }
+}
+loadServerTtsCache();
+function saveServerTtsCache(key, base64Audio) {
+  try {
+    serverTtsCache.set(key, base64Audio);
+    const obj = {};
+    for (const [k, v] of serverTtsCache.entries()) {
+      obj[k] = v;
+    }
+    import_fs2.default.writeFileSync(TOUR_TTS_CACHE_FILE, JSON.stringify(obj), "utf-8");
+  } catch (err) {
+    console.warn("[TTS Cache] Could not persist audio cache to disk:", err);
+  }
+}
 app.post("/api/study/narrate", async (req, res) => {
   const { text, voice } = req.body;
   const verbatimText = sanitizeServerVerbatimSpeechText(text);
   if (!verbatimText) {
     return res.status(400).json({ error: "Text is required for narration." });
+  }
+  const selectedVoice = voice || "Charon";
+  const cacheKey = `${verbatimText.toLowerCase()}_${selectedVoice}`;
+  if (serverTtsCache.has(cacheKey)) {
+    return res.json({
+      success: true,
+      audio: serverTtsCache.get(cacheKey),
+      cached: true
+    });
   }
   if (Date.now() < ttsQuotaExceededUntil) {
     return res.json({
@@ -7605,6 +7645,7 @@ app.post("/api/study/narrate", async (req, res) => {
       const rawBase64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (rawBase64Audio) {
         const cleanedBase64Audio = cleanServerGeminiPcmBase64(rawBase64Audio);
+        saveServerTtsCache(cacheKey, cleanedBase64Audio);
         return res.json({
           success: true,
           audio: cleanedBase64Audio

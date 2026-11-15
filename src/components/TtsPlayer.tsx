@@ -22,6 +22,14 @@ export const preCacheSpeechAudios = async (texts: string[], voice: string = "Cha
     const cacheKey = `v2_${cleaned}_${voice}`;
     if (!cache[cacheKey]) {
       try {
+        const stored = sessionStorage.getItem(`stba_tts_${cacheKey}`);
+        if (stored) {
+          cache[cacheKey] = stored;
+          return;
+        }
+      } catch {}
+
+      try {
         const response = await apiFetch("/api/study/narrate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -37,6 +45,9 @@ export const preCacheSpeechAudios = async (texts: string[], voice: string = "Cha
           const data = await safeParseResponseJson<any>(response);
           if (data?.success && data?.audio) {
             cache[cacheKey] = data.audio;
+            try {
+              sessionStorage.setItem(`stba_tts_${cacheKey}`, data.audio);
+            } catch {}
           }
         }
       } catch {

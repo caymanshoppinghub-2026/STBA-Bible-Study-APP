@@ -361,6 +361,16 @@ export const TourOverlay: React.FC = () => {
         let base64Audio: string | undefined = cache[cacheKey];
 
         if (!base64Audio) {
+          try {
+            const stored = sessionStorage.getItem(`stba_tts_${cacheKey}`);
+            if (stored) {
+              base64Audio = stored;
+              cache[cacheKey] = stored;
+            }
+          } catch {}
+        }
+
+        if (!base64Audio) {
           const response = await apiFetch("/api/study/narrate", {
             method: "POST",
             headers: {
@@ -395,8 +405,31 @@ export const TourOverlay: React.FC = () => {
             if ((window as any).__STBA_TTS_CACHE__) {
               (window as any).__STBA_TTS_CACHE__[cacheKey] = base64Audio;
             }
+            try {
+              sessionStorage.setItem(`stba_tts_${cacheKey}`, base64Audio);
+            } catch {}
           } else {
-            // Do NOT fall back to Edge / browser speechSynthesis during onboarding tour
+            // If Gemini 3.8 is temporarily offline or quota-limited, smoothly speak via natural speech synthesis
+            if (typeof window !== "undefined" && "speechSynthesis" in window) {
+              const utt = new SpeechSynthesisUtterance(cleaned);
+              utt.rate = 0.95;
+              utt.pitch = 0.95;
+              const voices = window.speechSynthesis.getVoices();
+              const preferredVoice =
+                voices.find(
+                  (v) =>
+                    v.name.includes("Natural") ||
+                    v.name.includes("Andrew") ||
+                    v.name.includes("Male") ||
+                    v.name.includes("Guy")
+                ) || voices[0];
+              if (preferredVoice) utt.voice = preferredVoice;
+              utt.onend = () => setIsSpeakingGreeting(false);
+              utt.onerror = () => setIsSpeakingGreeting(false);
+              setIsSpeakingGreeting(true);
+              window.speechSynthesis.speak(utt);
+              return;
+            }
             setIsSpeakingGreeting(false);
             return;
           }
@@ -794,6 +827,9 @@ export const TourOverlay: React.FC = () => {
       stepObj.onEnter();
     }
 
+    // Instantly trigger voice narration from memory / cache with 0ms delay
+    speakText(`${stepObj.title}. ${stepObj.body}`);
+
     const timer = setTimeout(() => {
       const element = stepObj.targetSelector();
       if (element) {
@@ -811,11 +847,9 @@ export const TourOverlay: React.FC = () => {
           }
           currentTargetRef.current = element;
           updateTooltipPosition();
-        }, 280);
+        }, 220);
       }
-
-      speakText(`${stepObj.title}. ${stepObj.body}`);
-    }, 180);
+    }, 50);
 
     return () => {
       clearTimeout(timer);
