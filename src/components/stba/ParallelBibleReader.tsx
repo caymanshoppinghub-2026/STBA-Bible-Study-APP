@@ -757,64 +757,9 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
               )}
             </div>
 
-            {/* Right Portion: Parallel Version Switches, and Search inputs below them */}
-            <div className="flex flex-col gap-3 shrink-0 self-stretch md:self-start items-start md:items-end">
-              {/* Row 1: Collapse Toggle and Bible Buttons */}
-              <div className="flex flex-wrap items-center gap-3 self-stretch md:self-auto justify-start md:justify-end">
-                {/* Workspace Tools Collapse Toggle Button (Desktop Only) */}
-                <button
-                  onClick={() => setGlobalHeaderCollapsed && setGlobalHeaderCollapsed(!globalHeaderCollapsed)}
-                  className={`hidden md:flex p-1.5 rounded-lg border transition-all cursor-pointer items-center justify-center ${
-                    theme === "dark" 
-                      ? "bg-[#1C212B] border-gray-800 text-gray-300 hover:text-[#C9A86A] hover:border-[#C9A86A]/40" 
-                      : "bg-white border-stone-200 text-gray-600 hover:text-[#C9A86A] hover:border-[#C9A86A]/40"
-                  }`}
-                  title={globalHeaderCollapsed ? "Expand Workspace Tools" : "Collapse Workspace Tools"}
-                >
-                  {globalHeaderCollapsed ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronUp className="w-4 h-4" />
-                  )}
-                </button>
-
-                {/* Translation selects picker check buttons */}
-                <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-                  {["KJV", "NKJV", "ESV", "NASB"].map((version) => {
-                    const isSelected = selectedVersions.includes(version);
-                    return (
-                      <button
-                        key={version}
-                        onClick={() => toggleVersion(version)}
-                        className={`px-2.5 sm:px-3 py-1.5 text-xs font-mono font-bold tracking-wider transition-all rounded cursor-pointer border outline-none focus:outline-none focus:ring-0 ${
-                          isSelected
-                            ? theme === "dark"
-                              ? "text-[#C9A86A] bg-[#C9A86A]/10 border-[#C9A86A]"
-                              : "text-[#C9A86A] bg-[#C9A86A]/15 border-[#C9A86A]"
-                            : theme === "dark"
-                              ? "text-gray-300 bg-transparent border-transparent hover:text-[#C9A86A] hover:bg-[#C9A86A]/5 hover:border-[#C9A86A]/20 hover:shadow-[0_0_8px_rgba(201,168,106,0.25)]"
-                              : "text-gray-700 bg-transparent border-transparent hover:text-[#C9A86A] hover:bg-[#C9A86A]/5 hover:border-[#C9A86A]/20 hover:shadow-[0_0_8px_rgba(201,168,106,0.25)]"
-                        }`}
-                      >
-                        {version}
-                      </button>
-                    );
-                  })}
-
-                  {/* Mobile-only Search Button directly to the right of NKJV, KJV, ESV, NASB */}
-                  <button
-                    onClick={() => handleLoadExegesis && handleLoadExegesis(queryRef, queryTopic)}
-                    disabled={loading}
-                    className="md:hidden bg-[#C9973A] hover:bg-[#B2822B] text-white px-3 py-1.5 text-xs rounded font-mono font-bold tracking-wide transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0"
-                  >
-                    {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                    Search
-                  </button>
-                </div>
-              </div>
-
-              {/* Row 2: Search Inputs (Scripture & Topic search boxes, moved below the Bible buttons) */}
-              <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto justify-start md:justify-end">
+            {/* Right Portion: Scripture Input, Topic Search, Search Button, and Bible Version Buttons in a single unified horizontal row */}
+            <div className="flex flex-col gap-1.5 shrink-0 self-stretch md:self-start items-start md:items-end">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 self-stretch md:self-auto justify-start md:justify-end">
                 {/* Scripture Reference Input */}
                 <div className="relative flex items-center">
                   <input
@@ -838,7 +783,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
-                    className={`px-2.5 py-1.5 text-xs rounded outline-none w-36 sm:w-44 font-serif border transition-all ${
+                    className={`px-2.5 py-1.5 text-xs rounded outline-none w-32 sm:w-36 md:w-40 font-serif border transition-all ${
                       queryRef && queryTopic && lastActiveSearchField === 'ref'
                         ? "border-[#C9973A] ring-1 ring-[#C9973A] shadow-[0_0_8px_rgba(201,151,58,0.3)]"
                         : theme === "dark" ? "bg-[#161B22] border-[#30363D] text-white" : "bg-white border-gray-300 text-gray-800"
@@ -877,7 +822,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
-                    className={`px-2.5 py-1.5 text-xs rounded outline-none w-44 sm:w-56 font-sans border transition-all ${
+                    className={`px-2.5 py-1.5 text-xs rounded outline-none w-36 sm:w-44 md:w-48 font-sans border transition-all ${
                       queryRef && queryTopic && lastActiveSearchField === 'topic'
                         ? "border-[#C9973A] ring-1 ring-[#C9973A] shadow-[0_0_8px_rgba(201,151,58,0.3)]"
                         : theme === "dark" ? "bg-[#161B22] border-[#30363D] text-white" : "bg-white border-gray-300 text-gray-800"
@@ -893,11 +838,11 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                   )}
                 </div>
 
-                {/* Desktop Search Button */}
+                {/* Search Button */}
                 <button
                   onClick={() => handleLoadExegesis && handleLoadExegesis(queryRef, queryTopic)}
                   disabled={loading}
-                  className="hidden md:flex bg-[#C9973A] hover:bg-[#B2822B] text-white px-3 py-1.5 text-xs rounded font-mono font-bold tracking-wide transition-colors cursor-pointer items-center gap-1.5 whitespace-nowrap"
+                  className="bg-[#C9973A] hover:bg-[#B2822B] text-white px-3 py-1.5 text-xs rounded font-mono font-bold tracking-wide transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
                   title={
                     queryRef && queryTopic 
                       ? `Searching by ${lastActiveSearchField === 'topic' ? 'Topic ("' + queryTopic + '")' : 'Scripture ("' + queryRef + '")'} (most recently edited)` 
@@ -907,9 +852,33 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                   {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
                   Search
                 </button>
+
+                {/* Translation selects picker check buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                  {["KJV", "NKJV", "ESV", "NASB"].map((version) => {
+                    const isSelected = selectedVersions.includes(version);
+                    return (
+                      <button
+                        key={version}
+                        onClick={() => toggleVersion(version)}
+                        className={`px-2.5 sm:px-3 py-1.5 text-xs font-mono font-bold tracking-wider transition-all rounded cursor-pointer border outline-none focus:outline-none focus:ring-0 ${
+                          isSelected
+                            ? theme === "dark"
+                              ? "text-[#C9A86A] bg-[#C9A86A]/10 border-[#C9A86A]"
+                              : "text-[#C9A86A] bg-[#C9A86A]/15 border-[#C9A86A]"
+                            : theme === "dark"
+                              ? "text-gray-300 bg-transparent border-transparent hover:text-[#C9A86A] hover:bg-[#C9A86A]/5 hover:border-[#C9A86A]/20 hover:shadow-[0_0_8px_rgba(201,168,106,0.25)]"
+                              : "text-gray-700 bg-transparent border-transparent hover:text-[#C9A86A] hover:bg-[#C9A86A]/5 hover:border-[#C9A86A]/20 hover:shadow-[0_0_8px_rgba(201,168,106,0.25)]"
+                        }`}
+                      >
+                        {version}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Row 3: Error Message (if any) */}
+              {/* Error Message (if any) */}
               {errorMsg && (
                 <span className="text-red-500 font-mono text-[11px] animate-pulse self-start md:self-end">
                   *{errorMsg}
@@ -961,6 +930,24 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
             />
             <span className="text-[10px] font-mono text-gray-400 font-extrabold">{currentFontSize}px</span>
           </div>
+
+          {/* Workspace Tools Collapse Toggle Button directly to the right of text size slider and font selector */}
+          <button 
+            type="button"
+            onClick={() => setGlobalHeaderCollapsed && setGlobalHeaderCollapsed(!globalHeaderCollapsed)}
+            className={`hidden md:flex p-1.5 rounded-lg border transition-all cursor-pointer items-center justify-center ${
+              theme === "dark" 
+                ? "bg-[#1C212B] border-gray-800 text-gray-300 hover:text-[#C9A86A] hover:border-[#C9A86A]/40" 
+                : "bg-white border-stone-200 text-gray-600 hover:text-[#C9A86A] hover:border-[#C9A86A]/40"
+            }`}
+            title={globalHeaderCollapsed ? "Expand Workspace Tools" : "Collapse Workspace Tools"}
+          >
+            {globalHeaderCollapsed ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronUp className="w-4 h-4" />
+            )}
+          </button>
 
           <button 
             type="button" 
