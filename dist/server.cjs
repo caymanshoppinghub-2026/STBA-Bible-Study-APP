@@ -7596,8 +7596,8 @@ app.post("/api/study/narrate", async (req, res) => {
           responseModalities: [import_genai.Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
-              // Options: 'Kore', 'Fenrir', 'Zephyr', 'Puck', 'Charon', 'Aoede'
-              prebuiltVoiceConfig: { voiceName: voice || "Puck" }
+              // Options: 'Charon', 'Kore', 'Fenrir', 'Zephyr', 'Puck', 'Aoede'
+              prebuiltVoiceConfig: { voiceName: voice || "Charon" }
             }
           }
         }

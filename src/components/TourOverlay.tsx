@@ -85,11 +85,11 @@ export const TourOverlay: React.FC = () => {
   const geminiAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const geminiSpeechReqIdRef = useRef<number>(0);
 
-  // Enforce Gemini Live 3.8 voice settings and pre-cache onboarding audio while tour is active
+  // Enforce Gemini Live 3.8 voice settings while tour is active
   useEffect(() => {
-    const voice = localStorage.getItem("stba_ai_voice") || "Puck";
-    if (!localStorage.getItem("stba_ai_voice") || voice === "Charon") {
-      localStorage.setItem("stba_ai_voice", "Puck");
+    const voice = localStorage.getItem("stba_ai_voice") || "Charon";
+    if (!localStorage.getItem("stba_ai_voice") || voice === "Puck") {
+      localStorage.setItem("stba_ai_voice", "Charon");
     }
     if (stage !== "idle") {
       localStorage.setItem("stba_tts_engine", "original");
@@ -102,8 +102,7 @@ export const TourOverlay: React.FC = () => {
     } else {
       localStorage.removeItem("stba_onboarding_voice_engine");
     }
-    preCacheSpeechAudios([welcomeGreetingText, tracksConclusionSpeech], voice === "Charon" ? "Puck" : voice).catch(() => {});
-  }, [stage, welcomeGreetingText, tracksConclusionSpeech]);
+  }, [stage]);
 
   const showToast = useCallback((msg: string, duration = 4200) => {
     setToast(msg);
@@ -263,6 +262,17 @@ export const TourOverlay: React.FC = () => {
 
   const activeSteps = stage === "profile_tour" ? profileTourSteps : dashboardClusterSteps;
 
+  // Pre-cache all tour audio clips (Welcome, Dashboard clusters, Profile steps, and Conclusion) in the background with Charon
+  useEffect(() => {
+    const allTourTexts = [
+      welcomeGreetingText,
+      ...dashboardClusterSteps.map((s) => `${s.title}. ${s.body}`),
+      ...profileTourSteps.map((s) => `${s.title}. ${s.body}`),
+      tracksConclusionSpeech
+    ];
+    preCacheSpeechAudios(allTourTexts, "Charon").catch(() => {});
+  }, [welcomeGreetingText, tracksConclusionSpeech]);
+
   // ===========================================================================
   // CONFETTI & AUDIO HELPERS
   // ===========================================================================
@@ -343,7 +353,7 @@ export const TourOverlay: React.FC = () => {
       const reqId = geminiSpeechReqIdRef.current;
 
       const savedVoice = localStorage.getItem("stba_ai_voice");
-      const voice = !savedVoice || savedVoice === "Charon" ? "Puck" : savedVoice;
+      const voice = savedVoice && savedVoice !== "Puck" ? savedVoice : "Charon";
       const cacheKey = `v2_${cleaned}_${voice}`;
       const cache = (window as any).__STBA_TTS_CACHE__ || {};
 

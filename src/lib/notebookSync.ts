@@ -647,7 +647,7 @@ export async function saveProfileToSupabase(profile: any): Promise<string | null
   try {
     await ensureSupabaseAuth();
 
-    const aiVoice = localStorage.getItem("stba_ai_voice") || "Puck";
+    const aiVoice = localStorage.getItem("stba_ai_voice") || "Charon";
     const dailyVerseLimit = localStorage.getItem("stba_daily_verse_limit") || "5";
     const recallQueueFrequency = localStorage.getItem("stba_recall_queue_frequency") || "5";
     const notificationsEnabled = localStorage.getItem("stba_notifications_enabled") || "true";

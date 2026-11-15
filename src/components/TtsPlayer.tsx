@@ -12,13 +12,13 @@ if (typeof window !== "undefined") {
   (window as any).__STBA_TTS_CACHE__ = (window as any).__STBA_TTS_CACHE__ || globalTtsCache;
 }
 
-export const preCacheSpeechAudios = async (texts: string[], voice: string = "Puck") => {
+export const preCacheSpeechAudios = async (texts: string[], voice: string = "Charon") => {
   if (typeof window === "undefined") return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
   const cache = (window as any).__STBA_TTS_CACHE__ || globalTtsCache;
-  for (const text of texts) {
+  const fetchPromises = texts.map(async (text) => {
     const cleaned = sanitizeVerbatimSpeechText(text);
-    if (!cleaned) continue;
+    if (!cleaned) return;
     const cacheKey = `v2_${cleaned}_${voice}`;
     if (!cache[cacheKey]) {
       try {
@@ -43,7 +43,8 @@ export const preCacheSpeechAudios = async (texts: string[], voice: string = "Puc
         // Optional opportunistic pre-cache: silently fall back to on-demand narration
       }
     }
-  }
+  });
+  await Promise.allSettled(fetchPromises);
 };
 
 interface TtsPlayerProps {
@@ -98,9 +99,9 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({
 
   const [currentVoice, setCurrentVoice] = useState(() => {
     const saved = localStorage.getItem("stba_ai_voice");
-    if (!saved || saved === "Charon") {
-      localStorage.setItem("stba_ai_voice", "Puck");
-      return "Puck";
+    if (!saved || saved === "Puck") {
+      localStorage.setItem("stba_ai_voice", "Charon");
+      return "Charon";
     }
     return saved;
   });
@@ -123,7 +124,7 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({
   useEffect(() => {
     const handleVoiceChange = () => {
       const savedAiVoice = localStorage.getItem("stba_ai_voice");
-      const resolvedAiVoice = !savedAiVoice || savedAiVoice === "Charon" ? "Puck" : savedAiVoice;
+      const resolvedAiVoice = !savedAiVoice || savedAiVoice === "Puck" ? "Charon" : savedAiVoice;
       setCurrentVoice(resolvedAiVoice);
 
       const savedEngine = (localStorage.getItem("stba_tts_engine") as "original" | "browser") || "original";
@@ -1006,7 +1007,8 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({
                   }}
                   className="w-full p-1.5 text-[10.5px] font-sans rounded border border-stone-300 bg-stone-50 text-stone-800 outline-none focus:ring-1 focus:ring-teal-500"
                 >
-                  <option value="Puck">Elder Stephen's Natural Voice (Default - Puck)</option>
+                  <option value="Charon">Elder Stephen's Natural Voice (Default - Charon)</option>
+                  <option value="Puck">Youth Bible Scholar (Puck)</option>
                   <option value="Kore">Theological Scholar (Kore)</option>
                   <option value="Aoede">Creative Lyricist (Aoede)</option>
                   <option value="Zephyr">Meditative Devotional (Zephyr)</option>

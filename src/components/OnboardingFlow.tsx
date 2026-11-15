@@ -62,7 +62,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) =>
 
   // Pre-cache all onboarding speech audio clips in the background
   React.useEffect(() => {
-    const voice = localStorage.getItem("stba_ai_voice") || "Puck";
+    const voice = localStorage.getItem("stba_ai_voice") || "Charon";
     const textsToCache = [
       `Study to shew thyself approved unto God. Grace and peace to you, ${user?.name || "Berean"}. I am Elder Stephen, your exegetical Bible study AI guide. Many people read the Bible again and again without truly retaining or applying what they learn. Using our STBA Study System, we help you understand Scripture deeply, remember it clearly, and use it meaningfully in your daily life. Click the button below to continue your inspiring journey into the study of the Scriptures.`,
       `I have adjusted your dynamic diagnostic, testing, and lesson planning tracks according to your goal. Which learning path would you like to focus on? Learning Foundations, Going Deeper into Doctrine, or Teaching and Preaching Standard.`,

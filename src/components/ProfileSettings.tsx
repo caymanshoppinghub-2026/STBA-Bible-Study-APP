@@ -488,11 +488,11 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   const [reminderTime, setReminderTime] = useState<string>(() => {
     return localStorage.getItem("stba_reminder_time") || "07:30";
   });
-  const [aiVoice, setAiVoice] = useState<"Kore" | "Aoede" | "Zephyr" | "Fenrir" | "Puck">(() => {
+  const [aiVoice, setAiVoice] = useState<"Charon" | "Kore" | "Aoede" | "Zephyr" | "Fenrir" | "Puck">(() => {
     const saved = localStorage.getItem("stba_ai_voice");
-    if (!saved || saved === "Charon") {
-      localStorage.setItem("stba_ai_voice", "Puck");
-      return "Puck";
+    if (!saved || saved === "Puck") {
+      localStorage.setItem("stba_ai_voice", "Charon");
+      return "Charon";
     }
     return saved as any;
   });
@@ -1799,7 +1799,8 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                       aria-label="Select preferred Gemini AI voice character"
                       id="select-ai-voice"
                     >
-                      <option value="Puck">Elder Stephen's Natural Voice (Default - Puck)</option>
+                      <option value="Charon">Elder Stephen's Natural Voice (Default - Charon)</option>
+                      <option value="Puck">Youth Bible Scholar (Puck)</option>
                       <option value="Kore">Theological Scholar (Kore)</option>
                       <option value="Aoede">Creative Lyricist (Aoede)</option>
                       <option value="Zephyr">Meditative Devotional (Zephyr)</option>
