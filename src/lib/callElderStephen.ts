@@ -335,7 +335,7 @@ export async function callElderStephen(partialPayload: Partial<ElderStephenPaylo
   // Call the production full-stack endpoint with 25000ms AbortController guard & resilient offline fallback
   try {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 25000)
+    const timeoutId = setTimeout(() => controller.abort(), 60000)
 
     const response = await apiFetch('/api/elder-stephen', {
       method: 'POST',

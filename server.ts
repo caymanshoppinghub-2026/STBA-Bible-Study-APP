@@ -1862,8 +1862,8 @@ async function generateContentWithFallback(aiClient: any, requestPayload: any): 
   }
 
   const baseModels = [
-    "gemini-2.5-flash",
-    "gemini-3.8-flash"
+    "gemini-3.8-flash",
+    "gemini-2.5-flash"
   ];
 
   const modelsToTry = [...baseModels];
@@ -3620,7 +3620,7 @@ OR IF ALL ARE INVALID (or if you cannot parse any of them):
     if (!aiClient) return await runLocalFallback();
 
     const response = await generateContentWithFallback(aiClient, {
-      model: "gemini-2.5-flash",
+      model: "gemini-3.8-flash",
       timeoutMs: 8000,
       contents: [
         { role: "user", parts: [{ text: prompt }] }
@@ -5491,7 +5491,7 @@ Please respond in Velocity Mode (Quick Answer) following the hierarchical outlin
       console.log(`[Elder Stephen] Executing Velocity Mode (Quick Answer) on "${activePassage}" for user "${actualName}"...`);
 
       const response = await generateContentWithFallback(aiClient, {
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-3.8-flash",
         contents,
         config: {
           systemInstruction: velocitySystemInstruction,
@@ -10337,4 +10337,9 @@ self.addEventListener('activate', function(event) {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export { app, server };
+export default app;
