@@ -1291,53 +1291,57 @@ export function STBAStudyMode() {
             {/* Topic Search Active information block removed from UI per user specification while preserving all underlying activeTopicSearch logic and background synthesis */}
 
             <div className="flex-1 overflow-hidden relative">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeRightTab}
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={{ duration: 0.12 }}
-                  className="w-full h-full overflow-hidden"
-                >
-                  {activeRightTab === "csms" && (
-                    <CSMSActiveRecall
-                      report={report}
-                      activeVerseIndex={activeVerseIndex}
-                      activeStepIndex={activeStepIndex}
-                      setActiveStepIndex={setActiveStepIndex}
-                      chatInputs={chatInputs}
-                      setChatInputs={setChatInputs}
-                      stepChats={stepChats}
-                      setStepChats={setStepChats}
-                      handleSendChat={handleSendGuidedChat}
-                      onReferenceChange={(ref) => handleLoadExegesis(ref, "")}
-                      theme={theme}
-                      onNavigateTab={(tab) => setActiveRightTab(tab as any)}
-                    />
-                  )}
+              {/* Persistent Elder Stephen Commentary — Stays mounted across tab switches so live audio, WebSocket, and dynamic guidance never stop */}
+              <div className={`w-full h-full overflow-hidden ${activeRightTab === "stephen" ? "block" : "hidden"}`}>
+                <ElderStephenCommentary
+                  report={report}
+                  activeVerseIndex={activeVerseIndex}
+                  activeStepIndex={activeStepIndex}
+                  setActiveStepIndex={setActiveStepIndex}
+                  chatInputs={chatInputs}
+                  setChatInputs={setChatInputs}
+                  stepChats={stepChats}
+                  setStepChats={setStepChats}
+                  handleSendChat={handleSendGuidedChat}
+                  onReferenceChange={(ref) => handleLoadExegesis(ref, "")}
+                  theme={theme}
+                  userProfile={user}
+                  stephenPendingPrompt={stephenPendingPrompt}
+                  clearStephenPendingPrompt={() => setStephenPendingPrompt("")}
+                  currentPassageRef={report?.reference || queryRef || customReference || ""}
+                  onNavigateTab={(tab) => setActiveRightTab(tab as any)}
+                  autoStartLive={stephenAutoStartLive}
+                  onLiveStarted={() => setStephenAutoStartLive(false)}
+                  activeWorkspaceTool={activeRightTab}
+                />
+              </div>
 
-                  {activeRightTab === "stephen" && (
-                    <ElderStephenCommentary
-                      report={report}
-                      activeVerseIndex={activeVerseIndex}
-                      activeStepIndex={activeStepIndex}
-                      setActiveStepIndex={setActiveStepIndex}
-                      chatInputs={chatInputs}
-                      setChatInputs={setChatInputs}
-                      stepChats={stepChats}
-                      handleSendChat={handleSendGuidedChat}
-                      onReferenceChange={(ref) => handleLoadExegesis(ref, "")}
-                      theme={theme}
-                      userProfile={user}
-                      stephenPendingPrompt={stephenPendingPrompt}
-                      clearStephenPendingPrompt={() => setStephenPendingPrompt("")}
-                      currentPassageRef={report?.reference || queryRef || customReference || ""}
-                      onNavigateTab={(tab) => setActiveRightTab(tab as any)}
-                      autoStartLive={stephenAutoStartLive}
-                      onLiveStarted={() => setStephenAutoStartLive(false)}
-                    />
-                  )}
+              {activeRightTab !== "stephen" && (
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeRightTab}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.12 }}
+                    className="w-full h-full overflow-hidden"
+                  >
+                    {activeRightTab === "csms" && (
+                      <CSMSActiveRecall
+                        report={report}
+                        activeVerseIndex={activeVerseIndex}
+                        activeStepIndex={activeStepIndex}
+                        setActiveStepIndex={setActiveStepIndex}
+                        chatInputs={chatInputs}
+                        setChatInputs={setChatInputs}
+                        stepChats={stepChats}
+                        setStepChats={setStepChats}
+                        handleSendChat={handleSendGuidedChat}
+                        onReferenceChange={(ref) => handleLoadExegesis(ref, "")}
+                        theme={theme}
+                        onNavigateTab={(tab) => setActiveRightTab(tab as any)}
+                      />
+                    )}
 
                   {activeRightTab === "notebook" && (
                     <STBANotebook
@@ -1454,7 +1458,8 @@ export function STBAStudyMode() {
                   )}
                 </motion.div>
               </AnimatePresence>
-            </div>
+            )}
+          </div>
           </div>
         )}
       </main>

@@ -69,6 +69,7 @@ export interface ToolProps {
   setStepChats?: React.Dispatch<React.SetStateAction<{ sender: "user" | "ai"; text: string }[][]>>;
   autoStartLive?: boolean;
   onLiveStarted?: () => void;
+  activeWorkspaceTool?: string;
 }
 
 // Helper to check if a reference belongs to the New Testament
@@ -553,7 +554,8 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   onReferenceChange,
   onNavigateTab,
   autoStartLive,
-  onLiveStarted
+  onLiveStarted,
+  activeWorkspaceTool
 }) => {
   const activeRef = (report?.reference || currentPassageRef || "Revelation 14:6-12").trim();
   const { isBottomBarVisible } = useApp();
@@ -611,6 +613,9 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
 
   // 🌟 Dynamic Gemini Live Interactive Mode States (gemini-3.8-live)
   const [isDynamicLiveActive, setIsDynamicLiveActive] = useState<boolean>(false);
+  const [isAudioPaused, setIsAudioPaused] = useState<boolean>(false);
+  const clickCountRef = useRef<number>(0);
+  const clickTimerRef = useRef<any>(null);
   const [liveState, setLiveState] = useState<"idle" | "connecting" | "ready" | "recording" | "playing" | "error">("idle");
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveModelName, setLiveModelName] = useState<string>("gemini-3.8-live");
@@ -618,6 +623,18 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   const [waveHeights, setWaveHeights] = useState<number[]>([8, 14, 20, 12, 18, 10, 16, 10]);
   const [showPassageSwitcher, setShowPassageSwitcher] = useState<boolean>(false);
   const [switcherInput, setSwitcherInput] = useState<string>("");
+
+  // Dynamic Workspace Tool context synchronization with live engine
+  useEffect(() => {
+    if (activeWorkspaceTool && isDynamicLiveActiveRef.current && liveWsRef.current && liveWsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        liveWsRef.current.send(JSON.stringify({
+          type: "tool_context",
+          activeTool: activeWorkspaceTool
+        }));
+      } catch (e) {}
+    }
+  }, [activeWorkspaceTool]);
 
   // Refs for audio callbacks to avoid stale closures
   const isMicMutedRef = useRef<boolean>(false);
@@ -739,10 +756,17 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(ctx.destination);
 
+      const gainNode = ctx.createGain();
       const currentTime = ctx.currentTime;
       const startTime = Math.max(currentTime, nextStartTimeRef.current);
+      // Smooth exponential gain ramp from 0.01 to 1.0 over 40ms to eliminate abrupt start / clicks
+      gainNode.gain.setValueAtTime(0.01, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(1.0, startTime + 0.04);
+
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
       source.start(startTime);
       nextStartTimeRef.current = startTime + buffer.duration;
 
@@ -1256,18 +1280,26 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     startMicCapture();
     
     const userName = userProfile?.name || "Disciple";
+    const userTier = userProfile?.tier || localStorage.getItem("stba_user_tier") || "Noble Berean";
+    const activeToolName = activeWorkspaceTool || "Bible Reader";
+    const lastStudiedPassage = localStorage.getItem("stba_last_studied_passage") || activeRef;
     const fullPassageText = (report?.text || "").trim();
     const boundedQueryPassage = fullPassageText.length > 400 ? fullPassageText.slice(0, 400) : fullPassageText;
     const boundedTopic = ((report?.topic || activeRef) || "").trim().slice(0, 180);
 
     const elderStephenSystemInstruction = [
-      `You are Elder Stephen, an exegetical, Seventh-day Adventist historical method mentor for live interactive Bible study in the "Study To Be Approved" (STBA) ecosystem.`,
-      `Your persona is a warm, wise, patient, and reverent Seventh-day Adventist pastor and biblical scholar who guides ${userName} using the historic Seventh-day Adventist historical-grammatical and historicist method of biblical interpretation.`,
-      `Core Hermeneutical & Exegetical Commitments:`,
-      `1. Sola Scriptura & Tota Scriptura: The Bible is its own expositor ("Scripture interprets Scripture", Isaiah 28:9-10; 2 Timothy 2:15).`,
-      `2. Historical-Grammatical Exegesis: Uncover the original historical setting, literary context, authorial intent, and key Hebrew/Aramaic/Greek lexical meanings before drawing doctrinal or devotional conclusions.`,
-      `3. Historicist Prophetic & Sanctuary Framework: Anchor prophetic and theological passages in the Seventh-day Adventist historicist hermeneutic, the Sanctuary message, the Three Angels' Messages (Revelation 14:6-12), the seventh-day Sabbath, and the Great Controversy theme centering on Jesus Christ.`,
-      `4. Live Interactive Mentorship: Guide ${userName} through active recall, careful textual observation, and Socratic dialogue on ${activeRef}${fullPassageText ? ` ("${fullPassageText}")` : ""}${report?.topic ? ` — Topic: ${report.topic}` : ""}. Keep each spoken turn warm, conversational, and concise (1-3 focused sentences) and invite ${userName} to respond.`
+      `You are Elder Stephen, the unified brain across all app modules in the "Study To Be Approved" (STBA) ecosystem. Deliver lead-driven exegesis, adapt guidance based on the workspace tool in use (${activeToolName}), and support smooth playback with click-state controls. Manage transitions to Teach It sessions, recalling active passages, and greet new users warmly to master the Bible.`,
+      `Current User Context: Disciple: ${userName} | Subscription Tier: ${userTier} | Active Tool: ${activeToolName}${lastStudiedPassage ? ` | Last Studied: ${lastStudiedPassage}` : ""}`,
+      `The 8-Point Lead-Driven Exegesis Methodology:`,
+      `1. Welcome and Tier Recognition: Greet ${userName} warmly by name and explicitly acknowledge their subscription tier (${userTier}).`,
+      `2. Introductory Remarks: Provide a brief overview of exegesis, emphasizing objective extraction of the text's inherent meaning (exegesis vs. eisegesis).`,
+      `3. Contextual Identification: Prompt user to explore author, historical background, cultural context, and original audience of ${activeRef}.`,
+      `4. Word Study: Guide using the Word Study tool to extract definitions and understand original Hebrew/Aramaic/Greek lexical meanings (e.g. roots like *orthotomeo*) without inserting personal beliefs.`,
+      `5. Interactive Check: Engage in back-and-forth dialogue by asking extracting questions to gauge understanding before building upon it.`,
+      `6. SDA Commentary: Guide user to click on the SDA Commentary tab for deeper exegetical insights and historic Adventist perspectives.`,
+      `7. Cross-References: Instruct user to use Cross-References to find supporting or highlighting scriptural texts (Scripture interprets Scripture; Isaiah 28:10).`,
+      `8. Progression: Transition cleanly to analyzing subsequent verses once a point is thoroughly understood, maintaining dynamic guidance without interruption.`,
+      `Dynamic Tool Adaptation: Adapt seamlessly to the active workspace tool (${activeToolName}). Maintain stateful memory across sessions. When returning, recall the last studied passage (${lastStudiedPassage || "2 Timothy 3:16"}). Keep each spoken turn warm, conversational, and concise (1-3 focused sentences) and invite ${userName} to respond.`
     ].join("\n");
 
     const studyContext: StudyContextQueryParams = {
@@ -1277,7 +1309,10 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       reference: activeRef,
       passageText: boundedQueryPassage,
       topic: boundedTopic,
-      userName
+      userName,
+      tier: userTier,
+      tool: activeToolName,
+      lastPassage: lastStudiedPassage
     };
 
     const wsUrl = buildRightPaneWebSocketUrl(
@@ -1318,6 +1353,10 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       reference: activeRef,
       passageText: fullPassageText,
       topic: report?.topic || activeRef,
+      userName,
+      tier: userTier,
+      activeTool: activeToolName,
+      lastPassage: lastStudiedPassage,
       accessToken: accessToken || undefined,
       systemInstruction: elderStephenSystemInstruction,
       setup: {
@@ -1624,6 +1663,8 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     clearPlaybackQueue();
     endLiveReplyAccumulation();
     handleStopSpeech();
+    setIsAudioPaused(false);
+    clickCountRef.current = 0;
 
     if (notifyToast) {
       setCopiedToast("Dynamic Interactive Mode ended.");
@@ -1632,11 +1673,57 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   };
 
   const handleToggleDynamicInteractiveMode = () => {
-    if (isDynamicLiveActive) {
-      cleanupLiveSession(true);
-    } else {
+    if (!isDynamicLiveActive) {
       startDynamicLiveSession();
+      return;
     }
+
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+    }
+
+    if (clickCountRef.current >= 3) {
+      clickCountRef.current = 0;
+      cleanupLiveSession(true);
+      return;
+    }
+
+    clickTimerRef.current = setTimeout(() => {
+      const clicks = clickCountRef.current;
+      clickCountRef.current = 0;
+
+      if (clicks >= 3) {
+        cleanupLiveSession(true);
+      } else {
+        // Single-click: Pause / Resume audio from exact interrupted point
+        if (outputAudioCtxRef.current) {
+          if (outputAudioCtxRef.current.state === "running") {
+            outputAudioCtxRef.current.suspend().then(() => {
+              setIsAudioPaused(true);
+              if (window.speechSynthesis && window.speechSynthesis.speaking) {
+                window.speechSynthesis.pause();
+              }
+            }).catch(() => {});
+          } else if (outputAudioCtxRef.current.state === "suspended") {
+            outputAudioCtxRef.current.resume().then(() => {
+              setIsAudioPaused(false);
+              if (window.speechSynthesis && window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+              }
+            }).catch(() => {});
+          }
+        } else if (window.speechSynthesis) {
+          if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+            window.speechSynthesis.pause();
+            setIsAudioPaused(true);
+          } else if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+            setIsAudioPaused(false);
+          }
+        }
+      }
+    }, 320);
   };
 
   // Auto-start Live Interactive session when triggered from Bible Study Workspace header button
@@ -1651,12 +1738,11 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     }
   }, [autoStartLive]);
 
-  // Clean up on component unmount
+  // Clean up on component unmount (live audio remains playing across tab navigation)
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      cleanupLiveSession(false);
     };
   }, []);
 
@@ -2354,18 +2440,33 @@ ${formattedNotes}
               onClick={handleToggleDynamicInteractiveMode}
               className={`min-h-[40px] px-2.5 py-1.5 text-[11px] font-mono rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 touch-manipulation active:scale-95 ${
                 isDynamicLiveActive
-                  ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold shadow-xs animate-pulse"
+                  ? isAudioPaused
+                    ? "bg-amber-500/20 border-amber-500 text-amber-400 font-bold shadow-xs"
+                    : "bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold shadow-xs animate-pulse"
                   : theme === "dark"
                     ? "bg-[#1E2530] border-amber-500/40 text-amber-400 hover:bg-[#252E3C]"
                     : "bg-amber-50 border-[#C9973A] text-[#8C6219] hover:bg-amber-100/80 shadow-2xs"
               }`}
-              title={isDynamicLiveActive ? "Exit Live Interactive Session" : "Start Live Interactive Session with Elder Stephen (gemini-3.8-live)"}
+              title={
+                isDynamicLiveActive
+                  ? isAudioPaused
+                    ? "Paused. Click to resume audio; triple-click to stop session"
+                    : "Live Audio Active. Click to pause audio; triple-click to stop session"
+                  : "Start Live Interactive Session with Elder Stephen (gemini-3.8-live)"
+              }
             >
               {isDynamicLiveActive ? (
-                <>
-                  <Radio className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-                  <span className="font-bold">Live Session</span>
-                </>
+                isAudioPaused ? (
+                  <>
+                    <Pause className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="font-bold">Paused</span>
+                  </>
+                ) : (
+                  <>
+                    <Radio className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                    <span className="font-bold">Live Session</span>
+                  </>
+                )
               ) : (
                 <>
                   <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
@@ -2666,28 +2767,41 @@ ${formattedNotes}
             onClick={handleToggleDynamicInteractiveMode}
             className={`px-2 py-1 rounded-lg transition-all cursor-pointer relative flex items-center justify-center gap-1 border h-[28px] m-0 ${
               isDynamicLiveActive
-                ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold shadow-md shadow-emerald-500/10 animate-pulse"
+                ? isAudioPaused
+                  ? "bg-amber-500/20 border-amber-500 text-amber-400 font-bold shadow-md shadow-amber-500/10"
+                  : "bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold shadow-md shadow-emerald-500/10 animate-pulse"
                 : theme === "dark"
                   ? "bg-[#1E2530] border-amber-500/40 text-amber-400 hover:bg-amber-500/20 hover:border-amber-400"
                   : "bg-amber-50 border-[#C9973A] text-[#C9973A] hover:bg-amber-100/80 shadow-2xs"
             }`}
             title={
               isDynamicLiveActive
-                ? "Exit Dynamic Interactive Mode"
+                ? isAudioPaused
+                  ? "Paused. Click to resume audio; triple-click to stop session"
+                  : "Live Active. Click to pause audio; triple-click to stop session"
                 : "Interactive Mode: Speak directly to Elder Stephen for live dynamic discussion"
             }
           >
             {isDynamicLiveActive ? (
-              <>
-                <Radio className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-                <span className="text-[10px] font-mono font-extrabold uppercase tracking-wide">
-                  LIVE
-                </span>
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-              </>
+              isAudioPaused ? (
+                <>
+                  <Pause className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-[10px] font-mono font-extrabold uppercase tracking-wide">
+                    PAUSED
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Radio className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                  <span className="text-[10px] font-mono font-extrabold uppercase tracking-wide">
+                    LIVE
+                  </span>
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                </>
+              )
             ) : (
               <>
                 <Sparkles className="w-3 h-3 text-[#C9973A] animate-pulse" />

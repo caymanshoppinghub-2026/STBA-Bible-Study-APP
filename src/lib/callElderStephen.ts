@@ -43,6 +43,9 @@ export interface MasteryStatePayload {
 export interface ElderStephenPayload {
   userId: string
   userName: string
+  userTier?: string
+  activeTool?: string
+  lastPassage?: string
   currentMode: 'Recall' | 'Explain' | 'Teach It' | 'STBA' | 'Syllabus' | 'Sabbath School Studies' | string
   contextSummary?: string
   noteTitle?: string
@@ -224,6 +227,9 @@ export function buildUnifiedPayload(partial: Partial<ElderStephenPayload>): Elde
 
   const resolvedTitle = partial.noteTitle || sessionMemory?.currentDocTitle || sessionMemory?.currentTopic || '';
   const resolvedPassage = partial.passage || sessionMemory?.currentPassage || '';
+  const userTier = partial.userTier || localStorage.getItem('stba_user_tier') || 'Noble Berean';
+  const activeTool = partial.activeTool || 'Bible Reader';
+  const lastPassage = partial.lastPassage || localStorage.getItem('stba_last_studied_passage') || '';
 
   const coalescedHistory = coalesceFragmentedChatHistory(partial.historyLog || []);
   const precedingUserTurn = [...coalescedHistory].reverse().find(m => m.role === 'user')?.text;
@@ -231,6 +237,9 @@ export function buildUnifiedPayload(partial: Partial<ElderStephenPayload>): Elde
   return {
     userId,
     userName,
+    userTier,
+    activeTool,
+    lastPassage,
     currentMode,
     contextSummary: partial.contextSummary || (sessionMemory?.studyFlow ? `Active Study Flow: [${sessionMemory.studyFlow.currentMode}] ${sessionMemory.studyFlow.currentTopic} (${sessionMemory.studyFlow.currentPassage})` : ''),
     noteTitle: resolvedTitle,
