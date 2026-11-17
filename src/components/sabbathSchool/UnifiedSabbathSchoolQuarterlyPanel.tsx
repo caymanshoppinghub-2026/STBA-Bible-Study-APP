@@ -28,6 +28,7 @@ import { SabbathAudioPlayerModal } from "./SabbathAudioPlayerModal";
 import { SabbathVideoPlayerModal } from "./SabbathVideoPlayerModal";
 import { SabbathShareModal } from "./SabbathShareModal";
 import { InteractiveRecallVerse } from "./InteractiveRecallVerse";
+import { parseMemoryVerseString } from "../../utils/sabbathUtils";
 import ssqCoverImg from "../../assets/images/gift_of_prophecy_1792375736613.jpg";
 
 const STOP_WORDS = new Set([
@@ -199,43 +200,8 @@ export const UnifiedSabbathSchoolQuarterlyPanel: React.FC = () => {
   const [hideKeyWords, setHideKeyWords] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  // Dynamic verse extraction with fallback to the Corinthians Quarterly Key Memory Text
-  let reference = "2 Corinthians 2:4, NKJV";
-  let text = "For out of much affliction and anguish of heart I wrote to you, with many tears, not that you should be grieved, but that you might know the love which I have so abundantly for you.";
-
-  if (memoryVerse && memoryVerse.trim().length > 0) {
-    const cleanVerse = memoryVerse.trim();
-    const parenMatch = cleanVerse.match(/^[“"']?(.*?)[”"']?\s*\(([^)]+)\)\.?$/);
-    if (parenMatch) {
-      text = parenMatch[1].replace(/^[“"']|[”"']$/g, "").trim();
-      reference = parenMatch[2].trim();
-    } else if (cleanVerse.includes("—")) {
-      const parts = cleanVerse.split("—");
-      if (parts.length >= 2) {
-        if (parts[1].toLowerCase().includes("corinthians") || parts[1].toLowerCase().includes("nkjv") || parts[1].toLowerCase().includes("esv") || parts[1].toLowerCase().includes("kjv") || /\d+:\d+/.test(parts[1])) {
-          text = parts[0].replace(/['"“”]/g, "").trim();
-          reference = parts[1].trim();
-        } else {
-          reference = parts[0].trim();
-          text = parts[1].replace(/['"“”]/g, "").trim();
-        }
-      }
-    } else if (cleanVerse.includes("-")) {
-      const parts = cleanVerse.split("-");
-      if (parts.length >= 2) {
-        if (/\d+:\d+/.test(parts[1])) {
-          text = parts[0].replace(/['"“”]/g, "").trim();
-          reference = parts[1].trim();
-        } else {
-          reference = parts[0].trim();
-          text = parts[1].replace(/['"“”]/g, "").trim();
-        }
-      }
-    } else {
-      text = cleanVerse.replace(/['"“”]/g, "").trim();
-      reference = "2 Corinthians 2:4, NKJV";
-    }
-  }
+  // Dynamic verse extraction bound directly to the active lesson's scraped memoryVerse
+  const { text, reference } = parseMemoryVerseString(memoryVerse);
 
   // Recall Cycle Local Storage Sync
   const [isInRecallCycle, setIsInRecallCycle] = useState<boolean>(() => {

@@ -247,3 +247,89 @@ export function playNotificationBellRingSound(): void {
     console.debug("Unable to play notification bell ring sound", e);
   }
 }
+
+/**
+ * Tactile slider whoosh + warm harmonic glide sound effect for the Discipleship Vault
+ * side tab (hover expansion, drawer slide-out open, and drawer slide-in close).
+ */
+export function playVaultSlideSound(mode: "hover" | "open" | "close" = "open"): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const duration = mode === "hover" ? 0.12 : mode === "open" ? 0.24 : 0.19;
+
+    // 1. Filtered noise buffer for authentic mechanical/velvet slider swoosh
+    const bufferSize = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+
+    const whiteNoise = ctx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.Q.setValueAtTime(mode === "hover" ? 3.5 : 2.4, now);
+
+    if (mode === "open") {
+      filter.frequency.setValueAtTime(320, now);
+      filter.frequency.exponentialRampToValueAtTime(1650, now + duration);
+    } else if (mode === "close") {
+      filter.frequency.setValueAtTime(1450, now);
+      filter.frequency.exponentialRampToValueAtTime(280, now + duration);
+    } else {
+      filter.frequency.setValueAtTime(480, now);
+      filter.frequency.exponentialRampToValueAtTime(1250, now + duration);
+    }
+
+    const noiseGain = ctx.createGain();
+    const peakNoiseGain = mode === "hover" ? 0.045 : 0.09;
+    noiseGain.gain.setValueAtTime(0.001, now);
+    noiseGain.gain.linearRampToValueAtTime(peakNoiseGain, now + duration * 0.35);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    whiteNoise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+
+    whiteNoise.start(now);
+    whiteNoise.stop(now + duration);
+
+    // 2. Subtle warm harmonic glide accompanying the slider motion
+    const glideOsc = ctx.createOscillator();
+    const glideGain = ctx.createGain();
+    glideOsc.type = "sine";
+
+    if (mode === "open") {
+      glideOsc.frequency.setValueAtTime(330, now); // E4
+      glideOsc.frequency.exponentialRampToValueAtTime(659.25, now + duration); // E5
+      glideGain.gain.setValueAtTime(0.001, now);
+      glideGain.gain.linearRampToValueAtTime(0.08, now + 0.04);
+      glideGain.gain.exponentialRampToValueAtTime(0.001, now + duration + 0.06);
+    } else if (mode === "close") {
+      glideOsc.frequency.setValueAtTime(587.33, now); // D5
+      glideOsc.frequency.exponentialRampToValueAtTime(293.66, now + duration); // D4
+      glideGain.gain.setValueAtTime(0.001, now);
+      glideGain.gain.linearRampToValueAtTime(0.065, now + 0.03);
+      glideGain.gain.exponentialRampToValueAtTime(0.001, now + duration + 0.04);
+    } else {
+      glideOsc.frequency.setValueAtTime(392, now); // G4
+      glideOsc.frequency.exponentialRampToValueAtTime(523.25, now + duration); // C5
+      glideGain.gain.setValueAtTime(0.001, now);
+      glideGain.gain.linearRampToValueAtTime(0.035, now + 0.02);
+      glideGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    }
+
+    glideOsc.connect(glideGain);
+    glideGain.connect(ctx.destination);
+
+    glideOsc.start(now);
+    glideOsc.stop(now + duration + 0.07);
+  } catch (e) {
+    console.debug("Unable to play vault slide sound", e);
+  }
+}

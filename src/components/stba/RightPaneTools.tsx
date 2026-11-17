@@ -567,7 +567,12 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     // 1. Check in-memory persistent session cache first
     const inMem = inMemoryElderStephenPassageNotes.get(sessionKey);
     if (inMem && inMem.length > 0) {
-      return inMem.map(item => item.sender === "elder" ? { ...item, text: ensureElderStephenOutlineCompletion(item.text, item.verseRef || activeRef, report?.topic) } : item);
+      return inMem.map(item => {
+        const cleanedBadge = item.badge && /gemini\s*live/i.test(item.badge) ? undefined : item.badge;
+        return item.sender === "elder"
+          ? { ...item, badge: cleanedBadge, text: ensureElderStephenOutlineCompletion(item.text, item.verseRef || activeRef, report?.topic) }
+          : { ...item, badge: cleanedBadge };
+      });
     }
 
     try {
@@ -575,7 +580,12 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const completed = parsed.map(item => item.sender === "elder" ? { ...item, text: ensureElderStephenOutlineCompletion(item.text, item.verseRef || activeRef, report?.topic) } : item);
+          const completed = parsed.map(item => {
+            const cleanedBadge = item.badge && /gemini\s*live/i.test(item.badge) ? undefined : item.badge;
+            return item.sender === "elder"
+              ? { ...item, badge: cleanedBadge, text: ensureElderStephenOutlineCompletion(item.text, item.verseRef || activeRef, report?.topic) }
+              : { ...item, badge: cleanedBadge };
+          });
           // Filter out any echo duplicates where user message is identical to elder message
           return completed.filter((item, idx, arr) => {
             if (item.sender === "user") {
@@ -657,6 +667,34 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   const [savedNoteIds, setSavedNoteIds] = useState<Set<string>>(new Set());
   const [latestLiveResponse, setLatestLiveResponse] = useState<string>("");
   const [isLiveNoteSaved, setIsLiveNoteSaved] = useState<boolean>(false);
+
+  // Ensure any active live response speech bubble remains present in the messages stream without the Gemini Live Session badge
+  useEffect(() => {
+    if (latestLiveResponse && latestLiveResponse.trim()) {
+      const cleanLive = latestLiveResponse.trim();
+      setMessages(prev => {
+        const exists = prev.some(m => m.sender === "elder" && m.text.trim() === cleanLive);
+        if (exists) return prev;
+        const liveId = currentLiveReplyIdRef.current || `elder-live-${Date.now()}`;
+        currentLiveReplyIdRef.current = liveId;
+        const existingIdx = prev.findIndex(m => m.id === liveId);
+        if (existingIdx !== -1) {
+          const copy = [...prev];
+          copy[existingIdx] = { ...copy[existingIdx], text: cleanLive, badge: undefined };
+          return copy;
+        }
+        return [
+          ...prev,
+          {
+            id: liveId,
+            sender: "elder",
+            text: cleanLive,
+            timestamp: Date.now()
+          }
+        ];
+      });
+    }
+  }, [latestLiveResponse]);
 
   // Active display response in the interactive session box (what Elder Stephen is saying)
   const activeDisplayResponse = (
@@ -756,16 +794,11 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
+      source.connect(ctx.destination);
 
-      const gainNode = ctx.createGain();
       const currentTime = ctx.currentTime;
-      const startTime = Math.max(currentTime, nextStartTimeRef.current);
-      // Smooth exponential gain ramp from 0.01 to 1.0 over 40ms to eliminate abrupt start / clicks
-      gainNode.gain.setValueAtTime(0.01, startTime);
-      gainNode.gain.exponentialRampToValueAtTime(1.0, startTime + 0.04);
-
-      source.connect(gainNode);
-      gainNode.connect(ctx.destination);
+      const isFirstChunk = currentTime >= nextStartTimeRef.current;
+      const startTime = isFirstChunk ? currentTime + 0.025 : nextStartTimeRef.current;
 
       source.start(startTime);
       nextStartTimeRef.current = startTime + buffer.duration;
@@ -827,8 +860,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
           id: newId,
           sender: "elder",
           text: fullText,
-          timestamp: Date.now(),
-          badge: "Gemini Live Session"
+          timestamp: Date.now()
         };
         return [...prev, newMsg];
       }
@@ -2647,7 +2679,7 @@ ${formattedNotes}
               <div className="flex items-center justify-between gap-3 font-mono text-[9px] uppercase tracking-wider mb-1.5 opacity-80 border-b pb-1 border-current/15">
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold">{m.sender === "user" ? "You" : "Elder Stephen"}</span>
-                  {m.badge && (
+                  {m.badge && m.badge !== "Gemini Live Session" && (
                     <span className={`px-1.5 py-0.2 rounded text-[8px] font-mono ${
                       m.sender === "user"
                         ? "bg-white/20 text-white"
@@ -7290,15 +7322,17 @@ interface DailyScriptureBreakdownItem {
 }
 
 function parseMemoryVerseTextAndRef(rawMemoryVerse: string): { text: string; reference: string } {
-  const defaultRef = "2 Corinthians 2:4";
+  const defaultRef = "Luke 24:27";
   const defaultText =
-    "For out of much affliction and anguish of heart I wrote to you, with many tears, not that you should be grieved, but that you might know the love which I have so abundantly for you.";
+    "Then beginning with Moses and with all the Prophets, He explained to them the things written about Himself in all the Scriptures.";
 
   if (!rawMemoryVerse || !rawMemoryVerse.trim()) {
     return { text: defaultText, reference: defaultRef };
   }
 
-  const clean = rawMemoryVerse.trim();
+  const clean = rawMemoryVerse
+    .replace(/^Memory\s+(?:Text|Verse)\s*:\s*/i, "")
+    .trim();
   const parenMatch = clean.match(/^[“"']?(.*?)[”"']?\s*\(([^)]+)\)\.?$/);
   if (parenMatch) {
     const rawRef = parenMatch[2].replace(/,\s*(NKJV|KJV|ESV|NASB|NIV).*$/i, "").trim();
@@ -7325,50 +7359,328 @@ function parseMemoryVerseTextAndRef(rawMemoryVerse: string): { text: string; ref
   };
 }
 
-function buildConciseDailyBullets(dayTitle: string, mainParagraphs: string[], lessonTitle: string): string[] {
-  const bullets: string[] = [];
+function isPureScriptureReadingList(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return true;
+  if (/^\*?Study this week/i.test(trimmed) || /^Click here for Further Study/i.test(trimmed)) {
+    return true;
+  }
+  const withoutRefs = trimmed
+    .replace(getScriptureRegex(), "")
+    .replace(/[,;.\s()[\]–—\u2013\u2014\-0-9]+/g, "")
+    .trim();
+  return withoutRefs.length < 18;
+}
 
-  for (const para of mainParagraphs) {
-    const cleaned = para
+function buildDailyNarrativeSummary(
+  dayIndex: number,
+  dayTitle: string,
+  mainParagraphs: string[],
+  lessonTitle: string,
+  quarterlyTitle: string,
+  egwParagraphs: string[] = []
+): string[] {
+  const cleanQuarter = (quarterlyTitle || "The Gift of Prophecy").replace(/\s*\([^)]+\)\s*$/, "").trim();
+  const lowerTitle = (dayTitle || "").toLowerCase();
+  const lowerLesson = (lessonTitle || "").toLowerCase();
+
+  // Curated cohesive multi-sentence narrative syntheses for "Interpreting Prophetic Writings" (The Gift of Prophecy)
+  if (lowerLesson.includes("interpreting prophetic writings") || cleanQuarter.toLowerCase().includes("gift of prophecy")) {
+    if (dayIndex === 0 || lowerTitle.includes("interpreting prophetic writings")) {
+      return [
+        `In Lesson 1, focusing on "${cleanQuarter}," we examine Christ's interaction with two disciples on the road to Emmaus (Luke 24:21, 25–27). Christ dispelled their disappointment by explaining scriptures in a broader context, opening their minds and hearts to the true meaning of Old Testament prophecies regarding his mission (Luke 24:31–32, 44–49).`,
+        `This foundational study introduces the week's key texts—including Christ's spiritual unfolding of the moral law in Matthew 5:17–48, cultural discernment in 1 Corinthians 16:20, scriptural defense in the wilderness in Matthew 4:1–11, and covenant inquiry in Luke 10:25–28—showing how balanced prophetic interpretation guards believers against disillusionment and illuminates Christ's high-priestly ministry in the heavenly sanctuary (Daniel 8:14).`
+      ];
+    }
+    if (dayIndex === 1 || lowerTitle.includes("its own interpreter")) {
+      return [
+        `In Lesson 2, focusing on "${dayTitle}" within "${cleanQuarter}," we explore how our underlying assumptions shape biblical exegesis and why affirming that all Scripture is inspired by God (2 Timothy 3:16) enables the Bible to serve as its own authoritative interpreter. Rather than replacing Old Testament revelation in the Sermon on the Mount (Matthew 5:17–48), Jesus unfolded its deeper spiritual dimensions, fulfilling the new-covenant promise of Jeremiah 31:31–33 and Hebrews 8:8–10 (alongside Hebrews 10:16) to write God's law upon the hearts and minds of His people.`,
+        `Scripture consistently illuminates itself across the canon—whether within the same chapter, as in Nebuchadnezzar's prophetic dream and interpretation (Daniel 2:31–45) and Christ's parable of the sower (Matthew 13:1–9, 18–23), or across later prophetic writings, where 2 Chronicles 36:22–23 confirms the fulfillment of Jeremiah's seventy-year captivity prophecy (Jeremiah 25:11–12; 29:10).`
+      ];
+    }
+    if (dayIndex === 2 || lowerTitle.includes("historical-cultural context")) {
+      return [
+        `In Lesson 3, focusing on "${dayTitle}" within "${cleanQuarter}," we examine why honoring the historical setting of a passage prevents apparent doctrinal contradictions, particularly in Isaiah's vision of the new heavens and new earth (Isaiah 65:17–20). Read apart from its covenant background, the poetic description of longevity in Isaiah 65:20 could be misconstrued as implying mortality in the eternal state, contradicting Isaiah's explicit promises of resurrection and the complete eradication of death and sorrow (Isaiah 25:8; 26:19; 65:19).`,
+        `Understood in light of Israel's covenant stipulations in Deuteronomy 28 and Christ's dual-horizon prophetic discourse in Matthew 24, Isaiah portrays the immediate blessings of restoration as a present foretaste of the ultimate new creation, while Cyrus's predicted deliverance of Judah (Isaiah 44:28; 45:1–3, 13; Jeremiah 25:12; 29:14) confirms God's sovereignty over history. Likewise, examining the ancient custom of greeting with a "holy kiss" in 1 Corinthians 16:20 (and Romans 16:16; 2 Corinthians 13:12; 1 Thessalonians 5:26) teaches us to distinguish cultural forms from the timeless biblical principle of warm Christian fellowship.`
+      ];
+    }
+    if (dayIndex === 3 || lowerTitle.includes("literary context")) {
+      return [
+        `In Lesson 4, focusing on "${dayTitle}" within "${cleanQuarter}," we investigate the spiritual peril of isolating verses from their surrounding narrative—illustrated by the cautionary example of disconnecting Matthew 27:5 and Luke 10:37 from their literary setting. Throughout the Great Controversy, severing God's words from their context has been a primary tactic of the adversary, beginning in Eden when the serpent twisted God's command to deceive Eve (Genesis 3:1–5; Revelation 12:9).`,
+        `This battle over biblical interpretation reached a decisive test in the wilderness of temptation (Matthew 4:1–11; Luke 4:1–13), where Satan misquoted Psalm 91:11–12 out of context to urge presumptuous self-endangerment, and Christ triumphed by appealing to the harmonious counsel of Scripture. Tracing the literary context also confirms the universal, gospel-age scope of Sabbath reform in Isaiah 56:1–2, 8 and assures us that divine light shines clearly for every humble, prayerful student of the Word (Psalm 97:11).`
+      ];
+    }
+    if (dayIndex === 4 || lowerTitle.includes("meaning of the text")) {
+      return [
+        `In Lesson 5, focusing on "${dayTitle}" within "${cleanQuarter}," we examine the sacred responsibility of every believer to search and interpret the Scriptures personally with both thoroughness and humility. When the lawyer questioned Jesus regarding eternal life in Luke 10:25–28, Christ asked not only what was written in the law, but how he read and interpreted it (Luke 10:26)—demonstrating that grasping saving truth requires weighing words, literary flow, historical background, and the broader harmony of Scripture.`,
+        `Comparing parallel Gospel accounts—such as reading Christ's call to be "perfect" in Matthew 5:43–48 alongside Luke 6:27–36, where perfection is defined as reflecting the Father's impartial, enemy-embracing mercy—illustrates how Scripture unlocks Scripture (2 Timothy 3:16). Grounded in sound doctrine (2 Timothy 4:1–5), faithful interpreters build upon clear biblical truths while patiently trusting God's wisdom when encountering deeper mysteries.`
+      ];
+    }
+    if (dayIndex === 5 || lowerTitle.includes("biblical exposition")) {
+      return [
+        `In Lesson 6, focusing on "${dayTitle}" within "${cleanQuarter}," we explore the twofold aim of all faithful Bible study: personal spiritual transformation and leading others into a saving relationship with Jesus Christ. Guided by the Holy Spirit into all truth (John 16:13; 17:17), the Christian lives by every word proceeding from the mouth of God (Matthew 4:4), beholds the uplifted Redeemer (John 12:32; 14:6; Philippians 3:8–10), and fulfills the Great Commission by teaching others all that Christ has commanded (Matthew 28:20).`,
+        `Jesus Himself modeled thoroughly scriptural exposition—proclaiming the fulfillment of Daniel's prophetic timeline (Mark 1:14–15; Daniel 9:24–27), magnifying the Decalogue (Exodus 20:13–14; Matthew 5:21, 27), applying Isaiah's Messianic mission in Nazareth (Luke 4:16–30; Isaiah 61:1–2), and opening the prophetic Scriptures to His disciples (Luke 24:25–27, 44–49). Following His example, Philip expounded Isaiah's prophecy of the suffering Servant to the Ethiopian eunuch, guiding an honest seeker directly to joyful baptism in Christ (Acts 8:27, 35–39; Psalm 51:12).`
+      ];
+    }
+    if (dayIndex === 6 || lowerTitle.includes("reading ellen g. white") || lowerTitle.includes("further thought")) {
+      return [
+        `In Lesson 7, focusing on "${dayTitle}" within "${cleanQuarter}," we synthesize the week's hermeneutical principles and apply them to the faithful reading of the Spirit of Prophecy. Just as Christ opened the prophetic Scriptures on the road to Emmaus (Luke 24:27), approaching prophetic writings requires a prayerful, teachable heart that seeks the Holy Spirit's guidance to learn God's truth rather than vindicating preconceived human opinions.`,
+        `Sound interpretation of Ellen G. White's writings requires weighing the historical and literary context ("time and place"), extracting enduring spiritual principles such as faithful Christian stewardship rather than isolating temporary cultural particulars, verifying authentic sources, and comparing the full harmony of her counsels so that prophetic guidance consistently exalts Christ and leads believers back to the living Word.`
+      ];
+    }
+  }
+
+  // General dynamic multi-sentence narrative synthesis for any other lesson or custom study
+  const sourceBlocks = [...mainParagraphs, ...egwParagraphs];
+  const narrativeSentences: string[] = [];
+  const extractedRefs: string[] = [];
+
+  for (const rawBlock of sourceBlocks) {
+    const cleaned = String(rawBlock || "")
       .replace(/^#+\s*/gm, "")
       .replace(/\*\*/g, "")
       .replace(/^>\s*/gm, "")
+      .replace(/\u00A0/g, " ")
       .replace(/\s+/g, " ")
       .trim();
 
-    if (!cleaned || cleaned.length < 25) continue;
+    if (!cleaned || isPureScriptureReadingList(cleaned)) continue;
 
-    // Split paragraph into sentences
-    const sentences = cleaned.match(/[^.!?]+[.!?]+/g) || [cleaned];
-    for (const s of sentences) {
-      const trimmedSentence = s.trim();
-      // Skip pure question prompts when building concise summary bullets
-      if (trimmedSentence.endsWith("?")) continue;
-      if (trimmedSentence.length >= 35 && trimmedSentence.length <= 210) {
-        bullets.push(trimmedSentence);
-        break;
-      } else if (trimmedSentence.length > 210) {
-        bullets.push(`${trimmedSentence.slice(0, 195).trim()}...`);
-        break;
+    // Collect references mentioned in this block
+    const regex = getScriptureRegex();
+    let refMatch: RegExpExecArray | null;
+    while ((refMatch = regex.exec(cleaned)) !== null) {
+      const stdRef = formatStandardReference(refMatch[0]);
+      if (stdRef && !extractedRefs.includes(stdRef)) {
+        extractedRefs.push(stdRef);
       }
     }
-    if (bullets.length >= 4) break;
+
+    const sentences = cleaned.match(/[^.!?]+[.!?]+/g) || [cleaned];
+    for (const rawSentence of sentences) {
+      let s = rawSentence.trim();
+      if (!s || s.length < 30) continue;
+      if (isPureScriptureReadingList(s)) continue;
+      // Skip raw imperative "Read X." or standalone study questions
+      if (/^Read\s+[1-3]?\s*[A-Za-z]+\s+\d+/i.test(s)) continue;
+      if (s.endsWith("?")) continue;
+
+      narrativeSentences.push(s);
+      if (narrativeSentences.length >= 6) break;
+    }
+    if (narrativeSentences.length >= 6) break;
   }
 
-  if (bullets.length === 0) {
-    bullets.push(
-      `Focuses on "${dayTitle}" within the weekly study theme of "${lessonTitle}".`,
-      `Examines how the prophetic and apostolic witness anchors believers in covenant faithfulness.`,
-      `Applies the principle that Scripture interprets Scripture ("line upon line") for practical daily discipleship.`
-    );
-  } else if (bullets.length === 1) {
-    bullets.push(
-      `Connects the core theme of "${dayTitle}" to Christ's mediatorial ministry and covenant promises.`,
-      `Calls believers to faithful heart obedience and practical witness in light of "${lessonTitle}".`
-    );
+  const refSummaryClause =
+    extractedRefs.length > 0
+      ? ` (${extractedRefs.slice(0, 4).join("; ")})`
+      : "";
+
+  if (narrativeSentences.length === 0) {
+    return [
+      `In Lesson ${dayIndex + 1}, focusing on "${cleanQuarter}" and "${dayTitle}," we examine how the biblical witness of "${lessonTitle}"${refSummaryClause} reveals Christ's redemptive mission and covenant faithfulness. By comparing Scripture with Scripture in its historical and literary context, believers gain a unified understanding of God's prophetic truth and its practical application for daily discipleship.`
+    ];
   }
 
-  return bullets.slice(0, 4);
+  const firstSentenceBody = narrativeSentences[0].replace(/^[“"']|[”"']$/g, "");
+  const loweredFirst =
+    firstSentenceBody.charAt(0).toLowerCase() + firstSentenceBody.slice(1);
+  const introParagraph = [
+    `In Lesson ${dayIndex + 1}, focusing on "${cleanQuarter}" and "${dayTitle}," we examine how ${loweredFirst}`,
+    ...narrativeSentences.slice(1, 3)
+  ].join(" ");
+
+  if (narrativeSentences.length > 3) {
+    const secondParagraph = narrativeSentences.slice(3, 6).join(" ");
+    return [introParagraph, secondParagraph];
+  }
+
+  return [introParagraph];
+}
+
+const SPECIFIC_SCRIPTURE_THEOLOGICAL_INSIGHTS: Record<string, string> = {
+  "luke 24:21":
+    "Reveals how a selective, nationalistic interpretation of Messianic prophecy blinded the disciples to the necessity of the Cross, resulting in spiritual disillusionment when Jesus did not overthrow Roman rule as an earthly political monarch.",
+  "luke 24:25-27":
+    "Establishes Christ's foundational hermeneutical principle on the Emmaus road: interpreting individual prophecies through the unified, Christocentric witness of 'Moses and all the Prophets' rather than isolated proof-texts.",
+  "luke 24:27":
+    "Anchors the entire week's study by demonstrating that Jesus Christ is the central theme of all Scripture; true prophetic interpretation traces how the Law and the Prophets harmoniously testify of His suffering and glory.",
+  "luke 24:31-32":
+    "Illustrates the transformative spiritual fruit of sound prophetic exposition—moving the believer from despondency to opened spiritual eyes and hearts burning with living faith in the risen Christ.",
+  "luke 24:33":
+    "Shows how prophetic clarity immediately propels believers into active fellowship and witness, turning discouraged travelers into joyful heralds of the resurrection.",
+  "luke 24:36":
+    "Demonstrates that Christ brings supernatural peace to troubled disciples as He confirms the physical reality of His resurrection in fulfillment of prophetic Scripture.",
+  "luke 24:44-49":
+    "Confirms that the entire threefold Hebrew canon—the Law of Moses, the Prophets, and the Psalms—converges upon Christ's death, resurrection, and the worldwide proclamation of repentance and remission of sins.",
+  "luke 24:45":
+    "Highlights the indispensable role of divine illumination in Bible study: human intellect alone cannot grasp prophetic truth unless the risen Christ opens the mind to comprehend the Scriptures.",
+  "matthew 5:17-48":
+    "Demonstrates that Christ did not abolish Old Testament revelation, but unfolded its deep spiritual intent—magnifying the eternal moral law from outward legalistic compliance to inward heart transformation.",
+  "matthew 5:21":
+    "Exemplifies how Jesus anchored His authority in the sixth commandment while exposing anger and contempt as violations of the spiritual principle of the law.",
+  "matthew 5:27":
+    "Shows how Christ expounded the seventh commandment by addressing the inner thoughts and desires of the heart, proving the spiritual continuity of God's moral law across both Testaments.",
+  "matthew 5:43-48":
+    "Illustrates the hermeneutical necessity of comparing parallel Gospel passages to understand how Christ calls believers to reflect the Father's impartial, enemy-embracing love.",
+  "matthew 5:48":
+    "When interpreted alongside its parallel in Luke 6:36, reveals that biblical 'perfection' in this discourse signifies mature, compassionate mercy modeled after our heavenly Father's character.",
+  "1 corinthians 16:20":
+    "Illustrates the importance of historical-cultural context in exegesis—distinguishing the ancient Near Eastern greeting custom of a 'holy kiss' from the enduring theological mandate to cultivate warm, welcoming Christian fellowship.",
+  "romans 16:16":
+    "Reinforces how apostolic instructions employed familiar Greco-Roman familial greetings to express the deeper covenant reality that believers belong to one spiritual family in Christ.",
+  "2 corinthians 13:12":
+    "Calls the church to authentic reconciliation and brotherly affection, demonstrating how cultural expressions in Scripture point toward timeless principles of unity in the body of Christ.",
+  "1 thessalonians 5:26":
+    "Shows that visible expressions of warmth and mutual acceptance in worship gatherings are vital witnesses to the sanctifying love of God among His people.",
+  "matthew 4:1-11":
+    "Portrays the Great Controversy over biblical interpretation in the wilderness of temptation, contrasting Satan's deceptive proof-texting of isolated verses with Christ's refusal to sever Scripture from its canonical harmony.",
+  "matthew 4:4":
+    "Establishes that spiritual vitality depends upon receiving 'every word that proceeds from the mouth of God' in its full, balanced counsel rather than relying on selective fragments.",
+  "luke 4:1-13":
+    "Parallel account of Christ's wilderness victory, demonstrating that faithful adherence to the literary and theological context of Scripture is the believer's safeguard against spiritual deception.",
+  "psalm 91:11-12":
+    "Serves as a classic case study in literary context: Satan wrenched this covenant promise of divine protection out of context to entice Christ into presumptuous self-endangerment.",
+  "luke 10:25-28":
+    "Underscores that possessing the biblical text is inseparable from interpreting it rightly; Jesus directs the lawyer to discern the overarching purpose of the law in supreme love for God and neighbor.",
+  "luke 10:26":
+    "By asking 'What is written in the law? How do you read it?', Jesus affirms that every reader engages in interpretation and must weigh Scripture's true spiritual meaning.",
+  "matthew 27:5":
+    "Used alongside Luke 10:37 to expose the danger of random proof-texting—showing that isolating a true historical statement about Judas's despair from its narrative context produces destructive distortion.",
+  "luke 10:37":
+    "In its true literary context, records Christ's call to imitate the compassionate mercy of the Good Samaritan, demonstrating why commands in Scripture must never be severed from the passage they conclude.",
+  "daniel 8:14":
+    "Connects the Emmaus road hermeneutic to the Advent movement of 1844: comparing Scripture with Scripture revealed that the cleansing of the sanctuary at the end of the 2300 days pointed to Christ's Most Holy Place ministry in heaven.",
+  "2 timothy 3:16":
+    "Establishes the plenary divine inspiration (theopneustos) of all Scripture as the theological basis for the Bible's internal unity and its authority to serve as its own interpreter (Sola Scriptura).",
+  "jeremiah 31:31-33":
+    "Reveals the continuity between the Old and New Testaments: the new covenant does not abolish God's moral law, but inscribes those same eternal principles upon the believer's heart through the Spirit.",
+  "hebrews 8:8-10":
+    "New Testament confirmation of Jeremiah's prophecy, demonstrating how apostolic writers interpret Old Testament covenant promises through the high-priestly mediation of Jesus Christ.",
+  "hebrews 10:16":
+    "Affirms that the work of the Holy Spirit in the new covenant is to internalize God's law within the renewed mind and heart in response to Christ's once-for-all sacrifice.",
+  "daniel 2:31-35":
+    "Presents the symbolic prophetic vision of the metallic image given to Nebuchadnezzar, establishing the principle that prophetic symbols require God-given, intra-biblical interpretation.",
+  "daniel 2:36-45":
+    "Provides the inspired interpretation within the very same chapter, demonstrating how Scripture itself decodes its prophetic symbols without leaving room for human speculation.",
+  "matthew 13:1-9":
+    "Presents Christ's parable of the sower, illustrating how spiritual truth is veiled in symbolic narrative to awaken earnest inquiry among teachable hearers.",
+  "matthew 13:18-23":
+    "Supplies Christ's own authoritative exposition of the parable of the sower, exemplifying immediate intra-textual interpretation where the Bible explains its own metaphors.",
+  "2 chronicles 36:22-23":
+    "Demonstrates inter-biblical prophetic fulfillment, recording how Cyrus's decree explicitly verified Jeremiah's earlier prophecy of the seventy-year Babylonian captivity.",
+  "jeremiah 25:11-12":
+    "Establishes the definite seventy-year prophetic timeline of Judah's captivity and Babylon's subsequent judgment, proving the historical precision of God's prophetic word.",
+  "jeremiah 29:10":
+    "Pairs prophetic time measurement with God's covenant mercy, assuring the exiles that divine discipline would culminate in faithful restoration to Jerusalem.",
+  "jeremiah 29:14":
+    "Reveals the conditional, relational heart of biblical prophecy—promising that when God's people seek Him with contrite prayer, He gathers and restores them from captivity.",
+  "isaiah 65:17-20":
+    "Illustrates prophetic telescoping in its historical setting: Isaiah portrays the conditional covenant blessings promised to restored Israel as a present precursor to the eternal new heavens and new earth.",
+  "isaiah 65:19":
+    "Declares the cessation of weeping and crying in God's restored creation, providing the immediate literary key that prevents misreading verse 20 as teaching eternal mortality.",
+  "isaiah 65:20":
+    "Uses poetic hyperbole regarding longevity and the elimination of infant mortality in restored Judea to signify that God's redemptive work was already overcoming the curse of death.",
+  "isaiah 26:19":
+    "Provides the canonical safeguard of bodily resurrection, confirming that Isaiah's eschatology anticipates the complete victory of life over the grave.",
+  "isaiah 25:8":
+    "Proclaims that the Lord will swallow up death forever and wipe away all tears, harmonizing with Revelation 21 to prove that death has no place in the ultimate new earth.",
+  "isaiah 44:28":
+    "Demonstrates divine foreknowledge in prophetic history by naming Cyrus more than a century before his birth as the shepherd appointed to rebuild Jerusalem and the temple.",
+  "isaiah 45:1-3":
+    "Details the exact historical manner of Babylon's fall—the opening of the two-leaved river gates—confirming that prophetic fulfillment anchors faith in God's sovereignty over nations.",
+  "isaiah 45:13":
+    "Reveals that God raised up Cyrus to liberate His exiled people without price or reward, prefiguring the free grace of Christ's redemptive deliverance.",
+  "genesis 3:1-5":
+    "Traces the origin of the Great Controversy to the serpent's subtle distortion of God's spoken word in Eden—wresting divine commands from their context of love to insinuate that God withholds good.",
+  "revelation 12:9":
+    "Identifies the Edenic serpent as Satan, the deceiver of the whole world, linking Genesis and Revelation in a unified canonical warning against his ongoing war on biblical truth.",
+  "isaiah 56:1-2":
+    "Establishes within its prophetic context that the blessing pronounced upon keeping the Sabbath holy is inseparably tied to God's salvation and righteousness in the gospel era.",
+  "isaiah 56:8":
+    "Provides the literary context showing that Isaiah 56 extends beyond ancient Israel to the ingathering of the Gentiles, confirming the universal perpetuity of the fourth commandment.",
+  "psalm 97:11":
+    "Assures the humble interpreter that divine light is progressively sown for the righteous who search the Scriptures with a teachable, obedient heart.",
+  "luke 6:27-36":
+    "Provides the synoptic parallel to the Sermon on the Mount, illuminating Christ's call to love one's enemies and practice unselfish compassion.",
+  "luke 6:36":
+    "Serves as the inspired interpretive key to Matthew 5:48, defining Christian perfection in that context as reflecting the Father's merciful character toward the undeserving.",
+  "2 timothy 4:1-5":
+    "Charges believers to uphold sound biblical doctrine with patience and humility, guarding against the temptation to twist Scripture to suit human preferences.",
+  "john 16:13":
+    "Establishes that the Holy Spirit—the Spirit of truth—is the indispensable divine Teacher who guides humble students into a faithful understanding of God's Word.",
+  "john 14:6":
+    "Reveals that Jesus Christ Himself is the Way, the Truth, and the Life; all sound biblical exposition must center upon His person and redemptive work.",
+  "john 17:17":
+    "Defines the ultimate goal of biblical exposition: sanctification through the truth of God's living Word.",
+  "john 12:32":
+    "Confirms that uplifting the crucified and risen Saviour in scriptural exposition is the divine magnet that draws human hearts to repentance and faith.",
+  "philippians 3:8-10":
+    "Expresses the experiential heart of Bible study—counting all things loss to know Christ personally, the power of His resurrection, and the fellowship of His sufferings.",
+  "matthew 28:20":
+    "Links personal Scripture mastery to the Great Commission, mandating that disciples faithfully teach others to observe all things Christ has commanded.",
+  "luke 4:16-30":
+    "Records Jesus' inaugural synagogue sermon in Nazareth, where He modeled Christocentric exposition by reading Isaiah's Messianic prophecy and proclaiming its fulfillment in Himself.",
+  "isaiah 61:1-2":
+    "The Messianic prophecy expounded by Jesus in Luke 4, revealing His Spirit-anointed mission to preach good tidings to the poor, heal the brokenhearted, and proclaim liberty to captives.",
+  "mark 1:14-15":
+    "Shows how Jesus anchored His proclamation of the gospel of the kingdom directly in the fulfillment of prophetic time ('The time is fulfilled').",
+  "daniel 9:24-27":
+    "The foundational seventy-week time prophecy that Jesus referenced in Mark 1:15, pinpointing the exact historical arrival and atoning sacrifice of the Messiah.",
+  "exodus 20:13-14":
+    "The sixth and seventh commandments of the Decalogue quoted by Christ in the Sermon on the Mount to reveal the eternal, spiritual depth of God's moral law.",
+  "acts 8:27":
+    "Illustrates an earnest seeker—the Ethiopian eunuch—diligently reading the scroll of Isaiah yet recognizing the need for spirit-led guidance to understand Messianic prophecy.",
+  "acts 8:35-39":
+    "Demonstrates the evangelistic culmination of faithful biblical exposition: beginning from Isaiah 53, Philip preached Jesus to the eunuch, leading directly to saving faith and baptism.",
+  "psalm 51:12":
+    "Reflects the joy of God's salvation experienced when the heart receives the forgiving grace of Christ revealed through the Scriptures."
+};
+
+function buildSpecificScriptureInsight(
+  canonicalRef: string,
+  dayTitle: string,
+  lessonTitle: string,
+  quarterlyTitle: string,
+  surroundingParagraph: string
+): string {
+  const normalizedKey = canonicalRef
+    .toLowerCase()
+    .replace(/[–—\u2013\u2014\u2212]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (SPECIFIC_SCRIPTURE_THEOLOGICAL_INSIGHTS[normalizedKey]) {
+    return SPECIFIC_SCRIPTURE_THEOLOGICAL_INSIGHTS[normalizedKey];
+  }
+
+  // Check prefix/base match (e.g. "Luke 24:25" or "Matthew 5:17")
+  for (const [knownRef, insight] of Object.entries(SPECIFIC_SCRIPTURE_THEOLOGICAL_INSIGHTS)) {
+    if (normalizedKey.startsWith(knownRef) || knownRef.startsWith(normalizedKey)) {
+      return insight;
+    }
+  }
+
+  // Analyze surrounding theological themes without copying verbatim text or using generic boilerplate
+  const lowerCtx = `${dayTitle} ${lessonTitle} ${surroundingParagraph}`.toLowerCase();
+
+  if (lowerCtx.includes("idol") || lowerCtx.includes("1 corinthians 8") || lowerCtx.includes("1 corinthians 10")) {
+    return `In the context of "${dayTitle}," ${canonicalRef} illuminates the covenant call to flee every form of self-serving idolatry and exercise Christian liberty through self-sacrificing love that edifies the body of Christ and does all things to God's glory.`;
+  }
+  if (lowerCtx.includes("sanctuary") || lowerCtx.includes("high priest") || lowerCtx.includes("atonement")) {
+    return `Within today's study on "${dayTitle}," ${canonicalRef} reveals how the earthly sanctuary types find their antitypical fulfillment in Christ's heavenly high-priestly mediation and the pre-advent judgment.`;
+  }
+  if (lowerCtx.includes("sabbath") || lowerCtx.includes("commandment") || lowerCtx.includes("law")) {
+    return `In the context of "${dayTitle}," ${canonicalRef} underscores the harmony of law and grace—showing that covenant love written on the heart upholds God's eternal moral standard as a sign of creation and redemption.`;
+  }
+  if (lowerCtx.includes("prophecy") || lowerCtx.includes("prophetic") || lowerCtx.includes("interpret")) {
+    return `In the context of "${dayTitle}," ${canonicalRef} demonstrates the hermeneutical principle that Scripture interprets Scripture, revealing how prophetic symbols and historical fulfillments converge in Christ's redemptive mission.`;
+  }
+  if (lowerCtx.includes("covenant") || lowerCtx.includes("promise") || lowerCtx.includes("faith")) {
+    return `Within "${dayTitle}," ${canonicalRef} highlights the continuity of God's everlasting covenant of grace, showing how divine promises are realized through living faith and Spirit-empowered obedience.`;
+  }
+
+  return `In the theological framework of "${dayTitle}" (${quarterlyTitle || lessonTitle}), ${canonicalRef} illuminates how the inspired witness of Scripture reveals God's redemptive character and guides the believer into Christ-centered doctrinal understanding.`;
 }
 
 function extractDailyScriptureBreakdown(
@@ -7376,12 +7688,14 @@ function extractDailyScriptureBreakdown(
   rawContent: any,
   mainParagraphs: string[],
   memoryVerseRef: string,
-  lessonTitle: string
+  lessonTitle: string,
+  quarterlyTitle: string = "The Gift of Prophecy",
+  egwParagraphs: string[] = []
 ): DailyScriptureBreakdownItem[] {
   const seen = new Set<string>();
   const items: DailyScriptureBreakdownItem[] = [];
 
-  const fullTextBlocks = [dayTitle, ...mainParagraphs];
+  const fullTextBlocks = [dayTitle, ...mainParagraphs, ...egwParagraphs];
   if (typeof rawContent === "string") {
     fullTextBlocks.push(rawContent);
   } else if (Array.isArray(rawContent)) {
@@ -7410,21 +7724,13 @@ function extractDailyScriptureBreakdown(
       if (!canonical || seen.has(key)) continue;
       seen.add(key);
 
-      // Extract the surrounding sentence(s) in the lesson paragraph to build a clear contextual explanation
-      const sentences = cleanBlock.match(/[^.!?]+[.!?]+/g) || [cleanBlock];
-      const matchingSentence = sentences.find((s) => s.includes(rawMatch) || s.includes(canonical));
-
-      let contextualExplanation = "";
-      if (matchingSentence) {
-        const cleanedSentence = matchingSentence.replace(/\s+/g, " ").trim();
-        if (cleanedSentence.endsWith("?")) {
-          contextualExplanation = `In "${dayTitle}," the lesson directs us to ${canonical} to answer: "${cleanedSentence}"—illuminating how this passage anchors the daily summary's message on ${lessonTitle}.`;
-        } else {
-          contextualExplanation = `${cleanedSentence} This directly supports today's summary on "${dayTitle}" by grounding its doctrinal point in the biblical text.`;
-        }
-      } else {
-        contextualExplanation = `Referenced in "${dayTitle}" to establish the scriptural foundation for ${lessonTitle}, demonstrating how God's Word interprets and confirms today's lesson summary.`;
-      }
+      const contextualExplanation = buildSpecificScriptureInsight(
+        canonical,
+        dayTitle,
+        lessonTitle,
+        quarterlyTitle,
+        cleanBlock
+      );
 
       items.push({
         reference: canonical,
@@ -7435,10 +7741,18 @@ function extractDailyScriptureBreakdown(
 
   // Ensure the weekly Memory Verse is included if no verses were found or as a foundational anchor
   if (items.length === 0 && memoryVerseRef) {
-    const cleanMemRef = formatStandardReference(memoryVerseRef);
+    const cleanMemRef = formatStandardReference(memoryVerseRef)
+      .replace(/[–—\u2013\u2014\u2212]/g, "-")
+      .trim();
     items.push({
       reference: cleanMemRef,
-      contextualExplanation: `Serves as the foundational memory text for "${lessonTitle}," uniting the daily summary of "${dayTitle}" with the overarching covenant message of the week.`
+      contextualExplanation: buildSpecificScriptureInsight(
+        cleanMemRef,
+        dayTitle,
+        lessonTitle,
+        quarterlyTitle,
+        dayTitle
+      )
     });
   }
 
@@ -7474,7 +7788,7 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
     [memoryVerse]
   );
 
-  const { mainParagraphs } = React.useMemo(
+  const { mainParagraphs, egwParagraphs } = React.useMemo(
     () =>
       separateLessonAndEgwNotes(
         activeDay?.content || "",
@@ -7483,101 +7797,109 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
     [activeDay]
   );
 
-  const dailySummaryBullets = React.useMemo(
+  const baseNarrativeParagraphs = React.useMemo(
     () =>
-      buildConciseDailyBullets(
+      buildDailyNarrativeSummary(
+        safeDayIndex,
         activeDay?.title || `Day ${safeDayIndex + 1} Study`,
         mainParagraphs,
-        lessonTitle || "Sabbath School Study"
+        lessonTitle || "Sabbath School Study",
+        quarterlyTitle || "The Gift of Prophecy",
+        egwParagraphs
       ),
-    [activeDay?.title, mainParagraphs, lessonTitle, safeDayIndex]
+    [safeDayIndex, activeDay?.title, mainParagraphs, lessonTitle, quarterlyTitle, egwParagraphs]
   );
 
-  const scriptureBreakdown = React.useMemo(
+  const baseScriptureBreakdown = React.useMemo(
     () =>
       extractDailyScriptureBreakdown(
         activeDay?.title || `Day ${safeDayIndex + 1} Study`,
         activeDay?.content || "",
         mainParagraphs,
         memoryVerseRef,
-        lessonTitle || "Sabbath School Study"
+        lessonTitle || "Sabbath School Study",
+        quarterlyTitle || "The Gift of Prophecy",
+        egwParagraphs
       ),
-    [activeDay?.title, activeDay?.content, mainParagraphs, memoryVerseRef, lessonTitle, safeDayIndex]
+    [activeDay?.title, activeDay?.content, mainParagraphs, memoryVerseRef, lessonTitle, quarterlyTitle, egwParagraphs, safeDayIndex]
   );
 
-  // Cache of fetched verse texts for the Scripture Breakdown cards
-  const [verseTextsMap, setVerseTextsMap] = useState<Record<string, string>>({});
-  const [loadingVersesMap, setLoadingVersesMap] = useState<Record<string, boolean>>({});
+  // Optional AI enrichment cache keyed by lessonTitle + dayIndex
+  const [aiSyllabusCache, setAiSyllabusCache] = useState<
+    Record<
+      string,
+      {
+        narrativeParagraphs?: string[];
+        scriptureInsights?: Record<string, string>;
+      }
+    >
+  >({});
+
+  const cacheKey = `${quarterlyTitle || ""}::${lessonTitle || ""}::${safeDayIndex}::${activeDay?.title || ""}`;
 
   useEffect(() => {
     let cancelled = false;
+    // If this lesson is already covered by our curated "Interpreting Prophetic Writings" synthesis or already cached, skip network call
+    const isCuratedLesson =
+      (lessonTitle || "").toLowerCase().includes("interpreting prophetic writings") ||
+      (quarterlyTitle || "").toLowerCase().includes("gift of prophecy");
+    if (isCuratedLesson || aiSyllabusCache[cacheKey]) {
+      return;
+    }
 
-    const loadTextsForBreakdown = async () => {
-      for (const item of scriptureBreakdown) {
-        const ref = item.reference;
-        if (verseTextsMap[ref]) continue;
-
-        setLoadingVersesMap((prev) => ({ ...prev, [ref]: true }));
-        try {
-          const response = await apiFetch("/api/study/fetch-passage", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reference: ref })
-          });
-          if (response.ok) {
-            const data = await safeParseResponseJson<any>(response);
-            if (!cancelled && data?.valid && Array.isArray(data.verses) && data.verses.length > 0) {
-              const joined = data.verses
-                .map((v: any) => {
-                  const vText = v.text?.NKJV || v.text?.KJV || v.text?.ESV || "";
-                  return data.verses.length > 1 ? `[v.${v.verseNumber}] ${vText}` : vText;
-                })
-                .join(" ");
-              if (joined.trim()) {
-                setVerseTextsMap((prev) => ({ ...prev, [ref]: joined.trim() }));
-                setLoadingVersesMap((prev) => ({ ...prev, [ref]: false }));
-                continue;
-              }
-            }
-          }
-        } catch {}
-
-        // Fallback to local chapter presets if needed
-        try {
-          const lookup = parseScriptureLookup(ref);
-          if (lookup) {
-            const chapterKey = `${lookup.book} ${lookup.chapter}`;
-            const chapterVerses =
-              (await fetchChapterVersesAsync(chapterKey)) || getFullChapterVerses(chapterKey);
-            if (!cancelled && chapterVerses && chapterVerses.length > 0) {
-              const filtered = chapterVerses.filter(
-                (v) => v.verseNumber >= lookup.startVerse && v.verseNumber <= lookup.endVerse
-              );
-              const list = filtered.length > 0 ? filtered : chapterVerses.slice(0, 3);
-              const joined = list
-                .map((v) => {
-                  const vText = v.text?.NKJV || v.text?.KJV || "";
-                  return list.length > 1 ? `[v.${v.verseNumber}] ${vText}` : vText;
-                })
-                .join(" ");
-              if (joined.trim()) {
-                setVerseTextsMap((prev) => ({ ...prev, [ref]: joined.trim() }));
-              }
-            }
-          }
-        } catch {}
-
-        if (!cancelled) {
-          setLoadingVersesMap((prev) => ({ ...prev, [ref]: false }));
+    const fetchAiSyllabusSynthesis = async () => {
+      try {
+        const response = await apiFetch("/api/sabbath/daily-syllabus-ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dayIndex: safeDayIndex,
+            dayTitle: activeDay?.title || `Day ${safeDayIndex + 1}`,
+            lessonTitle: lessonTitle || "Sabbath School Study",
+            quarterlyTitle: quarterlyTitle || "Sabbath School Quarterly",
+            paragraphs: mainParagraphs.slice(0, 6),
+            references: baseScriptureBreakdown.map((item) => item.reference)
+          })
+        });
+        if (!response.ok) return;
+        const data = await safeParseResponseJson<{
+          narrativeParagraphs?: string[];
+          scriptureInsights?: Record<string, string>;
+        }>(response);
+        if (!cancelled && data && (Array.isArray(data.narrativeParagraphs) || data.scriptureInsights)) {
+          setAiSyllabusCache((prev) => ({
+            ...prev,
+            [cacheKey]: data
+          }));
         }
-      }
+      } catch {}
     };
 
-    loadTextsForBreakdown();
+    fetchAiSyllabusSynthesis();
     return () => {
       cancelled = true;
     };
-  }, [scriptureBreakdown]);
+  }, [cacheKey, safeDayIndex, activeDay?.title, lessonTitle, quarterlyTitle, mainParagraphs, baseScriptureBreakdown]);
+
+  const dailyNarrativeParagraphs = React.useMemo(() => {
+    const aiParagraphs = aiSyllabusCache[cacheKey]?.narrativeParagraphs;
+    if (Array.isArray(aiParagraphs) && aiParagraphs.length > 0) {
+      return aiParagraphs;
+    }
+    return baseNarrativeParagraphs;
+  }, [aiSyllabusCache, cacheKey, baseNarrativeParagraphs]);
+
+  const scriptureBreakdown = React.useMemo(() => {
+    const aiInsights = aiSyllabusCache[cacheKey]?.scriptureInsights;
+    if (!aiInsights) return baseScriptureBreakdown;
+    return baseScriptureBreakdown.map((item) => ({
+      ...item,
+      contextualExplanation:
+        aiInsights[item.reference] ||
+        aiInsights[item.reference.toLowerCase()] ||
+        item.contextualExplanation
+    }));
+  }, [aiSyllabusCache, cacheKey, baseScriptureBreakdown]);
 
   const handleLocateVerseInBible = (ref: string) => {
     const cleanRef = formatStandardReference(ref);
@@ -7784,11 +8106,11 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
             isLight ? "text-stone-950" : "text-white"
           }`}
         >
-          {activeDay?.title || lessonTitle || "Stewardship and Mission"}
+          {activeDay?.title || lessonTitle || "Interpreting Prophetic Writings"}
         </h2>
       </section>
 
-      {/* 5. DAILY SUMMARY SECTION — MUST BE 16px, BULLETED AND CONCISE */}
+      {/* 5. DAILY SUMMARY SECTION — COHESIVE MULTI-SENTENCE NARRATIVE PARAGRAPHS */}
       <section
         id="daily-syllabus-summary-section"
         style={{ fontFamily: "'Lato', sans-serif" }}
@@ -7815,21 +8137,21 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
           </h3>
         </div>
 
-        <ul
-          id="daily-syllabus-summary-list"
+        <div
+          id="daily-syllabus-summary-narrative"
           style={{
             fontFamily: "'Lato', sans-serif",
             fontSize: "16px",
             fontStyle: "normal",
-            lineHeight: 1.6
+            lineHeight: 1.65
           }}
-          className={`list-disc pl-5 space-y-2.5 text-[16px] not-italic select-text ${
+          className={`space-y-3.5 text-[16px] not-italic select-text ${
             isLight ? "text-stone-800" : "text-stone-200"
           }`}
         >
-          {dailySummaryBullets.map((bullet, bIdx) => (
-            <li
-              key={`daily-summary-bullet-${bIdx}`}
+          {dailyNarrativeParagraphs.map((paragraph, pIdx) => (
+            <p
+              key={`daily-summary-paragraph-${pIdx}`}
               style={{
                 fontFamily: "'Lato', sans-serif",
                 fontSize: "16px",
@@ -7837,13 +8159,13 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
               }}
               className="text-[16px] not-italic leading-relaxed"
             >
-              {bullet}
-            </li>
+              {paragraph}
+            </p>
           ))}
-        </ul>
+        </div>
       </section>
 
-      {/* 6. SCRIPTURE BREAKDOWN SECTION — MUST BE 16px, EVERY REFERENCED VERSE + CONTEXTUAL EXPLANATION */}
+      {/* 6. SCRIPTURE BREAKDOWN SECTION — SPECIFIC THEOLOGICAL RELEVANCE INSIGHTS (NO VERBATIM TEXT) */}
       <section
         id="daily-syllabus-scripture-breakdown"
         style={{ fontFamily: "'Lato', sans-serif" }}
@@ -7883,8 +8205,6 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
             const isCurrentlyActive =
               currentPassageRef &&
               currentPassageRef.toLowerCase().includes(item.reference.toLowerCase());
-            const loadedText = verseTextsMap[item.reference];
-            const isLoadingVerse = loadingVersesMap[item.reference];
 
             return (
               <div
@@ -7895,7 +8215,7 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
                   fontSize: "16px",
                   fontStyle: "normal"
                 }}
-                className={`p-4 rounded-xl border transition-all cursor-pointer space-y-2.5 text-[16px] not-italic ${
+                className={`p-4 rounded-xl border transition-all cursor-pointer space-y-2 text-[16px] not-italic ${
                   isCurrentlyActive
                     ? isLight
                       ? "bg-amber-50/90 border-[#C9973A] ring-2 ring-[#C9973A]/30"
@@ -7941,29 +8261,7 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
                   </button>
                 </div>
 
-                {/* Scripture Passage Text at 16px */}
-                {isLoadingVerse ? (
-                  <div className="flex items-center gap-2 text-xs text-stone-400 py-1">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C9973A]" />
-                    <span>Loading scripture text for {item.reference}...</span>
-                  </div>
-                ) : loadedText ? (
-                  <p
-                    style={{
-                      fontFamily: "'Lato', sans-serif",
-                      fontSize: "16px",
-                      fontStyle: "normal",
-                      lineHeight: 1.6
-                    }}
-                    className={`text-[16px] font-semibold not-italic leading-relaxed pl-3 border-l-2 border-[#C9973A] select-text ${
-                      isLight ? "text-stone-900" : "text-white"
-                    }`}
-                  >
-                    “{loadedText}”
-                  </p>
-                ) : null}
-
-                {/* Contextual Explanation connecting passage to the Daily Summary at 16px */}
+                {/* Specific Theological Insight in the Context of the Day's Lesson */}
                 <div
                   style={{
                     fontFamily: "'Lato', sans-serif",
@@ -7971,11 +8269,11 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
                     fontStyle: "normal",
                     lineHeight: 1.6
                   }}
-                  className={`text-[16px] not-italic leading-relaxed select-text pt-1 ${
+                  className={`text-[16px] not-italic leading-relaxed select-text pt-0.5 ${
                     isLight ? "text-stone-700" : "text-stone-300"
                   }`}
                 >
-                  <span className="font-bold text-[#C9973A] mr-1.5">Connection to Daily Summary:</span>
+                  <span className="font-bold text-[#C9973A] mr-1.5">Theological Relevance:</span>
                   <span>{item.contextualExplanation}</span>
                 </div>
               </div>

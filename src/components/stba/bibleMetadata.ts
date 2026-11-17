@@ -433,7 +433,7 @@ function parseVerseRef(reference: string, currentVerse: number): { bookIndex: nu
 
   if (!match) return null;
 
-  const rawBook = match[1].trim().toLowerCase();
+  const rawBook = match[1].trim().toLowerCase().replace(/\./g, "").replace(/\s+/g, " ");
   const chapter = parseInt(match[2]);
   let verse = currentVerse;
 

@@ -38,14 +38,24 @@ import {
   Download,
   FileText,
   Printer,
-  Brain
+  Brain,
+  Pause,
+  Layers,
+  Quote,
+  Compass,
+  GraduationCap,
+  ChevronDown
 } from "lucide-react";
+import { jsPDF } from "jspdf";
 import { Scripture } from "../types";
 import { useApp } from "../context/AppContext";
 import { callElderStephen } from "../lib/callElderStephen";
+import { ElderStephenMemoryEngine } from "../lib/elderStephenEngine";
 import { getElderStephenVoice } from "./stba/RightPaneTools";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { bibleService } from "../services/bibleService";
+import { VerseModal } from "./VerseModal";
+import { getScriptureRegex, formatStandardReference } from "../utils/sabbathUtils";
 import {
   supabase,
   SUPABASE_URL,
@@ -103,6 +113,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 }) => {
   const { user, showConfetti } = useApp();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Resolve Holy Scriptures override
   const params = new URLSearchParams(location.search);
@@ -116,7 +127,24 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     keywords: ["inspiration", "profitable", "doctrine", "reproof", "correction", "instruction"]
   } : propScripture;
 
-  const [activeScripture, setActiveScripture] = useState<Scripture>(initialScripture);
+  const TEACH_IT_SESSION_STORAGE_KEY = "stba_teach_it_active_session_v1";
+
+  const savedSessionSnapshot = React.useMemo(() => {
+    try {
+      const raw = localStorage.getItem(TEACH_IT_SESSION_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.phase && parsed.phase !== "intro" && parsed.phase !== "feedback" && !parsed.completed) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  }, []);
+
+  const [activeScripture, setActiveScripture] = useState<Scripture>(
+    savedSessionSnapshot?.activeScripture || initialScripture
+  );
   const scripture = activeScripture;
 
   // Role selections and options
@@ -128,9 +156,39 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   });
   const [isAudioPrompterEnabled, setIsAudioPrompterEnabled] = useState<boolean>(true);
 
-  // Active state parameters
+  // Always start on the intro screen; incomplete sessions are resumed via "Continue Session"
   const [phase, setPhase] = useState<PhaseType>("intro");
-  const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "scorecard" | "checklist">("chat");
+  const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "slate">("chat");
+  const [activeSlateTab, setActiveSlateTab] = useState<"all" | "scriptures" | "egw" | "pedagogy">("all");
+  const [selectedVerseRef, setSelectedVerseRef] = useState<string | null>(null);
+  const [isVerseModalOpen, setIsVerseModalOpen] = useState<boolean>(false);
+  const [showSlateDownloadMenu, setShowSlateDownloadMenu] = useState<boolean>(false);
+  const [hasTopicBeenChosen, setHasTopicBeenChosen] = useState<boolean>(
+    Boolean(savedSessionSnapshot?.hasTopicBeenChosen)
+  );
+  const [isRightSlatePopulated, setIsRightSlatePopulated] = useState<boolean>(
+    Boolean(savedSessionSnapshot?.isRightSlatePopulated)
+  );
+  const [activeTopicTitle, setActiveTopicTitle] = useState<string>(
+    savedSessionSnapshot?.activeTopicTitle || ""
+  );
+  const [activeTopicOverview, setActiveTopicOverview] = useState<string>(
+    savedSessionSnapshot?.activeTopicOverview || ""
+  );
+  const [activeTopicImportance, setActiveTopicImportance] = useState<string>(
+    savedSessionSnapshot?.activeTopicImportance || ""
+  );
+  const [activeExegesisDemo, setActiveExegesisDemo] = useState<string>(
+    savedSessionSnapshot?.activeExegesisDemo || ""
+  );
+  const [customFoundationalScriptures, setCustomFoundationalScriptures] = useState<
+    Array<{ reference: string; role: string; stageInsight: string }>
+  >(savedSessionSnapshot?.customFoundationalScriptures || []);
+  const rightSlateScrollRef = useRef<HTMLDivElement>(null);
+  const [isOutlineCollapsed, setIsOutlineCollapsed] = useState<boolean>(false);
+  const [activeEgwCommentary, setActiveEgwCommentary] = useState<string>(
+    savedSessionSnapshot?.activeEgwCommentary || ""
+  );
 
   // Teach-It Elder Stephen elements
   const [teachingDraftOutline, setTeachingDraftOutline] = useState(() => {
@@ -172,41 +230,92 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       setIsGeneratingOutline(false);
     }
   };
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(900);
-  const [isTimerActive, setIsTimerActive] = useState<boolean>(false);
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(
+    savedSessionSnapshot?.secondsRemaining || 0
+  );
+  const [isTimerActive, setIsTimerActive] = useState<boolean>(
+    Boolean(savedSessionSnapshot?.isTimerActive)
+  );
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [userInput, setUserInput] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Chat message engine
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  // Chat message engine (restored across navigation so returning picks up where left off)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    if (Array.isArray(savedSessionSnapshot?.chatMessages)) {
+      return savedSessionSnapshot.chatMessages.map((m: any) => ({
+        ...m,
+        timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
+      }));
+    }
+    return [];
+  });
 
   // Speech Recognition engine
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const recognitionRef = useRef<any>(null);
 
   // Real-time Scorecard stats (accumulated through user input)
-  const [scoreStats, setScoreStats] = useState({
-    overallScore: 0,
-    stageScores: {
-      stage1: 0,
-      stage2: 0,
-      stage3: 0,
-      stage4: 0,
-      stage5: 0
-    } as Record<string, number>,
-    foundKeywords: [] as string[],
-    gaps: scripture.keywords || [],
-    stageFeedback: {
-      stage1: "Awaiting your exegesis...",
-      stage2: "Awaiting controversy insights...",
-      stage3: "Awaiting doctrinal links...",
-      stage4: "Awaiting action points...",
-      stage5: "Awaiting appeal presentation..."
-    } as Record<string, string>,
-    ellenWhiteQuote: "The Bible is its own expositor. Scripture is to be compared with scripture.",
-    devotionalPrompt: "What is God asking you to trust, release, or do today?"
-  });
+  const [scoreStats, setScoreStats] = useState(
+    savedSessionSnapshot?.scoreStats || {
+      overallScore: 0,
+      stageScores: {
+        stage1: 0,
+        stage2: 0,
+        stage3: 0,
+        stage4: 0,
+        stage5: 0
+      } as Record<string, number>,
+      foundKeywords: [] as string[],
+      gaps: scripture.keywords || [],
+      stageFeedback: {
+        stage1: "Awaiting your exegesis...",
+        stage2: "Awaiting controversy insights...",
+        stage3: "Awaiting doctrinal links...",
+        stage4: "Awaiting action points...",
+        stage5: "Awaiting appeal presentation..."
+      } as Record<string, string>,
+      ellenWhiteQuote: "The Bible is its own expositor. Scripture is to be compared with scripture.",
+      devotionalPrompt: "What is God asking you to trust, release, or do today?"
+    }
+  );
+
+  // Persist active Teach It Studio session across navigation
+  useEffect(() => {
+    if (phase === "intro") return;
+    try {
+      const payload = {
+        phase,
+        activeScripture,
+        hasTopicBeenChosen,
+        isRightSlatePopulated,
+        activeTopicTitle,
+        activeTopicOverview,
+        activeTopicImportance,
+        activeExegesisDemo,
+        customFoundationalScriptures,
+        scoreStats,
+        secondsRemaining,
+        isTimerActive,
+        chatMessages: chatMessages.slice(-80)
+      };
+      localStorage.setItem(TEACH_IT_SESSION_STORAGE_KEY, JSON.stringify(payload));
+    } catch {}
+  }, [
+    phase,
+    activeScripture,
+    hasTopicBeenChosen,
+    isRightSlatePopulated,
+    activeTopicTitle,
+    activeTopicOverview,
+    activeTopicImportance,
+    activeExegesisDemo,
+    customFoundationalScriptures,
+    scoreStats,
+    secondsRemaining,
+    isTimerActive,
+    chatMessages
+  ]);
 
   const [devotionalReflection, setDevotionalReflection] = useState<string>("");
   const [hasSavedReflection, setHasSavedReflection] = useState<boolean>(false);
@@ -483,6 +592,107 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     }
   };
 
+  const isRightSlatePopulatedRef = useRef<boolean>(isRightSlatePopulated);
+  useEffect(() => {
+    isRightSlatePopulatedRef.current = isRightSlatePopulated;
+  }, [isRightSlatePopulated]);
+  const lastLiveUserTranscriptRef = useRef<string>("");
+  const liveSlateSyncInFlightRef = useRef<boolean>(false);
+
+  const applySlateUpdatePayload = (slate: {
+    topicTitle?: string;
+    topicOverview?: string;
+    topicImportance?: string;
+    exegesisDemo?: string;
+    primaryReference?: string;
+    primaryText?: string;
+    egwCommentary?: string;
+    foundationalScriptures?: Array<{ reference: string; role: string; stageInsight: string }>;
+  }) => {
+    if (!slate) return;
+    const primaryRef = (slate.primaryReference || slate.foundationalScriptures?.[0]?.reference || "").trim();
+    if (primaryRef) {
+      setActiveScripture((prev) =>
+        prev.reference === primaryRef
+          ? prev
+          : {
+              ...prev,
+              id: `teach-topic-${primaryRef.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+              reference: primaryRef,
+              text: (slate.primaryText || "").trim()
+            }
+      );
+    }
+    setHasTopicBeenChosen(true);
+    setIsRightSlatePopulated(true);
+    isRightSlatePopulatedRef.current = true;
+    setActiveSlateTab("all");
+    if (slate.topicTitle) setActiveTopicTitle(slate.topicTitle);
+    if (slate.topicOverview) setActiveTopicOverview(slate.topicOverview);
+    if (slate.topicImportance) setActiveTopicImportance(slate.topicImportance);
+    if (slate.exegesisDemo) setActiveExegesisDemo(slate.exegesisDemo);
+    if (slate.egwCommentary) setActiveEgwCommentary(slate.egwCommentary);
+    if (Array.isArray(slate.foundationalScriptures) && slate.foundationalScriptures.length > 0) {
+      setCustomFoundationalScriptures(slate.foundationalScriptures);
+    }
+    try {
+      const topicToSave = slate.topicTitle || activeTopicTitle || scripture.reference;
+      const refToSave = slate.foundationalScriptures?.[0]?.reference || scripture.reference;
+      ElderStephenMemoryEngine.saveTeachItSessionTopic(topicToSave, refToSave);
+    } catch (memErr) {
+      console.warn("Teach It topic memory save warning:", memErr);
+    }
+  };
+
+  const syncLiveSlateFromTopic = async (userTopicText: string) => {
+    if (!userTopicText.trim() || liveSlateSyncInFlightRef.current) return;
+    liveSlateSyncInFlightRef.current = true;
+    try {
+      const topicPreset = resolveTopicSelectionPreset(userTopicText);
+      if (topicPreset) {
+        setActiveScripture(topicPreset.scripture);
+        applySlateUpdatePayload({
+          topicTitle: topicPreset.topicTitle,
+          topicOverview: topicPreset.topicOverview,
+          topicImportance: topicPreset.topicImportance,
+          exegesisDemo: topicPreset.exegesisDemo,
+          foundationalScriptures: topicPreset.foundationalScriptures
+        });
+        return;
+      }
+
+      const res = await apiFetch("/api/teach/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scripture,
+          messages: [{ sender: "user", text: userTopicText }],
+          stage: "stage1",
+          userRole,
+          isEvangelist,
+          userName: resolveUserName(),
+          isTopicSelected: true
+        })
+      });
+      if (res.ok) {
+        const data = await safeParseResponseJson<any>(res);
+        if (data && (data.topicOverview || data.topicImportance || data.foundationalScriptures?.length)) {
+          applySlateUpdatePayload({
+            topicTitle: data.topicTitle || userTopicText.slice(0, 60),
+            topicOverview: data.topicOverview,
+            topicImportance: data.topicImportance,
+            exegesisDemo: data.exegesisDemo,
+            foundationalScriptures: data.foundationalScriptures
+          });
+        }
+      }
+    } catch (syncErr) {
+      console.warn("Live right-slate fallback sync warning:", syncErr);
+    } finally {
+      liveSlateSyncInFlightRef.current = false;
+    }
+  };
+
   const appendLiveReplyChunk = (chunk: string) => {
     if (!chunk) return;
     if (currentLiveReplyTextRef.current.length > 0) {
@@ -579,7 +789,11 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     }
   };
 
-  const startGeminiLiveSession = async () => {
+  const startGeminiLiveSession = async (sessionInitMeta?: {
+    hasPriorSession?: boolean;
+    lastStudiedTopic?: string;
+    isContinuing?: boolean;
+  }) => {
     try {
       stopVoiceResponse();
       if (liveRetryTimerRef.current) {
@@ -613,17 +827,18 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
       const stateLesson = location.state?.lessonId || "";
       
       const userName = resolveUserName();
+      const priorMeta = sessionInitMeta || ElderStephenMemoryEngine.getPriorTeachItSessionHistory();
+      const priorTopicStr = priorMeta?.hasPriorSession ? priorMeta.lastStudiedTopic || "" : "";
       const passageRef = scripture?.reference || "2 Timothy 2:15";
       const passageBody = (scripture?.text || "").trim();
       const boundedQueryPassage = passageBody.length > 400 ? passageBody.slice(0, 400) : passageBody;
       const elderStephenSystemInstruction = [
-        `You are Elder Stephen, an exegetical, Seventh-day Adventist historical method mentor for live interactive Bible study and vocal discipleship in the "Study To Be Approved" (STBA) ecosystem.`,
-        `Your persona is a warm, wise, calm, reverent, and supportive Seventh-day Adventist pastor and biblical scholar guiding ${userName} through the historic Seventh-day Adventist historical-grammatical and historicist method of biblical interpretation on ${passageRef}${passageBody ? ` ("${passageBody}")` : ""}.`,
-        `Core Hermeneutical & Exegetical Commitments:`,
-        `1. Sola Scriptura & Scripture Interprets Scripture (Isaiah 28:9-10; 2 Timothy 2:15).`,
-        `2. Historical-Grammatical Exegesis: Examine original historical context, authorial intent, and key Hebrew/Aramaic/Greek terms.`,
-        `3. Historicist & Sanctuary Lens: Connect the passage to the Great Controversy, Christ's Sanctuary ministry, the Three Angels' Messages (Revelation 14:6-12), and Seventh-day Adventist Fundamental Beliefs.`,
-        `4. Live Interactive Mentorship: Guide ${userName} smoothly through the 5 stages of exegesis, doctrine, application, and winsome witness.`
+        `You are Elder Stephen, the pastoral mentor and Teach It Studio instructor inside the "Study To Be Approved" (STBA) ecosystem.`,
+        priorTopicStr
+          ? `1. Welcome Back & Prior Session Recall: PRIOR SESSION HISTORY EXISTS. Output a warm, dynamic "Welcome back, ${userName}!" greeting recalling their last studied topic ("${priorTopicStr}"), and ask whether they want to continue "${priorTopicStr}" or discuss a new biblical topic or verse today.`
+          : `1. Welcome by Name & Topic/Verse Inquiry: Warmly welcome the signed-in user (${userName}) by name and ask what biblical topic or scripture verse they would like to discuss today (or invite them to confirm studying ${passageRef}). Remind ${userName} that the session adapts to their pace without time limits and can be paused or resumed anytime.`,
+        `2. Overview, 3-5 Foundational Scriptures & Exegesis Demonstration: Once a topic or scripture is chosen, provide a clear overview, note the 3-5 foundational scriptures displayed on their right-hand content slate, demonstrate exegesis on the primary text (${passageRef}${passageBody ? `: "${passageBody}"` : ""}) using a clear example (historical context and original Greek/Hebrew root), and conclude by asking ${userName} an engaging question to prompt discussion.`,
+        `3. Comprehension-Gated Stage Transition Mechanism: Evaluate ${userName}'s understanding through their responses to your questions, assign a mastery rating percentage (0-100%), and transition to the next stage (Stage 1 Exegesis -> Stage 2 Cosmic Lens -> Stage 3 Doctrinal Connections -> Stage 4 Practical Application -> Stage 5 Evangelistic Invitation) once ${userName} demonstrates sufficient comprehension.`
       ].join("\n");
       
       const studyContext: StudyContextQueryParams = {
@@ -634,13 +849,20 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
         lessonId: stateLesson || undefined,
         userName,
         reference: scripture?.reference || undefined,
-        passageText: boundedQueryPassage || undefined
+        passageText: boundedQueryPassage || undefined,
+        ...(priorTopicStr ? { topic: priorTopicStr, lastPassage: priorTopicStr } : {})
       };
 
       const localSearchParams = new URLSearchParams();
       Object.entries(studyContext).forEach(([key, val]) => {
         if (val) localSearchParams.set(key, val);
       });
+      if (priorTopicStr) {
+        localSearchParams.set("hasPriorSession", "true");
+      }
+      if (sessionInitMeta?.isContinuing || priorTopicStr) {
+        localSearchParams.set("isContinuing", "true");
+      }
       const queryString = localSearchParams.toString() ? `?${localSearchParams.toString()}` : "";
 
       const wsUrl = buildSupabaseLiveWebSocketUrl(
@@ -782,6 +1004,12 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
               return;
             }
 
+            // Populate the right-hand "Understanding of the Topic" block as soon as Elder Stephen sends it
+            if (msg.slateUpdate) {
+              console.log("[STBA Live Voice Debug] slateUpdate received:", msg.slateUpdate);
+              applySlateUpdatePayload(msg.slateUpdate);
+            }
+
             if (msg.error) {
               console.warn("[STBA Live Voice Debug] Server message failure:", msg.error);
               if (!isSameOriginLocal && allowLocalFallback) {
@@ -815,6 +1043,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
             if (msg.userTranscript) {
               const spoken = msg.userTranscript.trim();
               if (spoken) {
+                lastLiveUserTranscriptRef.current = `${lastLiveUserTranscriptRef.current} ${spoken}`.trim().slice(-400);
                 endLiveReplyAccumulation();
                 setChatMessages((prev) => {
                   const last = prev[prev.length - 1];
@@ -846,6 +1075,10 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
             if (msg.audio) {
               setLiveState("playing");
               playPCMChunk(msg.audio);
+              // Elder Stephen has begun explaining the user's chosen topic — make sure the right block appears now
+              if (!isRightSlatePopulatedRef.current && lastLiveUserTranscriptRef.current.trim().length > 2) {
+                syncLiveSlateFromTopic(lastLiveUserTranscriptRef.current);
+              }
             }
 
             if (msg.text) {
@@ -858,6 +1091,9 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
               if (activeNodesRef.current.length === 0) {
                 setLiveState("ready");
                 isElderSpeakingRef.current = false;
+              }
+              if (!isRightSlatePopulatedRef.current && lastLiveUserTranscriptRef.current.trim().length > 2) {
+                syncLiveSlateFromTopic(lastLiveUserTranscriptRef.current);
               }
             }
 
@@ -1240,7 +1476,14 @@ Let us explore: How would you explain this truth gently and respectfully to a se
     }
   }, [chatMessages, isLoading]);
 
-  // Main countdown timer loop - strictly begins when isTimerActive is true
+  // Reset right instructional slate scroll to top when switching persistent tabs (top-down flow)
+  useEffect(() => {
+    if (rightSlateScrollRef.current) {
+      rightSlateScrollRef.current.scrollTop = 0;
+    }
+  }, [activeSlateTab]);
+
+  // Self-paced session loop (no time limit — adapts to user's pace with pause/resume support)
   useEffect(() => {
     if (!isTimerActive || phase === "intro" || phase === "feedback" || isPaused) {
       clearIntervals();
@@ -1248,15 +1491,7 @@ Let us explore: How would you explain this truth gently and respectfully to a se
     }
 
     countdownIntervalRef.current = setInterval(() => {
-      setSecondsRemaining((prev) => {
-        if (prev <= 1) {
-          clearIntervals();
-          triggerToast("Session time expired! Compiling report...");
-          handleAdvanceToScorecard();
-          return 0;
-        }
-        return prev - 1;
-      });
+      setSecondsRemaining((prev) => prev + 1);
     }, 1000);
 
     waveIntervalRef.current = setInterval(() => {
@@ -1275,6 +1510,30 @@ Let us explore: How would you explain this truth gently and respectfully to a se
 
     return () => clearIntervals();
   }, [isTimerActive, phase, isPaused, isRecording, isLoading]);
+
+  const handleTogglePauseSession = () => {
+    const nextPaused = !isPaused;
+    setIsPaused(nextPaused);
+    if (nextPaused) {
+      isMicMutedRef.current = true;
+      if (outputAudioCtxRef.current && outputAudioCtxRef.current.state === "running") {
+        outputAudioCtxRef.current.suspend().catch(() => {});
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.pause();
+      }
+      triggerToast("AI Session Paused. Take all the time you need—click Resume when ready.");
+    } else {
+      isMicMutedRef.current = isMicMuted;
+      if (outputAudioCtxRef.current && outputAudioCtxRef.current.state === "suspended") {
+        outputAudioCtxRef.current.resume().catch(() => {});
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.resume();
+      }
+      triggerToast("AI Session Resumed at your pace.");
+    }
+  };
 
   // Toggle voice recognition
   const handleToggleRecording = () => {
@@ -1311,12 +1570,88 @@ Let us explore: How would you explain this truth gently and respectfully to a se
     }
   };
 
-  // Starting the dialogue session - begins timer and starts Stage 1
+  // Topic & Scripture presets for instant right-slate overview, worked exegesis example, and 3-5 foundational scriptures
+  const resolveTopicSelectionPreset = (input: string) => {
+    const lower = input.toLowerCase();
+    if (lower.includes("sabbath") || lower.includes("exodus 20")) {
+      return {
+        scripture: {
+          id: "exod-20-8-11",
+          reference: "Exodus 20:8-11",
+          text: "Remember the sabbath day, to keep it holy. Six days shalt thou labour, and do all thy work: But the seventh day is the sabbath of the LORD thy God.",
+          keywords: ["remember", "sabbath", "holy", "seventh", "blessed", "hallowed"]
+        },
+        topicTitle: "The Seventh-day Sabbath — Memorial of Creation & Redemption",
+        topicOverview:
+          "The seventh-day Sabbath (Exodus 20:8-11) stands as God's eternal sign of creation, sanctification, and covenant rest—instituted in Eden, enshrined in the heart of the Decalogue, affirmed by Christ, and proclaimed in the Three Angels' Messages.",
+        exegesisDemo:
+          "Worked Exegesis Example (Exodus 20:8-11): The fourth commandment opens with the Hebrew imperative 'zakor' ('Remember'), pointing back to Creation week in Genesis 2:1-3 where God rested ('shabath'), blessed, and sanctified the seventh day long before Sinai."
+      };
+    }
+    if (lower.includes("sanctuary") || lower.includes("daniel 8")) {
+      return {
+        scripture: {
+          id: "dan-8-14",
+          reference: "Daniel 8:14",
+          text: "And he said unto me, Unto two thousand and three hundred days; then shall the sanctuary be cleansed.",
+          keywords: ["sanctuary", "cleansed", "two thousand", "three hundred", "judgment", "high priest"]
+        },
+        topicTitle: "The Heavenly Sanctuary & Pre-Advent Judgment",
+        topicOverview:
+          "The sanctuary doctrine (Daniel 8:14; Hebrews 8:1-2) unveils God's complete plan of redemption—tracing Christ's once-for-all sacrifice on Calvary to His two-phase high-priestly ministry in the heavenly sanctuary culminating in the investigative judgment.",
+        exegesisDemo:
+          "Worked Exegesis Example (Daniel 8:14): The Hebrew term 'tsadaq' (translated 'cleansed') signifies 'to be vindicated, restored, or made right,' linking the 2300 prophetic days (year-day principle of Ezekiel 4:6) to the antitypical Day of Atonement in the heavenly sanctuary."
+      };
+    }
+    if (lower.includes("three angels") || lower.includes("revelation 14")) {
+      return {
+        scripture: {
+          id: "rev-14-12",
+          reference: "Revelation 14:12",
+          text: "Here is the patience of the saints: here are they that keep the commandments of God, and the faith of Jesus.",
+          keywords: ["patience", "saints", "commandments", "faith of jesus", "everlasting gospel", "worship"]
+        },
+        topicTitle: "The Three Angels' Messages — Everlasting Gospel & Remnant Call",
+        topicOverview:
+          "Revelation 14:6-12 presents heaven's final, Christ-centered appeal to the world—proclaiming the everlasting gospel in the hour of God's judgment, calling humanity back to worship the Creator, and identifying a remnant who keep God's commandments and the faith of Jesus.",
+        exegesisDemo:
+          "Worked Exegesis Example (Revelation 14:12): In the Greek text, 'hupomone' ('patience' or 'steadfast endurance') describes active, Spirit-sustained loyalty that unites law ('commandments of God') and grace ('the faith of Jesus') in harmonious covenant obedience."
+      };
+    }
+    if (lower.includes("prophecy") || lower.includes("emmaus") || lower.includes("luke 24")) {
+      return {
+        scripture: {
+          id: "luke-24-27",
+          reference: "Luke 24:27",
+          text: "And beginning at Moses and all the prophets, he expounded unto them in all the scriptures the things concerning himself.",
+          keywords: ["moses", "prophets", "expounded", "scriptures", "himself", "christ"]
+        },
+        topicTitle: "Interpreting Prophetic Writings — Christ in All the Scriptures",
+        topicOverview:
+          "On the road to Emmaus (Luke 24:27), the risen Christ established the master key of prophetic interpretation: reading every Old Testament type, symbol, and prophecy in its broader canonical harmony with Jesus and His redemptive mission at the center.",
+        exegesisDemo:
+          "Worked Exegesis Example (Luke 24:27): Luke uses the Greek verb 'diermeneuo' ('expounded' or 'interpreted thoroughly'—the root of our word 'hermeneutics'), showing that Christ systematically compared Moses and all the Prophets to dispel the disciples' narrow political expectations."
+      };
+    }
+    return null;
+  };
+
+  // Starting the dialogue session - welcomes signed-in user by name & keeps right panel blank until initial breakdown
   const handleBeginSession = () => {
+    try {
+      localStorage.removeItem(TEACH_IT_SESSION_STORAGE_KEY);
+    } catch {}
     setIsTimerActive(true);
-    setSecondsRemaining(900);
+    setSecondsRemaining(0);
     setChatMessages([]);
     setIsPaused(false);
+    setHasTopicBeenChosen(false);
+    setIsRightSlatePopulated(false);
+    setActiveTopicTitle("");
+    setActiveTopicOverview("");
+    setActiveTopicImportance("");
+    setActiveExegesisDemo("");
+    setCustomFoundationalScriptures([]);
     setPhase("stage1");
     evaluatedStagesLiveRef.current.clear();
 
@@ -1343,42 +1678,134 @@ Let us explore: How would you explain this truth gently and respectfully to a se
     });
 
     const userName = resolveUserName();
-    const initialPrompt = `Hello ${userName}, welcome to today’s study session! Today, I'll be guiding you through our 5-stage study journey:
+    // "Start Session" is always a fresh session: simple greeting by name, then wait for the user's topic
+    const priorHistory = { hasPriorSession: false, lastStudiedTopic: "" };
+    const simpleGreeting = `Welcome, ${userName}. What topic or verse would you like us to discuss today?`;
 
-• **Stage 1**: Exegesis & Original Context
-• **Stage 2**: The Cosmic Lens & The Great Controversy
-• **Stage 3**: Doctrinal Connections & Fundamental Beliefs
-• **Stage 4**: Practical Life-Reforming Application
-• **Stage 5**: Graceful Evangelistic Invitation & Appeal
+    const deliverInitGreeting = (replyText: string) => {
+      setChatMessages((prev) =>
+        prev.length === 0
+          ? [
+              {
+                id: `ai-init-${Date.now()}`,
+                sender: "ai",
+                text: replyText,
+                timestamp: new Date()
+              }
+            ]
+          : prev
+      );
+      triggerVoiceResponse(replyText);
+    };
 
-Let's begin right away with **Stage 1: Exegesis & Original Context** for **${scripture.reference}**:
-*"${scripture.text}"*
-
-What is the authorial setting and original context of this passage, and how would you summarize its central meaning in your own words?`;
-
-    setChatMessages([
-      {
-        id: "sys-init",
-        sender: "ai",
-        text: initialPrompt,
-        timestamp: new Date()
-      }
-    ]);
-
-    // Proactively initiate Live Gemini (gemini-3.8-live) voice session immediately on Start Session
     if (useLiveVoiceAPI) {
-      startGeminiLiveSession();
+      // Gemini Live speaks the greeting itself; its transcript becomes the first bubble
+      startGeminiLiveSession({ hasPriorSession: false, lastStudiedTopic: "", isContinuing: false });
       setIsRecording(true);
-    } else {
       setTimeout(() => {
-        triggerVoiceResponse(initialPrompt);
-      }, 400);
+        const wsAlive = wsRef.current && wsRef.current.readyState === WebSocket.OPEN;
+        const liveActive = liveStateRef.current === "playing" || liveStateRef.current === "ready";
+        if (!wsAlive && !liveActive) {
+          deliverInitGreeting(simpleGreeting);
+        }
+      }, 2500);
+    } else {
+      deliverInitGreeting(simpleGreeting);
     }
 
-    triggerToast(`Welcome ${userName}! Gemini Live Study Session initialized.`);
+    triggerToast(
+      priorHistory.hasPriorSession && priorHistory.lastStudiedTopic
+        ? `Welcome back, ${userName}! Recalling "${priorHistory.lastStudiedTopic}".`
+        : `Welcome, ${userName}! Live Study Session initialized.`
+    );
   };
 
-  // Simple event trigger: auto-advance to next stage as soon as evaluation score is provided
+  // Resume an incomplete Teach It Studio session from the intro screen with a real user gesture
+  const handleContinueSession = () => {
+    if (!savedSessionSnapshot) {
+      handleBeginSession();
+      return;
+    }
+    const restoredTopic =
+      savedSessionSnapshot.activeTopicTitle ||
+      savedSessionSnapshot.activeScripture?.reference ||
+      "2 Timothy 2:15";
+    const userName = resolveUserName();
+
+    if (savedSessionSnapshot.activeScripture) {
+      setActiveScripture(savedSessionSnapshot.activeScripture);
+    }
+    setHasTopicBeenChosen(Boolean(savedSessionSnapshot.hasTopicBeenChosen));
+    setIsRightSlatePopulated(Boolean(savedSessionSnapshot.isRightSlatePopulated));
+    setActiveTopicTitle(savedSessionSnapshot.activeTopicTitle || "");
+    setActiveTopicOverview(savedSessionSnapshot.activeTopicOverview || "");
+    setActiveTopicImportance(savedSessionSnapshot.activeTopicImportance || "");
+    setActiveExegesisDemo(savedSessionSnapshot.activeExegesisDemo || "");
+    setCustomFoundationalScriptures(savedSessionSnapshot.customFoundationalScriptures || []);
+    if (savedSessionSnapshot.scoreStats) {
+      setScoreStats(savedSessionSnapshot.scoreStats);
+    }
+    if (typeof savedSessionSnapshot.secondsRemaining === "number") {
+      setSecondsRemaining(savedSessionSnapshot.secondsRemaining);
+    }
+    setIsTimerActive(true);
+    setIsPaused(false);
+    setPhase(savedSessionSnapshot.phase || "stage1");
+
+    // Restore only the prior conversation history — no static bubble above Elder Stephen's live speech
+    setChatMessages((prev) =>
+      prev.length > 0
+        ? prev
+        : Array.isArray(savedSessionSnapshot.chatMessages)
+        ? savedSessionSnapshot.chatMessages.map((m: any) => ({
+            ...m,
+            timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
+          }))
+        : []
+    );
+
+    const continuationText = `Welcome back, **${userName}**! Let's continue right where we left off on **${restoredTopic}**. Whenever you're ready, share your next thought to keep progressing.`;
+
+    if (useLiveVoiceAPI) {
+      startGeminiLiveSession({
+        hasPriorSession: true,
+        lastStudiedTopic: restoredTopic,
+        isContinuing: true
+      });
+      setIsRecording(true);
+      setTimeout(() => {
+        const wsAlive = wsRef.current && wsRef.current.readyState === WebSocket.OPEN;
+        const liveActive = liveStateRef.current === "playing" || liveStateRef.current === "ready";
+        if (!wsAlive && !liveActive) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: `ai-resume-${Date.now()}`,
+              sender: "ai" as const,
+              text: continuationText,
+              timestamp: new Date()
+            }
+          ]);
+          triggerVoiceResponse(continuationText);
+        }
+      }, 2500);
+    } else {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `ai-resume-${Date.now()}`,
+          sender: "ai" as const,
+          text: continuationText,
+          timestamp: new Date()
+        }
+      ]);
+      triggerVoiceResponse(continuationText);
+    }
+
+    triggerToast(`Continuing your session on "${restoredTopic}".`);
+  };
+
+  // Comprehension-gated stage transition: evaluates response, assigns mastery rating %, and transitions when ready
   const triggerAutoAdvanceToNextStage = (
     currentIdx: number,
     numericScore: number,
@@ -1387,15 +1814,29 @@ What is the authorial setting and original context of this passage, and how woul
       stageFeedback?: string;
       ellenWhiteQuote?: string;
       devotionalPrompt?: string;
+      skipSyntheticPrompt?: boolean;
+      shouldAdvance?: boolean;
     }
   ) => {
     const currentPhase = stagesList[currentIdx]?.id;
     if (!currentPhase) return;
 
-    // 1. Reveal/update score for the evaluated stage & reset session score to 0 for the new stage
+    const shouldMoveToNext =
+      additionalData?.shouldAdvance !== undefined
+        ? additionalData.shouldAdvance
+        : numericScore >= 70;
+
     setScoreStats((prev) => {
       const nextStageScores = { ...prev.stageScores };
-      nextStageScores[currentPhase] = numericScore;
+      if (numericScore > 0) {
+        nextStageScores[currentPhase] = numericScore;
+      }
+
+      const completedKeys = Object.keys(nextStageScores).filter((k) => nextStageScores[k] > 0);
+      const avgScore =
+        completedKeys.length > 0
+          ? Math.round(completedKeys.reduce((acc, k) => acc + nextStageScores[k], 0) / completedKeys.length)
+          : numericScore;
 
       const nextFoundKeywords = [...prev.foundKeywords];
       if (additionalData?.foundKeywords && Array.isArray(additionalData.foundKeywords)) {
@@ -1412,7 +1853,7 @@ What is the authorial setting and original context of this passage, and how woul
 
       return {
         ...prev,
-        overallScore: 0, // Reset session score for the new stage
+        overallScore: avgScore,
         stageScores: nextStageScores,
         foundKeywords: nextFoundKeywords,
         gaps: nextGaps,
@@ -1422,37 +1863,36 @@ What is the authorial setting and original context of this passage, and how woul
       };
     });
 
-    // 2. Synchronized stage transition: move from current stage to next stage AS SOON AS score is revealed!
+    if (!shouldMoveToNext) {
+      return;
+    }
+
     if (currentIdx < 4) {
       const nextIdx = currentIdx + 1;
       const nextStage = stagesList[nextIdx];
-
-      // Move to the next stage IMMEDIATELY visually
       setPhase(nextStage.id);
 
-      // Present next stage's prompt in chat so the user can immediately continue
-      const promptText = `**Stage ${nextStage.number}: ${nextStage.title}**\n\n${nextStage.prompt}`;
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: `sys-next-${Date.now()}`,
-          sender: "ai",
-          text: promptText,
-          timestamp: new Date()
-        }
-      ]);
-
-      // Spoken voice synchronized with the stage transition
-      triggerVoiceResponse(
-        `I evaluate your Stage ${currentIdx + 1} response at ${numericScore} out of 100. Moving to Stage ${nextStage.number}: ${nextStage.title}. ${nextStage.prompt}`
-      );
-      triggerToast(`Stage ${currentIdx + 1} score: ${numericScore}%. Advanced to Stage ${nextStage.number}: ${nextStage.title}`);
+      if (!additionalData?.skipSyntheticPrompt) {
+        const promptText = `**Stage ${nextStage.number}: ${nextStage.title}**\n\n${nextStage.prompt}`;
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: `sys-next-${Date.now()}`,
+            sender: "ai",
+            text: promptText,
+            timestamp: new Date()
+          }
+        ]);
+        triggerVoiceResponse(
+          `Mastery Rating: ${numericScore}%. Advancing to Stage ${nextStage.number}: ${nextStage.title}. ${nextStage.prompt}`
+        );
+      }
+      triggerToast(`Stage ${currentIdx + 1} Mastery: ${numericScore}%. Transitioned to Stage ${nextStage.number}: ${nextStage.title}`);
     } else {
-      // Completed final Stage 5!
       triggerVoiceResponse(
-        `I evaluate your final Stage 5 response at ${numericScore} out of 100. Praise God! You have successfully completed all five stages of our study journey today.`
+        `I evaluate your final Stage 5 response at ${numericScore}%. Praise God! You have completed all five stages of our study journey.`
       );
-      triggerToast(`Stage 5 score: ${numericScore}%. All 5 stages completed!`);
+      triggerToast(`Stage 5 Mastery: ${numericScore}%. All 5 stages completed!`);
       setTimeout(() => {
         handleAdvanceToScorecard(true);
       }, 1000);
@@ -1460,26 +1900,54 @@ What is the authorial setting and original context of this passage, and how woul
   };
 
   // Sending student dialogue to server
-  const handleSendMessage = async (customText?: string) => {
+  const handleSendMessage = async (customText?: string, forceTopicSelection: boolean = false) => {
     const textToSend = (customText || userInput).trim();
     if (!textToSend) return;
 
-    // Detect if user provided a scripture reference
-    const refMatch = textToSend.match(/\b([1-3]?\s*[A-Za-z]+)\s+(\d+:\d+(?:-\d+)?)\b/i);
-    if (refMatch) {
-      const detectedRef = refMatch[0];
-      bibleService.getText(detectedRef, "KJV").then((fetchedText) => {
-        if (fetchedText && !fetchedText.includes("Invalid scripture")) {
-          const cleanWords = fetchedText.replace(/[^a-zA-Z0-9\s]/g, "").split(/\s+/).filter((w) => w.length > 4);
-          const keywords = Array.from(new Set(cleanWords)).slice(0, 6);
-          setActiveScripture({
-            id: detectedRef.toLowerCase().replace(/[^a-z0-9]/g, ""),
-            reference: detectedRef,
-            text: fetchedText,
-            keywords: keywords.length > 0 ? keywords : ["scripture", "context", "truth", "grace"]
-          });
+    const isSelectingTopicTurn = forceTopicSelection || !hasTopicBeenChosen;
+    let targetScriptureForCall = scripture;
+
+    // 1. Check if user selected a named topic preset
+    const topicPreset = resolveTopicSelectionPreset(textToSend);
+    if (topicPreset) {
+      targetScriptureForCall = topicPreset.scripture;
+      setActiveScripture(topicPreset.scripture);
+      setActiveTopicTitle(topicPreset.topicTitle);
+      setActiveTopicOverview(topicPreset.topicOverview);
+      setActiveExegesisDemo(topicPreset.exegesisDemo);
+    } else {
+      // 2. Check if user provided a scripture reference
+      const refMatch = textToSend.match(/\b([1-3]?\s*[A-Za-z]+)\s+(\d+:\d+(?:[–—-]\d+)?)\b/i);
+      if (refMatch) {
+        const detectedRef = formatStandardReference(refMatch[0]) || refMatch[0];
+        try {
+          const fetchedText = await bibleService.getText(detectedRef, "KJV");
+          if (fetchedText && !fetchedText.includes("Invalid scripture")) {
+            const cleanWords = fetchedText
+              .replace(/[^a-zA-Z0-9\s]/g, "")
+              .split(/\s+/)
+              .filter((w) => w.length > 4);
+            const keywords = Array.from(new Set(cleanWords)).slice(0, 6);
+            const updatedScripture: Scripture = {
+              id: detectedRef.toLowerCase().replace(/[^a-z0-9]/g, ""),
+              reference: detectedRef,
+              text: fetchedText,
+              keywords: keywords.length > 0 ? keywords : ["scripture", "context", "truth", "grace"]
+            };
+            targetScriptureForCall = updatedScripture;
+            setActiveScripture(updatedScripture);
+            setActiveTopicTitle(`${detectedRef} — Exegetical & Doctrinal Mastery`);
+            setActiveTopicOverview(
+              `In our study of ${detectedRef} ("${fetchedText}"), we examine the historical setting, original lexical roots, Great Controversy harmony, and practical discipleship application.`
+            );
+            setActiveExegesisDemo(
+              `Worked Exegesis Example (${detectedRef}): We begin by examining the immediate literary context, identifying the original author and audience, and comparing parallel scriptures ("line upon line," Isaiah 28:9-10) so the text interprets itself without human bias.`
+            );
+          }
+        } catch (e) {
+          console.warn("Bible lookup note:", e);
         }
-      }).catch((e) => console.warn("Bible lookup note:", e));
+      }
     }
 
     // Append user's chat message
@@ -1497,13 +1965,11 @@ What is the authorial setting and original context of this passage, and how woul
     setIsLoading(true);
     stopVoiceResponse();
 
-    // Ensure recording is stopped
     if (isRecording && recognitionRef.current) {
       recognitionRef.current.stop();
       setIsRecording(false);
     }
 
-    // If Live Gemini WebSocket is active, notify the live speech session as well
     if (liveWebSocketActive && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       try {
         wsRef.current.send(JSON.stringify({ text: textToSend, currentStage: phase }));
@@ -1517,14 +1983,16 @@ What is the authorial setting and original context of this passage, and how woul
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scripture,
+          scripture: targetScriptureForCall,
           messages: nextMessages.map((m) => ({
             sender: m.sender,
             text: m.text
           })),
           stage: phase,
           userRole,
-          isEvangelist
+          isEvangelist,
+          userName: resolveUserName(),
+          isTopicSelection: isSelectingTopicTurn
         })
       });
 
@@ -1536,11 +2004,28 @@ What is the authorial setting and original context of this passage, and how woul
       if (!data || (data.ok === false && !data.reply)) {
         throw new Error(data?.error || "Tutor communications returned non-JSON payload.");
       }
-      const stageHeading = phase.replace("stage", "Stage ");
-      const numericScore = data.score || 85;
-      const formattedReply = `**${stageHeading} Evaluation Score: ${numericScore}/100**\n\n${data.reply || "Wonderful insights, Noble Berean."}`;
 
-      // Append AI response
+      if (data.topicTitle) setActiveTopicTitle(data.topicTitle);
+      if (data.topicOverview) setActiveTopicOverview(data.topicOverview);
+      if (data.topicImportance) setActiveTopicImportance(data.topicImportance);
+      if (data.exegesisDemonstration) setActiveExegesisDemo(data.exegesisDemonstration);
+      if (Array.isArray(data.foundationalScriptures) && data.foundationalScriptures.length > 0) {
+        setCustomFoundationalScriptures(data.foundationalScriptures.slice(0, 5));
+      }
+
+      const isTopicTurnResponse = Boolean(data.isTopicSelection) || isSelectingTopicTurn;
+      if (isTopicTurnResponse) {
+        setHasTopicBeenChosen(true);
+      }
+      setIsRightSlatePopulated(true);
+      ElderStephenMemoryEngine.saveTeachItSessionTopic(
+        data.topicTitle || activeTopicTitle || targetScriptureForCall.reference,
+        targetScriptureForCall.reference
+      );
+
+      const numericScore = typeof data.score === "number" ? data.score : isTopicTurnResponse ? 0 : 88;
+      const formattedReply = data.reply || "Wonderful insights, Noble Berean.";
+
       const aiMsgId = `ai-${Date.now()}`;
       setChatMessages((prev) => [
         ...prev,
@@ -1552,50 +2037,76 @@ What is the authorial setting and original context of this passage, and how woul
         }
       ]);
 
-      // Event trigger: reveal score dynamically, display in Session Scorecard, then immediately advance to next stage
+      triggerVoiceResponse(formattedReply);
+
       const currentIdx = getCurrentStageIndex();
-      if (currentIdx !== -1) {
+      if (currentIdx !== -1 && !isTopicTurnResponse) {
         triggerAutoAdvanceToNextStage(currentIdx, numericScore, {
           foundKeywords: data.foundKeywords,
           stageFeedback: data.stageFeedback,
           ellenWhiteQuote: data.ellenWhiteQuote,
-          devotionalPrompt: data.devotionalPrompt
+          devotionalPrompt: data.devotionalPrompt,
+          skipSyntheticPrompt: true,
+          shouldAdvance: data.shouldAdvance !== false && numericScore >= 70
         });
       }
     } catch (err: any) {
       console.error(err);
-      triggerToast("Failed to reach GenAI companion. Using theological local exegesis fallback.");
+      triggerToast("Using local theological exegesis mentor.");
 
-      // Emergency client-side mock so testing is perfect
-      const fallbackReplies: Record<string, string> = {
-        stage1: `Highly detailed point! Timothy's unashamed labor relates directly to accuracy. You discussed exegesis and linguistic context with wonderful accuracy.`,
-        stage2: `Brilliant reflection! In the cosmic war, divine truth holds up the lamp of God's character and counters deceptive compromises with clarity.`,
-        stage3: `Excellent mapping! Scripture indeed is our rock-solid standard, anchoring our fundamental beliefs unified as a global remnant church.`,
-        stage4: `Amazing action blueprint. Laying down a specific, daily study routine tomorrow morning is practical and highly sanctifying.`,
-        stage5: `Beautiful, respectful gospel presentation! Your warm, winsome appeal perfectly reflects Christ's character of love.`
-      };
-
-      const reply = fallbackReplies[phase] || "Well divided truth, Berean scholar!";
-      const fallbackHeading = phase.replace("stage", "Stage ");
-      const fallbackScore = 85;
-      const formattedFallbackReply = `**${fallbackHeading} Evaluation Score: ${fallbackScore}/100**\n\n${reply}`;
-      const aiMsgId = `ai-fallback-${Date.now()}`;
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: aiMsgId,
-          sender: "ai",
-          text: formattedFallbackReply,
-          timestamp: new Date()
+      const userName = resolveUserName();
+      if (isSelectingTopicTurn) {
+        setHasTopicBeenChosen(true);
+        setIsRightSlatePopulated(true);
+        if (!activeTopicTitle) setActiveTopicTitle(`${targetScriptureForCall.reference} — Exegetical Mastery`);
+        if (!activeTopicOverview) {
+          setActiveTopicOverview(`In our study of ${targetScriptureForCall.reference} ("${targetScriptureForCall.text}"), we explore the author's original intent, scriptural harmony, and practical discipleship application.`);
         }
-      ]);
+        if (!activeTopicImportance) {
+          setActiveTopicImportance(`Understanding ${targetScriptureForCall.reference} is vital because it anchors our faith in Sola Scriptura, prevents pulling verses out of context, and equips us to teach truth faithfully.`);
+        }
+        if (!activeExegesisDemo) {
+          setActiveExegesisDemo(`Worked Exegesis Example (${targetScriptureForCall.reference}): We examine the historical setting, original lexical roots, and canonical cross-references ("line upon line," Isaiah 28:9-10) to extract the text's intended meaning.`);
+        }
+        const introReply = `Wonderful choice, **${userName}**! I have updated your right-hand content slate with an overview of **${targetScriptureForCall.reference}** and **4 foundational scriptures**.
 
-      // Event trigger for fallback: reveal score, display in Session Scorecard, then advance to next stage
-      const currentIdx = getCurrentStageIndex();
-      if (currentIdx !== -1) {
-        triggerAutoAdvanceToNextStage(currentIdx, fallbackScore, {
-          stageFeedback: reply
-        });
+### Exegesis Demonstration (${targetScriptureForCall.reference})
+In **${targetScriptureForCall.reference}** (*"${targetScriptureForCall.text}"*), we examine the original authorial context and lexical roots—comparing Scripture with Scripture (Isaiah 28:9–10) to extract the text's true meaning without reading our own assumptions into it.
+
+### Stage 1 Engaging Question
+Take all the time you need—our dialogue has no time limits. **In your own words, ${userName}, what is the historical context of ${targetScriptureForCall.reference}, and what key truth stands out to you in this passage?**`;
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: `ai-topic-${Date.now()}`,
+            sender: "ai",
+            text: introReply,
+            timestamp: new Date()
+          }
+        ]);
+      } else {
+        const fallbackScore = 88;
+        const currentIdx = getCurrentStageIndex();
+        const nextStageObj = currentIdx >= 0 && currentIdx < 4 ? stagesList[currentIdx + 1] : null;
+        const reply = nextStageObj
+          ? `**Stage ${currentIdx + 1} Mastery Rating: ${fallbackScore}%**\n\nExcellent comprehension, **${userName}**! You connected the text's meaning with clarity and faithfulness. Let us now transition to **Stage ${nextStageObj.number}: ${nextStageObj.title}**.\n\n${nextStageObj.prompt}`
+          : `**Stage 5 Mastery Rating: 92%**\n\nBeautiful, Christ-centered appeal, **${userName}**! You have demonstrated thorough comprehension across all 5 stages.`;
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: `ai-fallback-${Date.now()}`,
+            sender: "ai",
+            text: reply,
+            timestamp: new Date()
+          }
+        ]);
+        if (currentIdx !== -1) {
+          triggerAutoAdvanceToNextStage(currentIdx, fallbackScore, {
+            stageFeedback: `Demonstrated solid comprehension (${fallbackScore}% mastery).`,
+            skipSyntheticPrompt: true,
+            shouldAdvance: true
+          });
+        }
       }
     } finally {
       setIsLoading(false);
@@ -1620,9 +2131,8 @@ What is the authorial setting and original context of this passage, and how woul
       }
     ]);
 
-    // Read next stage prompt
     triggerVoiceResponse(stagePrompt);
-    triggerToast(`Advanced target context to ${stagesList[nextIdx].title}`);
+    triggerToast(`Switched active stage to Stage ${stagesList[nextIdx].number}: ${stagesList[nextIdx].title}`);
   };
 
   const handleAdvanceToScorecard = (keepVoice = false) => {
@@ -1631,10 +2141,8 @@ What is the authorial setting and original context of this passage, and how woul
     }
     clearIntervals();
 
-    // Trigger celebration confetti
     showConfetti('teach', 'Hallelujah! All 5 Study Stages Mastered!');
 
-    // Calculate final cumulative score
     setScoreStats((prev) => {
       const nextScores = { ...prev.stageScores };
       const completedKeys = Object.keys(nextScores).filter((k) => nextScores[k] > 0);
@@ -1652,6 +2160,9 @@ What is the authorial setting and original context of this passage, and how woul
       };
     });
 
+    try {
+      localStorage.removeItem(TEACH_IT_SESSION_STORAGE_KEY);
+    } catch {}
     setPhase("feedback");
     triggerToast("🎉 Congratulations! Exegesis Mastery Session Completed!");
   };
@@ -1670,373 +2181,580 @@ What is the authorial setting and original context of this passage, and how woul
     triggerToast("Your heartfelt study devotion has been added to your Memory Vault!");
   };
 
-  const downloadSummaryAsTxt = () => {
-    let output = "";
-    output += "============================================================\\n";
-    output += "         STUDY TO BE APPROVED (STBA) - SESSION SUMMARY       \\n";
-    output += `         Reference: ${scripture.reference}                     \\n`;
-    output += `         Date: ${new Date().toLocaleDateString()} @ ${new Date().toLocaleTimeString()} \\n`;
-    output += "============================================================\\n\\n";
-
-    output += `[SCRIPTURE THEME]\\n`;
-    output += `Reference: ${scripture.reference}\\n`;
-    output += `Text: "${scripture.text}"\\n\\n`;
-
-    output += `[OVERALL COGNITIVE EVALUATION]\\n`;
-    output += `Overall Mastery Score: ${scoreStats.overallScore}%\\n`;
-    output += `Discipleship Rank: ${getMasteryLevelText(scoreStats.overallScore)}\\n`;
-    output += `Active Profile Background: ${userRole}\\n\\n`;
-
-    output += "------------------------------------------------------------\\n";
-    output += "                 STAGE-BY-STAGE EVALUATION                  \\n";
-    output += "------------------------------------------------------------\\n";
-    stagesList.forEach((stg) => {
-      const sc = scoreStats.stageScores[stg.id] || 0;
-      const feedback = scoreStats.stageFeedback[stg.id] || "No discussion recorded.";
-      output += `Stage ${stg.number}: ${stg.title}\\n`;
-      output += `Score: ${sc}/100\\n`;
-      output += `Feedback: ${feedback}\\n`;
-      output += `------------------------------------------------------------\\n`;
-    });
-
-    output += "\\n";
-    output += "------------------------------------------------------------\\n";
-    output += "                 DEVOTIONAL HEART REFLECTION                \\n";
-    output += "------------------------------------------------------------\\n";
-    output += `Prompt: ${scoreStats.devotionalPrompt}\\n`;
-    output += `Your Reflection:\\n`;
-    output += devotionalReflection.trim() ? devotionalReflection.trim() : "(No reflection text captured in memory journal yet.)";
-    output += "\\n\\n";
-
-    output += "------------------------------------------------------------\\n";
-    output += "                 SESSION TRANSLATION DIALOGUE               \\n";
-    output += "------------------------------------------------------------\\n";
-    if (chatMessages.length === 0) {
-      output += "(No dialogue text captures. Session completed using voice/audio prompters.)\\n";
-    } else {
-      chatMessages.forEach((msg, idx) => {
-        const title = msg.sender === "ai" ? "STBA INTERACTIVE GUIDE" : "STUDENT";
-        output += `[${idx + 1}] ${title} (${msg.timestamp.toLocaleTimeString()}):\\n`;
-        output += `    ${msg.text}\\n\\n`;
-      });
-    }
-
-    output += "\\n============================================================\\n";
-    output += "               VINDICATED & APPROVED BEREAN                 \\n";
-    output += `               "${scoreStats.ellenWhiteQuote}"\\n`;
-    output += "============================================================\\n";
-
-    // Trigger download
-    const blob = new Blob([output], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `STBA_${scripture.reference.replace(/\\s+/g, "_")}_Session_Summary.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    triggerToast("Plain-text session report saved successfully!");
+  const handleOpenVerseModal = (ref: string) => {
+    const normalized = String(ref || "")
+      .replace(/\u00A0/g, " ")
+      .replace(/[–—\u2013\u2014\u2212]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) return;
+    setSelectedVerseRef(formatStandardReference(normalized) || normalized);
+    setIsVerseModalOpen(true);
   };
 
-  const downloadSummaryAsHtml = () => {
-    let chatHtml = "";
-    if (chatMessages.length === 0) {
-      chatHtml = `<p style="font-style: italic; color: #888;">No textual dialogue logged. Session completed using real-time vocal streams.</p>`;
-    } else {
-      chatMessages.forEach((msg) => {
-        const isAi = msg.sender === "ai";
-        chatHtml += `
-          <div style="margin-bottom: 16px; padding: 12px; border-radius: 6px; background-color: ${isAi ? '#fdfaf5' : '#f4f5f7'}; border-left: 4px solid ${isAi ? '#C9973A' : '#1C2333'};">
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: ${isAi ? '#C9973A' : '#1C2333'}; font-weight: bold; margin-bottom: 4px;">
-              ${isAi ? 'STBA AI GUIDE' : 'STUDENT WORKMAN'} - ${new Date(msg.timestamp).toLocaleTimeString()}
-            </div>
-            <div style="font-size: 12.5px; line-height: 1.5; color: #333;">${msg.text}</div>
-          </div>
-        `;
+  const handleStudyDeeperVerse = (ref: string) => {
+    const cleanRef = formatStandardReference(ref) || ref;
+    localStorage.setItem("stba_pending_search_ref", cleanRef);
+    localStorage.setItem("stba_pending_search_tool", "syllabus");
+    setIsVerseModalOpen(false);
+    navigate(`/stba?ref=${encodeURIComponent(cleanRef)}&tool=syllabus`);
+  };
+
+  const renderTextWithScriptureTriggers = (rawText: string, keyPrefix: string = "ref") => {
+    const textToParse = String(rawText || "").replace(/\u00A0/g, " ");
+    if (!textToParse) return null;
+
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    const regex = getScriptureRegex();
+
+    while ((match = regex.exec(textToParse)) !== null) {
+      const fullMatch = match[0];
+      const matchIndex = match.index;
+
+      if (matchIndex > lastIndex) {
+        parts.push(textToParse.substring(lastIndex, matchIndex));
+      }
+
+      const stdRef = formatStandardReference(fullMatch) || fullMatch;
+      parts.push(
+        <button
+          key={`${keyPrefix}-${matchIndex}`}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenVerseModal(stdRef);
+          }}
+          className="rounded-full inline-flex items-center gap-1 font-mono font-bold text-[11px] px-2.5 py-0.5 mx-0.5 bg-[#FEF9C3] text-[#78350F] border border-[#FACC15] shadow-2xs hover:bg-[#FEF08A] hover:border-[#EAB308] cursor-pointer transition-all no-underline tracking-normal align-baseline"
+          title={`Click to open ${stdRef} in Scripture Reference Explorer`}
+        >
+          <BookOpen className="w-2.5 h-2.5 text-[#92400E] shrink-0" />
+          <span>{stdRef}</span>
+        </button>
+      );
+
+      lastIndex = matchIndex + fullMatch.length;
+    }
+
+    if (lastIndex < textToParse.length) {
+      parts.push(textToParse.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : textToParse;
+  };
+
+  // 3 to 5 Foundational Scriptures with concise, stage-specific theological relevance tied to the active study stage
+  const slateScripturesList = React.useMemo(() => {
+    const focalRef = formatStandardReference(scripture.reference) || scripture.reference;
+
+    const stageSpecificInsights: Record<
+      string,
+      Array<{ reference: string; role: string; theologicalInsight: string }>
+    > = {
+      stage1: [
+        {
+          reference: focalRef,
+          role: "Primary Text • Stage 1",
+          theologicalInsight: "Anchors our lexical and historical-grammatical exegesis in the author's original setting."
+        },
+        {
+          reference: "Isaiah 28:9-10",
+          role: "Hermeneutical Rule",
+          theologicalInsight: "Establishes 'line upon line' comparison so Scripture interprets Scripture objectively."
+        },
+        {
+          reference: "Luke 24:27",
+          role: "Christocentric Key",
+          theologicalInsight: "Demonstrates Christ expounding Moses and the Prophets in their unified canonical context."
+        },
+        {
+          reference: "Nehemiah 8:8",
+          role: "Expository Clarity",
+          theologicalInsight: "Models reading the sacred text distinctly and giving its true sense to the hearers."
+        }
+      ],
+      stage2: [
+        {
+          reference: focalRef,
+          role: "Primary Text • Stage 2",
+          theologicalInsight: "Equips the believer with uncompromised biblical truth in the Great Controversy."
+        },
+        {
+          reference: "Genesis 3:1-5",
+          role: "Edenic Conflict",
+          theologicalInsight: "Exposes Satan's original strategy of wresting God's words out of context to sow doubt."
+        },
+        {
+          reference: "Matthew 4:4",
+          role: "Wilderness Victory",
+          theologicalInsight: "Shows Christ overcoming temptation by standing upon 'every word' of Scripture."
+        },
+        {
+          reference: "Revelation 12:9",
+          role: "Cosmic Unmasking",
+          theologicalInsight: "Unveils the dragon's end-time war against God's Word and His remnant people."
+        }
+      ],
+      stage3: [
+        {
+          reference: focalRef,
+          role: "Primary Text • Stage 3",
+          theologicalInsight: "Forms the scriptural bedrock for Seventh-day Adventist doctrinal harmony."
+        },
+        {
+          reference: "2 Timothy 3:16-17",
+          role: "Belief #1 • Holy Scriptures",
+          theologicalInsight: "Affirms that all Scripture is God-breathed and authoritative for doctrine and instruction."
+        },
+        {
+          reference: "Hebrews 8:1-2",
+          role: "Belief #24 • Sanctuary",
+          theologicalInsight: "Centers all biblical doctrine in Christ our High Priest in the heavenly sanctuary."
+        },
+        {
+          reference: "Daniel 8:14",
+          role: "Prophetic Pillar",
+          theologicalInsight: "Connects prophetic time interpretation to Christ's closing ministry of atonement."
+        }
+      ],
+      stage4: [
+        {
+          reference: focalRef,
+          role: "Primary Text • Stage 4",
+          theologicalInsight: "Translates doctrinal conviction into daily heart sanctification and disciplined study."
+        },
+        {
+          reference: "Psalm 119:11",
+          role: "Heart Retention",
+          theologicalInsight: "Demonstrates how hiding God's Word in the heart guards daily life from sin."
+        },
+        {
+          reference: "1 Timothy 4:15-16",
+          role: "Diligent Devotion",
+          theologicalInsight: "Calls the workman to meditate wholly upon truth and take heed to personal life and doctrine."
+        },
+        {
+          reference: "James 1:22-25",
+          role: "Living Obedience",
+          theologicalInsight: "Urges believers to be active doers of the Word rather than passive hearers."
+        }
+      ],
+      stage5: [
+        {
+          reference: focalRef,
+          role: "Primary Text • Stage 5",
+          theologicalInsight: "Prepares the disciple to present God's truth with clarity, grace, and winsome love."
+        },
+        {
+          reference: "2 Timothy 2:2",
+          role: "Discipleship Chain",
+          theologicalInsight: "Commissions us to entrust what we have learned to faithful witnesses who will teach others."
+        },
+        {
+          reference: "1 Peter 3:15",
+          role: "Gentle Witness",
+          theologicalInsight: "Directs us to share the reason for our hope with meekness and deep respect."
+        },
+        {
+          reference: "Revelation 14:12",
+          role: "Remnant Appeal",
+          theologicalInsight: "Unites keeping the commandments of God with the winsome faith of Jesus."
+        }
+      ]
+    };
+
+    if (customFoundationalScriptures.length >= 3) {
+      return customFoundationalScriptures.slice(0, 5).map((s) => ({
+        reference: formatStandardReference(s.reference) || s.reference,
+        role: s.role,
+        theologicalInsight: s.stageInsight
+      }));
+    }
+
+    return stageSpecificInsights[phase] || stageSpecificInsights.stage1;
+  }, [scripture.reference, phase, customFoundationalScriptures]);
+
+  // Curated Spirit of Prophecy insights for the 'Ellen White' and 'All Slate' tabs
+  const slateEllenWhiteList = React.useMemo(
+    () => [
+      {
+        id: "egw-primary",
+        stageLabel: "Core Hermeneutic • Sola Scriptura",
+        source: "Fundamentals of Christian Education, pp. 187, 188",
+        quote: scoreStats.ellenWhiteQuote || "The Bible is its own expositor. One passage will prove to be a key that will unlock other passages, and in this way light will be shed upon the hidden meaning of the word.",
+        relatedScripture: "2 Timothy 3:16"
+      },
+      {
+        id: "egw-stage1",
+        stageLabel: "Stage 1 • Exegesis & Original Context",
+        source: "Education, p. 189",
+        quote: "We should not take the testimony of any man as to what the Scriptures teach, but should study the words of God for ourselves. If we allow others to do our thinking, we shall have crippled energies and contracted abilities.",
+        relatedScripture: "2 Timothy 2:15"
+      },
+      {
+        id: "egw-stage2",
+        stageLabel: "Stage 2 • The Cosmic Lens & Great Controversy",
+        source: "The Great Controversy, p. 595",
+        quote: "None but those who have fortified the mind with the truths of the Bible will stand through the last great conflict. To every soul will come the searching test: Shall I obey God rather than men?",
+        relatedScripture: "Revelation 14:12"
+      },
+      {
+        id: "egw-stage3",
+        stageLabel: "Stage 3 • Doctrinal Connections & Sanctuary",
+        source: "The Great Controversy, p. 423",
+        quote: "The subject of the sanctuary was the key which unlocked the mystery of the disappointment of 1844. It opened to view a complete system of truth, connected and harmonious, showing that God's hand had directed the great Advent Movement.",
+        relatedScripture: "Daniel 8:14"
+      },
+      {
+        id: "egw-stage4-5",
+        stageLabel: "Stages 4 & 5 • Sanctified Life & Winsome Appeal",
+        source: "Christ's Object Lessons, p. 335",
+        quote: "In the common things of nature and of life, Jesus found the lessons with which He illustrated the highest truths. The heart that is filled with the grace of God will communicate truth with tenderness and winsome love.",
+        relatedScripture: "2 Timothy 2:2"
+      }
+    ],
+    [scoreStats.ellenWhiteQuote]
+  );
+
+  // Build structured export sections for PDF and DOCX downloads
+  const buildExportSections = () => {
+    const stageNotes = stagesList.map((st) => ({
+      title: `Stage ${st.number}: ${st.title} (${st.subtitle})`,
+      score: scoreStats.stageScores[st.id] || 0,
+      feedback: scoreStats.stageFeedback[st.id] || "In progress — self-paced study."
+    }));
+
+    return {
+      title: `Teach It Studio — Pedagogy & Exegesis Notes (${scripture.reference})`,
+      dateStr: `${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+      focalReference: scripture.reference,
+      focalText: scripture.text,
+      overallScore: scoreStats.overallScore,
+      masteryRank: getMasteryLevelText(scoreStats.overallScore),
+      targetAudience,
+      teachingDraftOutline,
+      outlineFeedback,
+      devotionalPrompt: scoreStats.devotionalPrompt,
+      devotionalReflection,
+      stageNotes,
+      scriptures: slateScripturesList,
+      egwQuotes: slateEllenWhiteList,
+      dialogue: chatMessages
+    };
+  };
+
+  // Export Notes as PDF (.pdf) using jsPDF
+  const downloadNotesAsPdf = () => {
+    try {
+      const data = buildExportSections();
+      const doc = new jsPDF({ unit: "pt", format: "letter" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 48;
+      const contentWidth = pageWidth - margin * 2;
+      let y = 54;
+
+      const checkPageBreak = (neededHeight: number = 36) => {
+        if (y + neededHeight > pageHeight - 54) {
+          doc.addPage();
+          y = 54;
+        }
+      };
+
+      const addHeading = (text: string) => {
+        checkPageBreak(40);
+        y += 8;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(140, 95, 25);
+        doc.text(text.toUpperCase(), margin, y);
+        y += 6;
+        doc.setDrawColor(201, 151, 58);
+        doc.setLineWidth(0.75);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 16;
+      };
+
+      const addParagraph = (text: string, bold = false, indent = 0) => {
+        doc.setFont("helvetica", bold ? "bold" : "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(35, 35, 35);
+        const lines = doc.splitTextToSize(String(text || ""), contentWidth - indent);
+        for (const line of lines) {
+          checkPageBreak(16);
+          doc.text(line, margin + indent, y);
+          y += 14;
+        }
+        y += 4;
+      };
+
+      // Document Title Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.setTextColor(28, 35, 51);
+      doc.text("STUDY TO BE APPROVED (STBA) — TEACH IT STUDIO", margin, y);
+      y += 18;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Focal Passage: ${data.focalReference} • Exported: ${data.dateStr} • Audience: ${data.targetAudience}`, margin, y);
+      y += 20;
+
+      // 1. Focal Scripture & Supporting Scriptures
+      addHeading("1. Focal Passage & Supporting Scriptures");
+      addParagraph(`${data.focalReference}: "${data.focalText}"`, true);
+      for (const item of data.scriptures) {
+        addParagraph(`• ${item.reference} (${item.role}): ${item.theologicalInsight}`, false, 8);
+      }
+
+      // 2. Pedagogy Notes & Homiletic Teaching Outline
+      addHeading(`2. Pedagogy Notes & Homiletic Outline (${data.targetAudience})`);
+      addParagraph(data.teachingDraftOutline || "(No outline drafted yet.)");
+      if (data.outlineFeedback) {
+        addParagraph(`Elder Stephen's Coaching Feedback: ${data.outlineFeedback}`, false, 8);
+      }
+
+      // 3. 5-Stage Pedagogical Evaluation
+      addHeading("3. 5-Stage Pedagogical Progress & Feedback");
+      for (const st of data.stageNotes) {
+        addParagraph(`${st.title} — Score: ${st.score}/100`, true);
+        addParagraph(st.feedback, false, 10);
+      }
+
+      // 4. Ellen G. White Spirit of Prophecy Insights
+      addHeading("4. Ellen G. White Spirit of Prophecy Insights");
+      for (const egw of data.egwQuotes) {
+        addParagraph(`"${egw.quote}" — ${egw.source} (${egw.stageLabel})`, false, 8);
+      }
+
+      // 5. Devotional Reflection & Dialogue
+      if (data.devotionalReflection.trim()) {
+        addHeading("5. Devotional Heart Reflection");
+        addParagraph(`Prompt: ${data.devotionalPrompt}`, true);
+        addParagraph(data.devotionalReflection.trim());
+      }
+
+      if (data.dialogue.length > 0) {
+        addHeading("6. Continuous Dialogue Transcript");
+        for (const msg of data.dialogue) {
+          const speaker = msg.sender === "ai" ? "Elder Stephen" : "Disciple";
+          addParagraph(`[${speaker}]: ${msg.text}`, false, 4);
+        }
+      }
+
+      const safeRef = scripture.reference.replace(/[^a-zA-Z0-9_-]/g, "_");
+      doc.save(`STBA_Teach_It_${safeRef}_Notes.pdf`);
+      triggerToast("Exported Teach It Studio Notes as PDF (.pdf)!");
+    } catch (err) {
+      console.error("PDF export error:", err);
+      triggerToast("Unable to generate PDF file.");
+    }
+  };
+
+  // Export Notes as genuine Word Document (.docx) using an uncompressed ECMA-376 OpenXML ZIP container
+  const downloadNotesAsDocx = () => {
+    try {
+      const data = buildExportSections();
+
+      const escapeXml = (str: string) =>
+        String(str || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&apos;");
+
+      const makeDocxPara = (text: string, opts?: { bold?: boolean; sizeHalfPt?: number; colorHex?: string }) => {
+        const size = opts?.sizeHalfPt || 22;
+        const color = opts?.colorHex || "1C2333";
+        const boldTag = opts?.bold ? "<w:b/>" : "";
+        return `<w:p><w:pPr><w:spacing w:after="140"/></w:pPr><w:r><w:rPr>${boldTag}<w:color w:val="${color}"/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr><w:t xml:space="preserve">${escapeXml(
+          text
+        )}</w:t></w:r></w:p>`;
+      };
+
+      const bodyParagraphs: string[] = [];
+      bodyParagraphs.push(
+        makeDocxPara("STUDY TO BE APPROVED (STBA) — TEACH IT STUDIO NOTES", {
+          bold: true,
+          sizeHalfPt: 30,
+          colorHex: "1C2333"
+        })
+      );
+      bodyParagraphs.push(
+        makeDocxPara(`Focal Scripture: ${data.focalReference} | Target Audience: ${data.targetAudience} | Exported: ${data.dateStr}`, {
+          bold: true,
+          sizeHalfPt: 20,
+          colorHex: "8C5209"
+        })
+      );
+
+      bodyParagraphs.push(makeDocxPara("1. FOCAL PASSAGE & SCRIPTURE BREAKDOWN", { bold: true, sizeHalfPt: 24, colorHex: "8C5209" }));
+      bodyParagraphs.push(makeDocxPara(`${data.focalReference}: "${data.focalText}"`, { bold: true, sizeHalfPt: 22 }));
+      for (const s of data.scriptures) {
+        bodyParagraphs.push(makeDocxPara(`• ${s.reference} (${s.role}): ${s.theologicalInsight}`, { sizeHalfPt: 21 }));
+      }
+
+      bodyParagraphs.push(makeDocxPara(`2. PEDAGOGY NOTES & HOMILETIC OUTLINE (${data.targetAudience.toUpperCase()})`, { bold: true, sizeHalfPt: 24, colorHex: "8C5209" }));
+      for (const line of String(data.teachingDraftOutline || "").split("\n")) {
+        if (line.trim()) bodyParagraphs.push(makeDocxPara(line.trim(), { sizeHalfPt: 22 }));
+      }
+      if (data.outlineFeedback) {
+        bodyParagraphs.push(makeDocxPara(`Elder Stephen's Coaching Feedback: ${data.outlineFeedback}`, { sizeHalfPt: 21 }));
+      }
+
+      bodyParagraphs.push(makeDocxPara("3. 5-STAGE PEDAGOGICAL EVALUATION", { bold: true, sizeHalfPt: 24, colorHex: "8C5209" }));
+      for (const st of data.stageNotes) {
+        bodyParagraphs.push(makeDocxPara(`${st.title} — Score: ${st.score}/100`, { bold: true, sizeHalfPt: 22 }));
+        bodyParagraphs.push(makeDocxPara(st.feedback, { sizeHalfPt: 21 }));
+      }
+
+      bodyParagraphs.push(makeDocxPara("4. ELLEN G. WHITE SPIRIT OF PROPHECY INSIGHTS", { bold: true, sizeHalfPt: 24, colorHex: "8C5209" }));
+      for (const egw of data.egwQuotes) {
+        bodyParagraphs.push(makeDocxPara(`"${egw.quote}" — ${egw.source} (${egw.stageLabel})`, { sizeHalfPt: 21 }));
+      }
+
+      if (data.devotionalReflection.trim()) {
+        bodyParagraphs.push(makeDocxPara("5. DEVOTIONAL HEART REFLECTION", { bold: true, sizeHalfPt: 24, colorHex: "8C5209" }));
+        bodyParagraphs.push(makeDocxPara(`Prompt: ${data.devotionalPrompt}`, { bold: true, sizeHalfPt: 21 }));
+        bodyParagraphs.push(makeDocxPara(data.devotionalReflection.trim(), { sizeHalfPt: 21 }));
+      }
+
+      if (data.dialogue.length > 0) {
+        bodyParagraphs.push(makeDocxPara("6. CONTINUOUS DIALOGUE TRANSCRIPT", { bold: true, sizeHalfPt: 24, colorHex: "8C5209" }));
+        for (const msg of data.dialogue) {
+          const speaker = msg.sender === "ai" ? "Elder Stephen" : "Disciple";
+          bodyParagraphs.push(makeDocxPara(`[${speaker}]: ${msg.text}`, { sizeHalfPt: 20 }));
+        }
+      }
+
+      const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+      const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+      const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    ${bodyParagraphs.join("\n    ")}
+    <w:sectPr>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+
+      // Minimal store-mode ZIP builder for genuine .docx binary output
+      const encoder = new TextEncoder();
+      const files = [
+        { name: "[Content_Types].xml", data: encoder.encode(contentTypesXml) },
+        { name: "_rels/.rels", data: encoder.encode(relsXml) },
+        { name: "word/document.xml", data: encoder.encode(documentXml) }
+      ];
+
+      const crcTable = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) {
+          c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        }
+        crcTable[n] = c >>> 0;
+      }
+      const crc32 = (bytes: Uint8Array) => {
+        let crc = 0xffffffff;
+        for (let i = 0; i < bytes.length; i++) {
+          crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+        }
+        return (crc ^ 0xffffffff) >>> 0;
+      };
+
+      const localParts: Uint8Array[] = [];
+      const centralParts: Uint8Array[] = [];
+      let offset = 0;
+
+      for (const file of files) {
+        const nameBytes = encoder.encode(file.name);
+        const crc = crc32(file.data);
+        const size = file.data.length;
+
+        const localHeader = new Uint8Array(30 + nameBytes.length);
+        const lv = new DataView(localHeader.buffer);
+        lv.setUint32(0, 0x04034b50, true);
+        lv.setUint16(4, 20, true);
+        lv.setUint16(6, 0, true);
+        lv.setUint16(8, 0, true);
+        lv.setUint16(10, 0, true);
+        lv.setUint16(12, 0, true);
+        lv.setUint32(14, crc, true);
+        lv.setUint32(18, size, true);
+        lv.setUint32(22, size, true);
+        lv.setUint16(26, nameBytes.length, true);
+        lv.setUint16(28, 0, true);
+        localHeader.set(nameBytes, 30);
+
+        const centralHeader = new Uint8Array(46 + nameBytes.length);
+        const cv = new DataView(centralHeader.buffer);
+        cv.setUint32(0, 0x02014b50, true);
+        cv.setUint16(4, 20, true);
+        cv.setUint16(6, 20, true);
+        cv.setUint16(8, 0, true);
+        cv.setUint16(10, 0, true);
+        cv.setUint16(12, 0, true);
+        cv.setUint16(14, 0, true);
+        cv.setUint32(16, crc, true);
+        cv.setUint32(20, size, true);
+        cv.setUint32(24, size, true);
+        cv.setUint16(28, nameBytes.length, true);
+        cv.setUint16(30, 0, true);
+        cv.setUint16(32, 0, true);
+        cv.setUint16(34, 0, true);
+        cv.setUint16(36, 0, true);
+        cv.setUint32(38, 0, true);
+        cv.setUint32(42, offset, true);
+        centralHeader.set(nameBytes, 46);
+
+        localParts.push(localHeader, file.data);
+        centralParts.push(centralHeader);
+        offset += localHeader.length + size;
+      }
+
+      const centralSize = centralParts.reduce((acc, arr) => acc + arr.length, 0);
+      const eocd = new Uint8Array(22);
+      const ev = new DataView(eocd.buffer);
+      ev.setUint32(0, 0x06054b50, true);
+      ev.setUint16(4, 0, true);
+      ev.setUint16(6, 0, true);
+      ev.setUint16(8, files.length, true);
+      ev.setUint16(10, files.length, true);
+      ev.setUint32(12, centralSize, true);
+      ev.setUint32(16, offset, true);
+      ev.setUint16(20, 0, true);
+
+      const blob = new Blob([...localParts, ...centralParts, eocd], {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const safeRef = scripture.reference.replace(/[^a-zA-Z0-9_-]/g, "_");
+      link.href = url;
+      link.download = `STBA_Teach_It_${safeRef}_Notes.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      triggerToast("Exported Teach It Studio Notes as Word Document (.docx)!");
+    } catch (err) {
+      console.error("DOCX export error:", err);
+      triggerToast("Unable to generate DOCX file.");
     }
-
-    let stagesHtml = "";
-    stagesList.forEach((stg) => {
-      const sc = scoreStats.stageScores[stg.id] || 0;
-      const feedback = scoreStats.stageFeedback[stg.id] || "No discussion recorded.";
-      stagesHtml += `
-        <div style="padding: 12px 0; border-bottom: 1px dashed #e8e4da;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <strong style="font-family: 'Inter', sans-serif; font-size: 13px; color: #222;">Stage ${stg.number}: ${stg.title}</strong>
-            <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: bold; color: #C9973A; background-color: #fdfaf5; padding: 2px 8px; border-radius: 4px; border: 1px solid #c9973a20;">
-              ${sc}/100
-            </span>
-          </div>
-          <p style="font-size: 12px; color: #666; margin: 0; line-height: 1.45;">${feedback}</p>
-        </div>
-      `;
-    });
-
-    const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>STBA Scripture Exegesis Record: ${scripture.reference}</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,500;0,700;1,400&family=JetBrains+Mono:wght@400;700&display=swap');
-    
-    body {
-      background-color: #f6f5f0;
-      color: #1a1a1a;
-      font-family: 'Inter', sans-serif;
-      margin: 0;
-      padding: 40px 20px;
-    }
-    .paper {
-      background-color: #ffffff;
-      border: 1px solid #e8e4da;
-      border-radius: 16px;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 50px 60px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.03);
-      position: relative;
-    }
-    .seal-border {
-      position: absolute;
-      top: 15px;
-      left: 15px;
-      right: 15px;
-      bottom: 15px;
-      border: 1px solid #c9973a20;
-      pointer-events: none;
-      border-radius: 12px;
-    }
-    .header {
-      text-align: center;
-      border-bottom: 2px solid #C9973A;
-      padding-bottom: 24px;
-      margin-bottom: 30px;
-    }
-    .header h1 {
-      font-family: 'Playfair Display', serif;
-      font-size: 32px;
-      margin: 0;
-      color: #1C2333;
-      letter-spacing: -0.01em;
-    }
-    .header p {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10.5px;
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-      color: #C9973A;
-      margin: 8px 0 0 0;
-      font-weight: 700;
-    }
-    .scripture-card {
-      background-color: #fdfaf5;
-      border: 1px solid #C9973A25;
-      padding: 20px 24px;
-      border-radius: 8px;
-      margin-bottom: 30px;
-    }
-    .scripture-card h2 {
-      font-family: 'Playfair Display', serif;
-      font-size: 18px;
-      margin: 0 0 8px 0;
-      color: #C9973A;
-    }
-    .scripture-card p {
-      font-family: 'Playfair Display', serif;
-      font-style: italic;
-      font-size: 15px;
-      color: #333;
-      line-height: 1.6;
-      margin: 0;
-    }
-    .score-banner {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background-color: #1C2333;
-      color: #ffffff;
-      padding: 20px 30px;
-      border-radius: 8px;
-      margin-bottom: 30px;
-    }
-    .score-banner h3 {
-      font-size: 24px;
-      margin: 0;
-      font-family: 'Playfair Display', serif;
-    }
-    .score-badge {
-      font-size: 32px;
-      font-weight: 800;
-      color: #C9973A;
-      font-family: 'Inter', sans-serif;
-    }
-    .section-title {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: #1C2333;
-      border-bottom: 1px solid #1c233315;
-      padding-bottom: 8px;
-      margin-top: 35px;
-      margin-bottom: 16px;
-      font-weight: 800;
-    }
-    .reflection-text {
-      font-family: 'Playfair Display', serif;
-      font-style: italic;
-      font-size: 14.5px;
-      line-height: 1.6;
-      color: #2b2b2b;
-      background-color: #fefefc;
-      padding: 20px;
-      border-left: 3px solid #C9973A;
-      border-radius: 0 8px 8px 0;
-    }
-    .quote {
-      text-align: center;
-      font-family: 'Playfair Display', serif;
-      font-style: italic;
-      font-size: 13.5px;
-      color: #666;
-      border-top: 1px solid #e8e4da;
-      padding-top: 20px;
-      margin-top: 40px;
-    }
-    .footer {
-      text-align: center;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
-      color: #999;
-      margin-top: 25px;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
-    
-    @media print {
-      body {
-        background-color: #ffffff;
-        padding: 0;
-      }
-      .paper {
-        border: none;
-        box-shadow: none;
-        padding: 20px;
-      }
-      .no-print {
-        display: none;
-      }
-    }
-    .btn-print {
-      display: block;
-      width: fit-content;
-      margin: 20px auto 0 auto;
-      background-color: #C9973A;
-      color: white;
-      border: none;
-      padding: 10px 24px;
-      font-family: 'Inter', sans-serif;
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-    }
-    .btn-print:hover {
-      background-color: #b5852f;
-    }
-  </style>
-</head>
-<body>
-
-  <div class="paper">
-    <div class="seal-border"></div>
-    
-    <button class="btn-print no-print" onclick="window.print()">Print This Record / Save PDF</button>
-
-    <div class="header">
-      <p>Study To Be Approved (STBA)</p>
-      <h1>Scriptural Exegesis Record</h1>
-      <p style="color: #666; font-size: 10px; margin-top: 4px;">Syllabus Assessment & Verbal Evaluation</p>
-    </div>
-
-    <div class="scripture-card">
-      <h2>Active Study Core: ${scripture.reference}</h2>
-      <p>"${scripture.text}"</p>
-    </div>
-
-    <div class="score-banner">
-      <div>
-        <h3 style="margin-bottom: 4px;">Assessment Profile</h3>
-        <p style="font-size: 12px; color: #aaa; margin: 0; font-family: 'Inter', sans-serif;">
-          Role: <strong>${userRole} background</strong> • Status: <strong>VERIFIED</strong>
-        </p>
-      </div>
-      <div>
-        <div class="score-badge">${scoreStats.overallScore}%</div>
-        <p style="font-size: 10px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; margin: 0; text-align: right; color: #C9973A; font-weight: bold;">
-          ${getMasteryLevelText(scoreStats.overallScore)}
-        </p>
-      </div>
-    </div>
-
-    <div class="section-title">Cognitive Stage Evaluation Breakdown</div>
-    <div>
-      ${stagesHtml}
-    </div>
-
-    <div class="section-title">Active Recall Keywords Captured</div>
-    <p style="font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: #1C2333;">
-      <strong>Identified Scriptural Keys:</strong><br/>
-      ${scripture.keywords.map(k => {
-        return `<span style="display: inline-block; margin-right: 12px; color: #2E7D32; font-weight: bold;">[✓] ${k}</span>`;
-      }).join(' ')}
-    </p>
-
-    <div class="section-title">Devotional Heart Reflection</div>
-    <div style="margin-top: 10px;">
-      <p style="font-size: 12px; color: #666; font-family: 'Inter', sans-serif; font-weight: 500; margin-bottom: 8px;">
-        <strong>Prompt:</strong> ${scoreStats.devotionalPrompt}
-      </p>
-      <div class="reflection-text">
-        ${devotionalReflection.trim() ? devotionalReflection.trim().replace(/\n/g, "<br/>") : "(No personal reflection text captured in memory journal yet.)"}
-      </div>
-    </div>
-
-    <div class="section-title">Historical Session Dialogue Transcript</div>
-    <div style="margin-top: 12px;">
-      ${chatHtml}
-    </div>
-
-    <div class="quote">
-      "${scoreStats.ellenWhiteQuote}"
-    </div>
-
-    <div class="footer">
-      Syllabus Reference Code STBA-EXP-${scripture.id.toUpperCase()} • STBA SECURE ARCHIVAL LEDGER
-    </div>
-  </div>
-
-</body>
-</html>
-`;
-
-    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `STBA_${scripture.reference.replace(/\s+/g, "_")}_Exegesis_Record.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    triggerToast("Beautiful HTML/PDF-ready certificate template exported!");
   };
 
   const getMasteryLevelText = (sc: number): string => {
@@ -2187,21 +2905,48 @@ What is the authorial setting and original context of this passage, and how woul
                   </div>
                 )}
 
-                {/* START BUTTON */}
-                <button
-                  onClick={handleBeginSession}
-                  className="w-full py-4 bg-[#C9973A] hover:bg-[#B5852F] text-white font-sans font-bold text-sm uppercase tracking-wider rounded-[8px] transition-all cursor-pointer shadow-lg flex items-center justify-center gap-2 group transform active:scale-[0.98]"
-                  id="btn-teach-intro-begin"
-                >
-                  <BrainCircuit className="w-4 h-4 animate-bounce" />
-                  <span>Start Session</span>
-                </button>
+                {/* START / CONTINUE BUTTONS */}
+                {savedSessionSnapshot ? (
+                  <div className="space-y-2.5">
+                    <button
+                      onClick={handleContinueSession}
+                      className="w-full py-4 bg-[#C9973A] hover:bg-[#B5852F] text-white font-sans font-bold text-sm uppercase tracking-wider rounded-[8px] transition-all cursor-pointer shadow-lg flex items-center justify-center gap-2 group transform active:scale-[0.98]"
+                      id="btn-teach-intro-continue"
+                    >
+                      <BrainCircuit className="w-4 h-4 animate-bounce" />
+                      <span>
+                        Continue Session:{" "}
+                        {savedSessionSnapshot.activeTopicTitle ||
+                          savedSessionSnapshot.activeScripture?.reference ||
+                          "Active Study"}
+                      </span>
+                    </button>
+                    <button
+                      onClick={handleBeginSession}
+                      className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-stone-300 border border-white/15 font-sans font-semibold text-xs uppercase tracking-wider rounded-[8px] transition-all cursor-pointer flex items-center justify-center gap-2"
+                      id="btn-teach-intro-begin"
+                    >
+                      <span>Start Fresh Session</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleBeginSession}
+                    className="w-full py-4 bg-[#C9973A] hover:bg-[#B5852F] text-white font-sans font-bold text-sm uppercase tracking-wider rounded-[8px] transition-all cursor-pointer shadow-lg flex items-center justify-center gap-2 group transform active:scale-[0.98]"
+                    id="btn-teach-intro-begin"
+                  >
+                    <BrainCircuit className="w-4 h-4 animate-bounce" />
+                    <span>Start Session</span>
+                  </button>
+                )}
               </div>
             </motion.div>
           )}
 
           {/* ============================================== */}
-          {/* 2. CORE INTERACTIVE CHAT & LIVE SCORECARD GRID */}
+          {/* 2. TWO-COLUMN TEACH IT STUDIO WORKSPACE        */}
+          {/*    Left: Narrow Continuous Dialogue Bubbles    */}
+          {/*    Right: Wide Tabbed Instructional Slate      */}
           {/* ============================================== */}
           {phase !== "intro" && phase !== "feedback" && activeStage && (
             <motion.div
@@ -2209,10 +2954,10 @@ What is the authorial setting and original context of this passage, and how woul
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch w-full"
+              className="flex flex-col gap-4 w-full"
             >
-              {/* STATUS & ACTIONS HUD TIMER */}
-              <div className="col-span-12 flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-3">
+              {/* STATUS & SELF-PACED PAUSE/RESUME HUD BAR */}
+              <div className="w-full flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
                 <div className="flex items-center gap-3">
                   <span className="relative flex h-3 w-3">
                     {!isPaused ? (
@@ -2224,30 +2969,30 @@ What is the authorial setting and original context of this passage, and how woul
                       <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
                     )}
                   </span>
-                  <span className="text-[11px] font-mono uppercase tracking-widest font-extrabold text-stone-300">
-                    {!isPaused ? "AI Session Live" : "Study Paused"}
+                  <span className="text-[11px] font-mono uppercase tracking-widest font-extrabold text-stone-200">
+                    {!isPaused ? "AI Session Live" : "Session Paused"}
                   </span>
                 </div>
 
-                {/* TIMERS HUD PANEL */}
+                {/* PAUSE / RESUME CONTROL (self-paced, no timer) */}
                 <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10 text-xs">
-                  <div className="px-3 py-1 font-mono font-bold text-stone-200 flex items-center gap-1.5 border-r border-white/5">
-                    <Clock className={`w-3.5 h-3.5 ${isTimerActive && !isPaused ? "text-[#C9973A] animate-pulse" : "text-stone-400"}`} />
-                    <span>
-                      {!isTimerActive
-                        ? "Timer Standby"
-                        : `Time Left: ${formatTimerMMSS(secondsRemaining)}`}
-                    </span>
-                  </div>
                   {isTimerActive ? (
                     <button
-                      onClick={() => setIsPaused(!isPaused)}
-                      className="p-1 px-2.5 hover:bg-white/10 rounded font-mono text-[10px] uppercase font-bold text-[#C9973A] cursor-pointer transition-colors"
+                      id="btn-teach-pause-resume"
+                      type="button"
+                      onClick={handleTogglePauseSession}
+                      className={`py-1 px-3 rounded-lg font-mono text-[10px] uppercase font-bold cursor-pointer transition-all flex items-center gap-1.5 ${
+                        isPaused
+                          ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30"
+                          : "bg-[#C9973A]/20 border border-[#C9973A]/40 text-[#F3CF65] hover:bg-[#C9973A]/30"
+                      }`}
                     >
-                      {isPaused ? "Resume" : "Pause"}
+                      {isPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+                      <span>{isPaused ? "Resume" : "Pause"}</span>
                     </button>
                   ) : (
                     <button
+                      type="button"
                       onClick={handleBeginSession}
                       className="p-1 px-3 bg-[#C9973A] hover:bg-[#B5852F] rounded font-mono text-[10px] uppercase font-bold text-stone-950 cursor-pointer shadow transition-colors"
                     >
@@ -2258,9 +3003,9 @@ What is the authorial setting and original context of this passage, and how woul
               </div>
 
               {/* TOP STAGE ICONS TIMELINE */}
-              <div 
+              <div
                 ref={stageSelectorRef}
-                className="col-span-12 w-full bg-[#141A27]/60 border border-white/10 rounded-2xl p-3 sm:p-4 backdrop-blur-sm shadow-md" 
+                className="w-full bg-[#141A27]/60 border border-white/10 rounded-2xl p-3 sm:p-4 backdrop-blur-sm shadow-md"
                 id="timer-breadcrumbs-bar"
               >
                 <div className="flex items-center justify-between gap-1 sm:gap-3 overflow-x-auto pb-1 scrollbar-hide">
@@ -2272,10 +3017,9 @@ What is the authorial setting and original context of this passage, and how woul
 
                     return (
                       <React.Fragment key={st.id}>
-                        {/* Connecting Line between stage icons */}
                         {idx > 0 && (
                           <div className="flex-1 h-0.5 sm:h-1 min-w-[14px] sm:min-w-[28px] max-w-[80px] rounded-full overflow-hidden bg-white/10 relative">
-                            <div 
+                            <div
                               className={`h-full transition-all duration-500 rounded-full ${
                                 isVisited || (isCurrent && idx > 0)
                                   ? "bg-gradient-to-r from-emerald-500 to-[#C9973A] w-full"
@@ -2285,19 +3029,20 @@ What is the authorial setting and original context of this passage, and how woul
                           </div>
                         )}
 
-                        {/* Stage Icon Node */}
-                        <div
+                        <button
+                          type="button"
+                          onClick={() => handleNextStage(st.id)}
                           data-active={isCurrent ? "true" : "false"}
-                          className={`flex items-center gap-2 sm:gap-3 p-1.5 sm:p-2.5 rounded-xl border transition-all select-none flex-shrink-0 cursor-default ${
+                          className={`flex items-center gap-2 sm:gap-3 p-1.5 sm:p-2.5 rounded-xl border transition-all select-none flex-shrink-0 cursor-pointer ${
                             isCurrent
                               ? "bg-[#C9973A]/15 border-[#C9973A] text-white shadow-lg ring-2 ring-[#C9973A]/40"
                               : isVisited
-                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
-                              : "bg-white/[0.02] border-white/5 text-stone-500"
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200 hover:border-emerald-400"
+                              : "bg-white/[0.02] border-white/5 text-stone-400 hover:border-white/20"
                           }`}
+                          title={`Switch to Stage ${st.number}: ${st.title}`}
                         >
-                          {/* Circular icon container */}
-                          <div 
+                          <div
                             className={`w-7 h-7 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center relative transition-transform ${
                               isCurrent
                                 ? "bg-[#C9973A] text-stone-950 font-bold shadow-md scale-105"
@@ -2319,38 +3064,41 @@ What is the authorial setting and original context of this passage, and how woul
                             )}
                           </div>
 
-                          {/* Stage details */}
                           <div className="flex flex-col text-left pr-1">
                             <div className="flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-wider">
                               <span className={isCurrent ? "text-[#C9973A] font-extrabold" : isVisited ? "text-emerald-400 font-bold" : "text-stone-500"}>
                                 Stage {st.number}
                               </span>
-                              <span className={`font-bold px-1 py-0.2 rounded text-[8px] sm:text-[9px] ${
-                                hasScore
-                                  ? "text-emerald-400 bg-emerald-500/20"
-                                  : isCurrent
-                                  ? "text-[#C9973A] bg-[#C9973A]/20"
-                                  : "text-stone-500 bg-white/5"
-                              }`}>
+                              <span
+                                className={`font-bold px-1 py-0.2 rounded text-[8px] sm:text-[9px] ${
+                                  hasScore
+                                    ? "text-emerald-400 bg-emerald-500/20"
+                                    : isCurrent
+                                    ? "text-[#C9973A] bg-[#C9973A]/20"
+                                    : "text-stone-500 bg-white/5"
+                                }`}
+                              >
                                 {score}%
                               </span>
                             </div>
-                            <span className={`text-[11px] sm:text-xs font-sans font-bold leading-tight truncate max-w-[100px] sm:max-w-[130px] ${
-                              isCurrent ? "text-white" : isVisited ? "text-stone-200" : "text-stone-400"
-                            }`}>
+                            <span
+                              className={`text-[11px] sm:text-xs font-sans font-bold leading-tight truncate max-w-[100px] sm:max-w-[130px] ${
+                                isCurrent ? "text-white" : isVisited ? "text-stone-200" : "text-stone-400"
+                              }`}
+                            >
                               {st.title}
                             </span>
                           </div>
-                        </div>
+                        </button>
                       </React.Fragment>
                     );
                   })}
                 </div>
               </div>
 
-              {/* MOBILE WORKSPACE TAB SELECTOR */}
-              <div 
-                className="col-span-12 lg:hidden flex p-1 bg-stone-900/65 rounded-xl border border-white/5 text-[10px] font-mono select-none w-full gap-1 mb-2" 
+              {/* MOBILE COLUMN SWITCHER */}
+              <div
+                className="lg:hidden flex p-1 bg-stone-900/65 rounded-xl border border-white/10 text-[10px] font-mono select-none w-full gap-1"
                 id="mobile-workspace-tab-bar"
               >
                 <button
@@ -2358,469 +3106,698 @@ What is the authorial setting and original context of this passage, and how woul
                   onClick={() => setActiveMobileTab("chat")}
                   className={`flex-1 py-2.5 rounded-lg text-center font-bold uppercase tracking-wide transition-all cursor-pointer ${
                     activeMobileTab === "chat"
-                      ? "bg-[#C9973A] text-white shadow-md font-extrabold"
+                      ? "bg-[#C9973A] text-stone-950 shadow-md font-extrabold"
                       : "text-stone-400 hover:text-stone-200"
                   }`}
                 >
-                  Dialogue
+                  Dialogue Stream
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveMobileTab("scorecard")}
+                  onClick={() => setActiveMobileTab("slate")}
                   className={`flex-1 py-2.5 rounded-lg text-center font-bold uppercase tracking-wide transition-all cursor-pointer ${
-                    activeMobileTab === "scorecard"
-                      ? "bg-[#C9973A] text-white shadow shadow-md font-extrabold"
+                    activeMobileTab === "slate"
+                      ? "bg-[#C9973A] text-stone-950 shadow-md font-extrabold"
                       : "text-stone-400 hover:text-stone-200"
                   }`}
                 >
-                  Scorecard
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveMobileTab("checklist")}
-                  className={`flex-1 py-2.5 rounded-lg text-center font-bold uppercase tracking-wide transition-all cursor-pointer ${
-                    activeMobileTab === "checklist"
-                      ? "bg-[#C9973A] text-white shadow shadow-md font-extrabold"
-                      : "text-stone-400 hover:text-stone-200"
-                  }`}
-                >
-                  Checklist
+                  Instructional Slate
                 </button>
               </div>
 
-              {/* STUDY WORKSPACE PANELS */}
-              <div className="col-span-12 flex flex-col lg:flex-row gap-6 items-stretch w-full min-w-0" id="study-workspace-panels">
-
-                {/* ==================== LEFT PANEL: METRICS CARD ==================== */}
-                <div className={`space-y-4 flex-col order-last lg:order-none w-full lg:w-[320px] lg:flex-shrink-0 ${
-                  activeMobileTab !== "chat" ? "flex" : "hidden lg:flex"
-                }`}>
-                  
-                  {/* Live Exegesis Scorecard & Stage Progress Tracking */}
-                  <div className={`bg-[#141A27] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-5 w-full shadow-lg ${
-                    activeMobileTab === "scorecard" ? "block" : "hidden lg:block"
-                  }`}>
-                    {/* Session Score Card */}
-                    <div className="bg-[#1C2333]/70 border border-white/10 rounded-xl p-4 space-y-3" id="scorecard-header-badge-row">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <span className="text-[9px] font-mono uppercase tracking-widest text-[#C9973A] block font-extrabold">Mastery HUD</span>
-                          <h3 className="font-serif text-base font-bold text-stone-100">Session Score</h3>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-14 h-14 bg-gradient-to-br from-[#C9973A]/20 to-[#C9973A]/5 border-2 border-[#C9973A] rounded-xl text-center flex flex-col justify-center items-center shadow-lg shadow-[#C9973A]/10">
-                            <span className="text-[8px] font-mono text-[#C9973A] font-bold uppercase tracking-wider leading-none mb-0.5">Live</span>
-                            <span className="text-[17px] font-sans font-black text-white leading-none">{scoreStats.overallScore}%</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Cumulative progress bar */}
-                      <div className="space-y-1.5 pt-1">
-                        <div className="flex items-center justify-between text-[10px] font-mono">
-                          <span className="text-stone-400">Cumulative Progress</span>
-                          <span className="text-[#C9973A] font-bold">
-                            {completedStagesCount} of 5 Stages Mastered
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-stone-900 rounded-full overflow-hidden border border-white/5">
-                          <motion.div
-                            className="h-full bg-gradient-to-r from-emerald-500 via-[#C9973A] to-amber-300 rounded-full"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${Math.max(4, (completedStagesCount / 5) * 100)}%` }}
-                            transition={{ duration: 0.6 }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between text-[9px] font-mono text-stone-400">
-                          <span>Rank: {getMasteryLevelText(scoreStats.overallScore)}</span>
-                          <span>{Math.round((completedStagesCount / 5) * 100)}% Complete</span>
-                        </div>
+              {/* ===================================================================== */}
+              {/* TWO-COLUMN WORKSPACE:                                                 */}
+              {/*   LEFT (NARROW): Exclusively Continuous Chat Dialogue Bubbles         */}
+              {/*   RIGHT (WIDE): Tabbed Instructional Area (All Slate, Scriptures,     */}
+              {/*                 Ellen White, Pedagogy Notes) loading top-down         */}
+              {/* ===================================================================== */}
+              <div
+                className="flex flex-col lg:flex-row gap-5 items-stretch w-full min-w-0"
+                id="study-workspace-panels"
+              >
+                {/* ==================== NARROW LEFT COLUMN: CONTINUOUS DIALOGUE BUBBLES ONLY ==================== */}
+                <div
+                  id="teach-it-left-dialogue-column"
+                  className={`w-full lg:w-[370px] xl:w-[400px] lg:flex-shrink-0 bg-[#141A27] rounded-2xl border border-white/10 flex-col justify-between min-h-[580px] max-h-[760px] relative shadow-xl overflow-hidden ${
+                    activeMobileTab === "chat" ? "flex" : "hidden lg:flex"
+                  }`}
+                >
+                  {/* Compact Dialogue Header */}
+                  <div
+                    className="px-4 py-3 bg-[#101520] border-b border-white/10 flex items-center justify-between gap-2 shrink-0"
+                    id="chat-metadata-header"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <MessageSquare className="w-4 h-4 text-[#C9973A] shrink-0" />
+                      <div className="text-left min-w-0">
+                        <span className="text-xs font-bold text-white block truncate">
+                          Elder Stephen Dialogue
+                        </span>
+                        <span className="text-[10px] font-mono text-[#C9973A] uppercase tracking-wider block truncate">
+                          Stage {activeStage.number}: {activeStage.title}
+                        </span>
                       </div>
                     </div>
 
-                    {/* STAGE PROGRESS TRACKING (Left Panel) */}
-                    <div className="space-y-2.5" id="stage-progress-tracking-panel">
-                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                        <span className="font-mono text-[10px] text-stone-300 uppercase tracking-widest block font-bold flex items-center gap-1.5">
-                          <BrainCircuit className="w-3.5 h-3.5 text-[#C9973A]" />
-                          <span>Stage Progress Tracking</span>
-                        </span>
-                        <span className="text-[9px] font-mono text-[#C9973A] bg-[#C9973A]/10 px-1.5 py-0.5 rounded font-bold">
-                          Step {activeStageIndex !== -1 ? activeStageIndex + 1 : 1}/5
-                        </span>
-                      </div>
-
-                      <div className="space-y-2 font-sans">
-                        {stagesList.map((st, idx) => {
-                          const sc = scoreStats.stageScores[st.id] || 0;
-                          const isCurrentStage = phase === st.id;
-                          const isVisited = getCurrentStageIndex() > idx || sc > 0;
-                          const hasScore = sc > 0;
-
-                          return (
-                            <div
-                              key={st.id}
-                              className={`p-3 rounded-xl border transition-all duration-300 ${
-                                isCurrentStage
-                                  ? "bg-[#C9973A]/15 border-2 border-[#C9973A] shadow-md shadow-[#C9973A]/10 text-white"
-                                  : hasScore
-                                  ? "bg-emerald-500/10 border border-emerald-500/30 text-stone-200"
-                                  : "bg-white/[0.02] border border-white/5 text-stone-500 opacity-70"
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-mono font-bold ${
-                                    isCurrentStage
-                                      ? "bg-[#C9973A] text-stone-950 font-black shadow"
-                                      : hasScore
-                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                                      : "bg-white/5 text-stone-400"
-                                  }`}>
-                                    {hasScore ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : st.number}
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className={`text-[12px] font-bold leading-none ${
-                                        isCurrentStage ? "text-white" : hasScore ? "text-emerald-300" : "text-stone-400"
-                                      }`}>
-                                        {st.title}
-                                      </span>
-                                      {isCurrentStage && (
-                                        <span className="flex h-2 w-2">
-                                          <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-[#C9973A] opacity-75"></span>
-                                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#C9973A]"></span>
-                                        </span>
-                                      )}
-                                    </div>
-                                    <span className="text-[10px] text-stone-400 line-clamp-1 block mt-0.5">
-                                      {st.subtitle}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {/* Real-time Stage Score Badge */}
-                                <div>
-                                  <div className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold flex items-center gap-1 whitespace-nowrap shadow-sm border ${
-                                    hasScore
-                                      ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-                                      : isCurrentStage
-                                      ? "bg-[#C9973A]/20 border-[#C9973A]/50 text-[#C9973A]"
-                                      : "bg-white/5 border-white/10 text-stone-500"
-                                  }`}>
-                                    <span>Score:</span>
-                                    <span className="font-black">{sc}%</span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Real-time score progress bar */}
-                              <div className="mt-2 pt-1 border-t border-white/5 flex items-center justify-between text-[9px] font-mono">
-                                <span className={hasScore ? "text-emerald-400 font-bold" : isCurrentStage ? "text-[#C9973A] font-semibold" : "text-stone-500"}>
-                                  Stage Score: {sc}/100
-                                </span>
-                                <div className="w-16 h-1 bg-stone-900 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full transition-all duration-500 ${
-                                      hasScore ? "bg-emerald-400" : isCurrentStage ? "bg-[#C9973A]" : "bg-stone-700"
-                                    }`}
-                                    style={{ width: `${sc}%` }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Real-time Gemini Live session HUD (gemini-3.8-live) */}
+                    {/* Compact Live Audio Indicator / Mic Mute */}
                     {useLiveVoiceAPI && (
-                      <div className="bg-[#1C2333]/65 border border-[#C9973A]/30 rounded-xl p-4 w-full space-y-3" id="live-vocal-coach-panel">
-                        <div className="flex items-center justify-between gap-2 flex-wrap border-b border-white/10 pb-2 select-none" id="vocal-coach-status-header">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] uppercase tracking-wider font-mono text-[#C9973A] font-bold">Elder Stephen Live</span>
-                            <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-[#C9973A]/15 text-[#C9973A] border border-[#C9973A]/30">
-                              {liveModelName}
-                            </span>
-                          </div>
-                          <span className={`inline-flex items-center gap-1.5 text-[9px] font-mono uppercase px-2 py-0.5 rounded-full font-bold ${
-                            liveState === "playing" 
-                              ? "bg-teal-500/15 text-teal-300 animate-pulse" 
-                              : liveState === "recording" 
-                              ? "bg-red-500/15 text-red-300 animate-pulse" 
-                              : liveState === "ready" 
-                              ? "bg-emerald-500/15 text-emerald-300" 
-                              : liveState === "connecting"
-                              ? "bg-amber-500/15 text-amber-300 animate-pulse"
-                              : "bg-white/5 text-stone-400"
-                          }`}>
-                            {liveState === "playing" 
-                              ? "● Elder Stephen Speaking" 
-                              : liveState === "recording" 
-                              ? "● Live Mic Streaming" 
-                              : liveState === "ready" 
-                              ? "● Live Connected" 
-                              : liveState === "connecting"
-                              ? "● Connecting Live API..."
-                              : "● Standby"}
-                          </span>
-                        </div>
-
-                        {/* Real-time Waveform Visualizer */}
-                        <div className="flex items-end justify-center gap-1 h-7 bg-black/25 rounded-lg px-3 py-1.5 border border-white/5">
-                          {waveHeights.map((h, idx) => (
-                            <div
-                              key={idx}
-                              className={`w-1.5 rounded-full transition-all duration-75 ${
-                                liveState === "playing"
-                                  ? "bg-teal-400"
-                                  : liveState === "recording"
-                                  ? "bg-rose-400"
-                                  : liveWebSocketActive
-                                  ? "bg-emerald-400/60"
-                                  : "bg-stone-600"
-                              }`}
-                              style={{ height: `${Math.max(4, Math.min(20, h))}px` }}
-                            />
-                          ))}
-                        </div>
-
-                        <div className="w-full text-xs leading-relaxed text-stone-300 font-sans break-words whitespace-normal text-left">
-                          {liveState === "idle" && (
-                            <p className="text-stone-400">Oral exegesis pipeline on standby. Click Start Session to connect real-time voice with Elder Stephen.</p>
-                          )}
-                          {liveState === "connecting" && (
-                            <p className="text-amber-300 animate-pulse font-mono text-[10px]">Initializing WebSocket pipelines and authenticating Gemini Live ({liveModelName}) stream...</p>
-                          )}
-                          {liveState === "ready" && (
-                            <p className="text-emerald-400 font-serif">"I'm listening. Speak your theological insight out loud or type in the chat..."</p>
-                          )}
-                          {liveState === "recording" && (
-                            <p className="text-red-300">Streaming 16,000Hz 16-bit PCM voice audio directly to {liveModelName}...</p>
-                          )}
-                          {liveState === "playing" && (
-                            <p className="text-teal-300 font-serif">"Elder Stephen is speaking directly via 24,000Hz Live PCM stream..."</p>
-                          )}
-                          {liveState === "error" && (
-                            <p className="text-rose-400 font-mono text-[10px]">{liveError || "Connection closed unexpectedly."}</p>
-                          )}
-                        </div>
-
-                        <div className="flex gap-2 pt-1 font-mono text-[9px]">
-                          {!liveWebSocketActive ? (
-                            <button
-                              type="button"
-                              onClick={startGeminiLiveSession}
-                              disabled={liveState === "connecting"}
-                              className="w-full py-2 bg-[#C9973A] hover:bg-[#B5852F] text-white font-sans font-bold rounded uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer"
-                            >
-                              Start Session
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => setIsMicMuted(!isMicMuted)}
-                                className={`flex-1 py-2 rounded font-sans font-bold uppercase tracking-wider transition-all cursor-pointer border ${
-                                  isMicMuted
-                                    ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
-                                    : "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-                                }`}
-                              >
-                                {isMicMuted ? "Unmute Mic" : "Mute Mic"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cleanupLiveAudioAndWS}
-                                className="flex-1 py-2 bg-red-600/20 hover:bg-red-600/35 border border-red-500/35 text-red-300 font-sans font-bold rounded uppercase tracking-wider transition-all cursor-pointer"
-                              >
-                                End Live
-                              </button>
-                            </>
-                          )}
-                        </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                          className={`inline-flex items-center gap-1 text-[9px] font-mono uppercase px-2 py-0.5 rounded-full font-bold border ${
+                            isPaused
+                              ? "bg-amber-500/15 border-amber-500/35 text-amber-300"
+                              : liveState === "playing"
+                              ? "bg-teal-500/15 border-teal-500/35 text-teal-300 animate-pulse"
+                              : liveState === "recording"
+                              ? "bg-rose-500/15 border-rose-500/35 text-rose-300 animate-pulse"
+                              : liveState === "ready"
+                              ? "bg-emerald-500/15 border-emerald-500/35 text-emerald-300"
+                              : "bg-white/5 border-white/10 text-stone-400"
+                          }`}
+                        >
+                          {isPaused
+                            ? "Paused"
+                            : liveState === "playing"
+                            ? "Speaking"
+                            : liveState === "recording"
+                            ? "Listening"
+                            : liveState === "ready"
+                            ? "Live"
+                            : "Voice"}
+                        </span>
                       </div>
                     )}
                   </div>
 
-                {/* Keyword tracker & Theological gaps */}
-                <div className={`bg-[#141A27] border border-white/5 rounded-xl p-5 space-y-3 ${
-                  activeMobileTab === "checklist" ? "block" : "hidden lg:block"
-                }`}>
-                  <div className="border-b border-white/5 pb-2">
-                    <span className="text-[9px] font-mono uppercase tracking-wider text-stone-400">Word Tracing Analytics</span>
-                    <h4 className="font-serif text-sm font-bold text-stone-200">Scripture Keywords Checklist</h4>
-                  </div>
-
-                  {/* Keywords mapped checklist */}
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-1.5 min-h-[28px] items-center">
-                      {scoreStats.foundKeywords.length === 0 ? (
-                        <span className="text-[11px] text-stone-500 font-serif italic">
-                          No reference keywords detected yet...
-                        </span>
-                      ) : (
-                        scoreStats.foundKeywords.map((kw) => (
-                          <span
-                            key={kw}
-                            className="font-mono text-[9.5px] px-2 py-0.5 border rounded-md transition-all flex items-center gap-1 bg-emerald-500/10 border-emerald-500/35 text-emerald-300"
-                          >
-                            <span>✓</span>
-                            <span>{kw}</span>
-                          </span>
-                        ))
-                      )}
-                    </div>
-                    <p className="text-[10px] text-stone-400 leading-normal leading-relaxed">
-                      AI analyzes your responses looking for reference keywords.
-                    </p>
-                  </div>
-                </div>
-
-
-
-              </div>
-
-              {/* ==================== RIGHT PANEL: ACTIVE CHAT FLUX ==================== */}
-              <div className={`flex-1 min-w-0 w-full bg-[#141A27] rounded-xl border border-white/5 p-3 sm:p-5 flex-col justify-between min-h-[460px] relative shadow-lg order-first lg:order-none ${
-                activeMobileTab === "chat" ? "flex" : "hidden lg:flex"
-              }`}>
-                
-                {/* Responsive Chat Metadata Header */}
-                <div 
-                  className="flex flex-col items-center justify-center text-center w-full px-4 py-3 gap-2 border-b border-white/5 text-[10px] font-mono select-none lg:flex-col lg:items-start lg:text-left lg:w-[240px] lg:px-6 lg:py-6"
-                  id="chat-metadata-header"
-                >
-                  <div className="flex flex-wrap items-center justify-center gap-1.5 text-stone-400 w-full lg:justify-start">
-                    <span className="whitespace-nowrap">Active study phase:</span>
-                    <span className="text-[#C9973A] font-bold uppercase whitespace-nowrap">{activeStage.title}</span>
-                  </div>
-                </div>
-
-                {/* Chat Log container */}
-                <div
-                  ref={chatContainerRef}
-                  className="w-full min-w-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-4 h-[320px] scrollbar-thin border-b border-white/5"
-                  id="chat-scroller-box"
-                >
-                  <AnimatePresence initial={false}>
-                    {chatMessages.map((msg) => {
-                      const isAi = msg.sender === "ai";
-                      return (
-                        <motion.div
-                          key={msg.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className={`flex items-start gap-2.5 w-full ${isAi ? "mr-auto text-left" : "ml-auto flex-row-reverse text-right"}`}
-                        >
-                          <div
-                            className={`p-2 rounded-full text-xs font-serif shrink-0 ${
-                              isAi ? "bg-[#C9973A]/20 text-[#C9973A]" : "bg-white/10 text-white"
+                  {/* Continuous Chat Dialogue Bubbles Stream */}
+                  <div
+                    ref={chatContainerRef}
+                    className="w-full min-w-0 flex-1 space-y-3.5 overflow-y-auto p-3.5 sm:p-4 scrollbar-thin"
+                    id="chat-scroller-box"
+                  >
+                    <AnimatePresence initial={false}>
+                      {chatMessages.map((msg) => {
+                        const isAi = msg.sender === "ai";
+                        return (
+                          <motion.div
+                            key={msg.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`flex items-start gap-2.5 w-full ${
+                              isAi ? "mr-auto text-left" : "ml-auto flex-row-reverse text-right"
                             }`}
                           >
-                            {isAi ? "AI" : "You"}
-                          </div>
-                          <div
-                            className={`p-3.5 rounded-xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap select-text w-full max-w-none break-words [word-break:break-word] ${
-                              isAi
-                                ? "bg-white/5 text-[#E8E4DA] border border-white/5 rounded-tl-none font-serif font-light"
-                                : "bg-[#C9973A] text-white rounded-tr-none font-sans"
-                            }`}
-                          >
-                            {msg.text}
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
+                            <div
+                              className={`w-7 h-7 rounded-full text-[10px] font-mono font-bold flex items-center justify-center shrink-0 border ${
+                                isAi
+                                  ? "bg-[#C9973A]/20 border-[#C9973A]/40 text-[#F3CF65]"
+                                  : "bg-white/10 border-white/20 text-white"
+                              }`}
+                            >
+                              {isAi ? "ES" : "You"}
+                            </div>
+                            <div
+                              className={`p-3 rounded-2xl leading-relaxed whitespace-pre-wrap select-text break-words [word-break:break-word] max-w-[88%] ${
+                                isAi
+                                  ? "text-[15px] sm:text-base bg-[#1B2334] text-[#E8E4DA] border border-white/10 rounded-tl-none font-sans"
+                                  : "text-xs sm:text-[13px] "
+                              } ${
+                                isAi
+                                  ? ""
+                                  : "bg-[#C9973A] text-stone-950 font-medium rounded-tr-none font-sans shadow-sm"
+                              }`}
+                            >
+                              {renderTextWithScriptureTriggers(msg.text, `chat-${msg.id}`)}
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
 
-                  {isLoading && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="flex items-center gap-2.5 mr-auto max-w-[80%]"
-                    >
-                      <div className="p-2 rounded-full bg-[#C9973A]/10 text-[#C9973A] shrink-0 text-xs animate-pulse">
-                        AI
-                      </div>
-                      <div className="bg-white/5 border border-white/5 p-3 rounded-xl rounded-tl-none flex items-center gap-3">
-                        <div className="flex space-x-1">
-                          <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce" />
-                          <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce [animation-delay:0.2s]" />
-                          <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce [animation-delay:0.4s]" />
+                    {isLoading && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex items-center gap-2.5 mr-auto max-w-[85%]"
+                      >
+                        <div className="w-7 h-7 rounded-full bg-[#C9973A]/15 border border-[#C9973A]/35 text-[#F3CF65] shrink-0 text-[10px] font-mono font-bold flex items-center justify-center animate-pulse">
+                          ES
                         </div>
-                        <span className="font-mono text-[10px] text-stone-400">Dividing truth...</span>
-                      </div>
-                    </motion.div>
-                  )}
-                </div>
-
-                {/* Input panel */}
-                <div className="space-y-4 pt-3 select-none">
-                  
-                  {/* speech transcription panel */}
-                  {isRecording && (
-                    <div className="bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg text-[10px] text-red-300 flex items-center justify-between font-mono animate-pulse mx-4">
-                      <span>🎤 Speaking: Your voice is transcribing live directly into your input area...</span>
-                      <button onClick={handleToggleRecording} className="text-stone-300 hover:text-white underline">Stop recording</button>
-                    </div>
-                  )}
-
-                  <div className="flex flex-row items-end gap-2 w-full px-4 pb-4" id="chat-input-row">
-                    <textarea
-                      value={userInput}
-                      onChange={(e) => setUserInput(e.target.value)}
-                      placeholder={isRecording ? "Speak now..." : "Type your exposition or study observations here..."}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                      disabled={isLoading}
-                      rows={2}
-                      className="flex-1 min-w-0 resize-none rounded-lg px-3 py-2 text-sm bg-white/5 border border-white/10 text-stone-200 placeholder-stone-400 focus:outline-none focus:border-[#C9973A] scrollbar-thin"
-                    />
-
-                    <button
-                      onClick={() => handleSendMessage()}
-                      disabled={isLoading || !userInput.trim()}
-                      className="flex-shrink-0 w-10 h-10 rounded-lg bg-[#C9973A] hover:bg-[#B5852F] text-white disabled:opacity-40 transition-all cursor-pointer flex items-center justify-center group shrink-0"
-                      title="Send Message"
-                    >
-                      <Send className="w-4 h-4 group-hover:scale-110" />
-                    </button>
-                    
-                    <button
-                      onClick={handleToggleRecording}
-                      className={`flex-shrink-0 w-10 h-10 rounded-lg border transition-all flex items-center justify-center shrink-0 cursor-pointer ${
-                        isRecording ? "bg-red-600 border-red-500 text-white" : "bg-white/5 hover:bg-white/10 border-white/10 text-stone-400"
-                      }`}
-                      title="Toggle Mic Capture"
-                    >
-                      <Mic className="w-3.5 h-3.5" />
-                    </button>
+                        <div className="bg-[#1B2334] border border-white/10 p-3 rounded-2xl rounded-tl-none flex items-center gap-2.5">
+                          <div className="flex space-x-1">
+                            <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce" />
+                            <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce [animation-delay:0.2s]" />
+                            <div className="w-1.5 h-1.5 bg-[#C9973A] rounded-full animate-bounce [animation-delay:0.4s]" />
+                          </div>
+                          <span className="font-mono text-[10px] text-stone-400">
+                            Dividing truth...
+                          </span>
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
 
-                  {/* Actions footer of the chat studio */}
-                  <div className="flex flex-col sm:flex-row gap-2 w-full px-4 pb-4 pt-1 border-t border-white/5 text-[10px] text-stone-400 font-mono" id="chat-actions-footer">
-                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto font-sans font-bold ml-auto">
-                      {activeStageIndex >= 4 && (
+                  {/* Dialogue Input Footer */}
+                  <div className="p-3 bg-[#101520] border-t border-white/10 space-y-2.5 shrink-0 select-none">
+                    {isRecording && !isPaused && (
+                      <div className="bg-red-500/10 border border-red-500/25 px-3 py-1.5 rounded-lg text-[10px] text-red-300 flex items-center justify-between font-mono animate-pulse">
+                        <span>🎤 Live Voice Active</span>
                         <button
-                          onClick={() => handleAdvanceToScorecard()}
-                          className="w-full sm:w-auto px-3 py-2 bg-[#C9973A] hover:bg-[#B5852F] text-white uppercase tracking-wide rounded text-[9.5px] transition-all cursor-pointer whitespace-nowrap text-center"
+                          type="button"
+                          onClick={handleToggleRecording}
+                          className="text-stone-200 hover:text-white underline cursor-pointer"
                         >
-                          Check Analytical Scorecard →
+                          Stop
                         </button>
-                      )}
+                      </div>
+                    )}
+
+                    <div className="flex flex-row items-end gap-2 w-full" id="chat-input-row">
+                      <textarea
+                        value={userInput}
+                        onChange={(e) => setUserInput(e.target.value)}
+                        placeholder={
+                          isPaused
+                            ? "Session paused — click Resume or type your response..."
+                            : isRecording
+                            ? "Speak now or type your exposition..."
+                            : "Type your exposition or study observations..."
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                        disabled={isLoading}
+                        rows={2}
+                        className="flex-1 min-w-0 resize-none rounded-xl px-3 py-2 text-xs sm:text-sm bg-[#182030] border border-white/10 text-stone-100 placeholder-stone-400 focus:outline-none focus:border-[#C9973A] scrollbar-thin"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => handleSendMessage()}
+                        disabled={isLoading || !userInput.trim()}
+                        className="flex-shrink-0 w-9 h-9 rounded-xl bg-[#C9973A] hover:bg-[#B5852F] text-stone-950 font-bold disabled:opacity-40 transition-all cursor-pointer flex items-center justify-center group shrink-0"
+                        title="Send Message"
+                      >
+                        <Send className="w-4 h-4 group-hover:scale-110" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleToggleRecording}
+                        className={`flex-shrink-0 w-9 h-9 rounded-xl border transition-all flex items-center justify-center shrink-0 cursor-pointer ${
+                          isRecording
+                            ? "bg-red-600 border-red-500 text-white"
+                            : "bg-white/5 hover:bg-white/10 border-white/10 text-stone-300"
+                        }`}
+                        title="Toggle Live Voice / Mic Capture"
+                      >
+                        <Mic className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ==================== WIDE RIGHT COLUMN: TABBED INSTRUCTIONAL AREA ==================== */}
+                <div
+                  id="teach-it-right-instructional-column"
+                  className={`flex-1 min-w-0 bg-[#141A27] rounded-2xl border border-white/10 flex-col min-h-[580px] max-h-[760px] shadow-xl overflow-hidden ${
+                    activeMobileTab === "slate" ? "flex" : "hidden lg:flex"
+                  }`}
+                >
+                  {/* Persistent Instructional Tab Bar + Download (PDF / DOCX) Button */}
+                  <div
+                    id="teach-it-right-tabs"
+                    className="px-4 py-3 bg-[#101520] border-b border-white/10 flex flex-wrap items-center justify-between gap-2.5 shrink-0"
+                  >
+                    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+                      {(
+                        [
+                          { id: "all", label: "All Slate", icon: <Layers className="w-3.5 h-3.5" /> },
+                          { id: "scriptures", label: "Scriptures", icon: <BookOpen className="w-3.5 h-3.5" /> },
+                          { id: "egw", label: "Ellen White", icon: <Quote className="w-3.5 h-3.5" /> },
+                          { id: "pedagogy", label: "Pedagogy Notes", icon: <GraduationCap className="w-3.5 h-3.5" /> }
+                        ] as const
+                      ).map((tab) => {
+                        const isActive = activeSlateTab === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            id={`teach-slate-tab-${tab.id}`}
+                            type="button"
+                            onClick={() => setActiveSlateTab(tab.id)}
+                            className={`px-3.5 py-2 rounded-xl text-xs font-sans font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap border ${
+                              isActive
+                                ? "bg-[#C9973A] text-stone-950 border-[#F3CF65] shadow-md"
+                                : "bg-[#182030] text-stone-300 border-white/10 hover:border-[#C9973A]/50 hover:text-white"
+                            }`}
+                          >
+                            {tab.icon}
+                            <span>{tab.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Download Button (Replaces 'Copy Notes' — Exports PDF or DOCX) */}
+                    <div className="relative">
+                      <button
+                        id="btn-download-teach-notes"
+                        type="button"
+                        onClick={() => setShowSlateDownloadMenu((prev) => !prev)}
+                        className="px-3.5 py-2 rounded-xl bg-[#1B2538] hover:bg-[#233048] text-[#F3CF65] border border-[#C9973A]/50 text-xs font-sans font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                        title="Download Study & Pedagogy Notes as PDF or DOCX"
+                      >
+                        <Download className="w-3.5 h-3.5 text-[#C9973A]" />
+                        <span>Download</span>
+                        <ChevronDown className="w-3 h-3 opacity-80" />
+                      </button>
+
+                      <AnimatePresence>
+                        {showSlateDownloadMenu && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-20"
+                              onClick={() => setShowSlateDownloadMenu(false)}
+                            />
+                            <motion.div
+                              initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                              transition={{ duration: 0.14 }}
+                              className="absolute right-0 mt-2 w-60 bg-[#0F1624] border border-[#C9973A]/40 rounded-xl shadow-2xl p-2 z-30 space-y-1 text-left"
+                            >
+                              <span className="block text-[9px] font-mono uppercase tracking-widest text-[#C9973A] px-2.5 py-1 font-bold">
+                                Export Study & Pedagogy Notes
+                              </span>
+                              <button
+                                id="btn-export-notes-pdf"
+                                type="button"
+                                onClick={() => {
+                                  downloadNotesAsPdf();
+                                  setShowSlateDownloadMenu(false);
+                                }}
+                                className="w-full text-left p-2.5 rounded-lg hover:bg-white/10 transition flex items-center gap-2.5 cursor-pointer text-xs"
+                              >
+                                <div className="p-1.5 bg-[#C9973A]/15 text-[#F3CF65] rounded-lg">
+                                  <Printer className="w-3.5 h-3.5" />
+                                </div>
+                                <div>
+                                  <span className="block font-bold text-white">Export as PDF (.pdf)</span>
+                                  <span className="block text-[10px] text-stone-400">Formatted printable study packet</span>
+                                </div>
+                              </button>
+                              <button
+                                id="btn-export-notes-docx"
+                                type="button"
+                                onClick={() => {
+                                  downloadNotesAsDocx();
+                                  setShowSlateDownloadMenu(false);
+                                }}
+                                className="w-full text-left p-2.5 rounded-lg hover:bg-white/10 transition flex items-center gap-2.5 cursor-pointer text-xs"
+                              >
+                                <div className="p-1.5 bg-blue-500/15 text-blue-300 rounded-lg">
+                                  <FileText className="w-3.5 h-3.5" />
+                                </div>
+                                <div>
+                                  <span className="block font-bold text-white">Export as Word (.docx)</span>
+                                  <span className="block text-[10px] text-stone-400">Editable Microsoft Word document</span>
+                                </div>
+                              </button>
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
-                </div>
+                  {/* TOP-DOWN INSTRUCTIONAL SLATE SCROLL AREA */}
+                  <div
+                    ref={rightSlateScrollRef}
+                    id="teach-it-slate-content-area"
+                    className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 flex flex-col justify-start items-stretch text-left scrollbar-thin"
+                  >
+                    {!isRightSlatePopulated ? (
+                      <div
+                        id="teach-it-slate-blank-state"
+                        className="flex-1 w-full min-h-[420px]"
+                        aria-label="Instructional slate awaiting topic selection"
+                      />
+                    ) : (
+                      <>
+                        {/* ============================================================ */}
+                        {/* SEGMENT 1: TOPIC & VERSE OVERVIEW + IMPORTANCE + EXEGESIS    */}
+                        {/* ============================================================ */}
+                        {activeSlateTab === "all" && (
+                      <div
+                        id="teach-slate-topic-overview"
+                        className="bg-[#1B2334] border border-[#C9973A]/40 rounded-2xl p-4 sm:p-5 space-y-4"
+                      >
+                        {/* Top Header: Topic Title + Active Stage Mastery Rating */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[10px] font-mono uppercase tracking-widest text-[#C9973A] font-bold block">
+                              Staged Instructional Slate • Stage {activeStage.number} of 5 ({activeStage.title})
+                            </span>
+                            <h3 className="font-serif text-base sm:text-lg font-bold text-white mt-0.5 truncate">
+                              {activeTopicTitle}
+                            </h3>
+                          </div>
 
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="px-3 py-1.5 rounded-xl bg-[#101520] border border-[#C9973A]/40 text-center">
+                              <span className="text-[9px] font-mono uppercase text-stone-400 block">
+                                Stage {activeStage.number} Mastery
+                              </span>
+                              <span className="text-sm font-black text-[#F3CF65]">
+                                {(scoreStats.stageScores[phase] || 0) > 0
+                                  ? `${scoreStats.stageScores[phase]}%`
+                                  : "In Progress"}
+                              </span>
+                            </div>
+                            {activeStageIndex >= 4 && (
+                              <button
+                                type="button"
+                                onClick={() => handleAdvanceToScorecard()}
+                                className="px-3 py-2 bg-[#C9973A] hover:bg-[#B5852F] text-stone-950 font-bold text-xs rounded-xl cursor-pointer transition-all"
+                              >
+                                Complete Report →
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Topic & Primary Verse Overview */}
+                        <div className="p-4 rounded-xl bg-[#101520] border border-white/10 space-y-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-[#C9973A] font-bold">
+                                Primary Text:
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenVerseModal(scripture.reference)}
+                                className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#FEF9C3] text-[#78350F] border border-[#FACC15] hover:bg-[#FEF08A] font-mono font-bold text-xs cursor-pointer transition-all shadow-2xs"
+                                title={`Click to open ${scripture.reference} in Scripture Reference Explorer`}
+                              >
+                                <BookOpen className="w-3 h-3 text-[#92400E]" />
+                                <span>{scripture.reference}</span>
+                              </button>
+                            </div>
+
+
+                          </div>
+
+                          {scripture.text && (
+                            <p className="text-[15px] sm:text-base font-serif text-white leading-relaxed border-l-2 border-[#C9973A] pl-3">
+                              &ldquo;{scripture.text}&rdquo;
+                            </p>
+                          )}
+
+                          <div className="pt-1 space-y-2.5 text-[15px] sm:text-base text-stone-300 leading-relaxed">
+                            <div>
+                              <span className="font-bold text-[#F3CF65] mr-1.5">Topic Overview:</span>
+                              {renderTextWithScriptureTriggers(activeTopicOverview, "topic-ov")}
+                            </div>
+                            {activeTopicImportance && (
+                              <div>
+                                <span className="font-bold text-[#F3CF65] mr-1.5">Why This Matters:</span>
+                                {renderTextWithScriptureTriggers(activeTopicImportance, "topic-imp")}
+                              </div>
+                            )}
+                            <div className="p-3 rounded-lg bg-[#161F30] border border-[#C9973A]/25 text-stone-200">
+                              <span className="font-bold text-[#C9973A] block text-[11px] font-mono uppercase tracking-wider mb-1">
+                                Elder Stephen's Exegesis Demonstration ({scripture.reference}):
+                              </span>
+                              {renderTextWithScriptureTriggers(activeExegesisDemo, "exegesis-demo")}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ============================================================ */}
+                    {/* SEGMENT 2: 3 TO 5 FOUNDATIONAL SCRIPTURES (STAGE-TIED)       */}
+                    {/* ============================================================ */}
+                    {(activeSlateTab === "all" || activeSlateTab === "scriptures") && (
+                      <div className="space-y-3" id="teach-slate-scriptures-section">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
+                          <h4 className="text-sm font-serif font-bold text-amber-300 flex items-center gap-2">
+                            <BookOpen className="w-4 h-4 text-[#C9973A]" />
+                            <span>
+                              Foundational Scriptures ({slateScripturesList.slice(0, 5).length} Passages • Stage {activeStage.number}: {activeStage.title})
+                            </span>
+                          </h4>
+                          <span className="text-[11px] font-mono text-stone-400">
+                            Click any reference to explore or study deeper
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-2.5">
+                          {slateScripturesList.slice(0, 5).map((item, idx) => (
+                            <div
+                              key={`slate-scripture-${item.reference}-${idx}`}
+                              onClick={() => handleOpenVerseModal(item.reference)}
+                              className="p-3.5 rounded-xl bg-[#182030] hover:bg-[#1E293D] border border-white/10 hover:border-[#C9973A]/60 transition-all cursor-pointer space-y-1.5"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenVerseModal(item.reference);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#FEF9C3] text-[#78350F] border border-[#FACC15] hover:bg-[#FEF08A] font-mono font-bold text-xs cursor-pointer transition-all shadow-2xs"
+                                  >
+                                    <BookOpen className="w-3 h-3 text-[#92400E]" />
+                                    <span>{item.reference}</span>
+                                  </button>
+                                  <span className="text-[11px] font-mono text-[#C9973A] font-semibold">
+                                    {item.role}
+                                  </span>
+                                </div>
+
+
+                              </div>
+
+                              <p className="text-[15px] sm:text-base text-stone-200 leading-relaxed">
+                                <span className="font-bold text-[#F3CF65] mr-1.5">
+                                  Stage {activeStage.number} ({activeStage.title}):
+                                </span>
+                                {renderTextWithScriptureTriggers(item.theologicalInsight, `sc-ins-${idx}`)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ============================================================ */}
+                    {/* SEGMENT 3: ELLEN WHITE TAB (STAGED SEGMENT IN 'ALL SLATE')   */}
+                    {/* ============================================================ */}
+                    {(activeSlateTab === "all" || activeSlateTab === "egw") && (
+                      <div className="space-y-3" id="teach-slate-egw-section">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                          <h4 className="text-sm font-serif font-bold text-amber-300 flex items-center gap-2">
+                            <Quote className="w-4 h-4 text-[#C9973A]" />
+                            <span>
+                              {activeSlateTab === "all"
+                                ? `Stage ${activeStage.number} Spirit of Prophecy Insight`
+                                : "Ellen G. White • Staged Spirit of Prophecy Illumination"}
+                            </span>
+                          </h4>
+                          <span className="text-[11px] font-mono text-stone-400">
+                            {activeSlateTab === "all" ? `Focused on ${activeStage.title}` : "All 5 Stages"}
+                          </span>
+                        </div>
+
+                        <div className="space-y-3">
+                          {(activeSlateTab === "all"
+                            ? [slateEllenWhiteList[Math.min(activeStageIndex + 1, slateEllenWhiteList.length - 1)] || slateEllenWhiteList[0]]
+                            : slateEllenWhiteList
+                          ).map((egw, eIdx) => (
+                            <div
+                              key={egw.id}
+                              className="p-4 rounded-xl bg-[#182030] border border-[#C9973A]/30 space-y-2"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-[#C9973A] font-bold">
+                                  {egw.stageLabel}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenVerseModal(egw.relatedScripture)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#FEF9C3] text-[#78350F] border border-[#FACC15] hover:bg-[#FEF08A] font-mono font-bold text-[11px] cursor-pointer transition-all"
+                                  title={`Open ${egw.relatedScripture} in Scripture Explorer`}
+                                >
+                                  <BookOpen className="w-2.5 h-2.5 text-[#92400E]" />
+                                  <span>{egw.relatedScripture}</span>
+                                </button>
+                              </div>
+
+                              <blockquote className="pl-3.5 border-l-2 border-[#C9973A] text-[15px] sm:text-base text-stone-200 leading-relaxed font-serif">
+                                &ldquo;{renderTextWithScriptureTriggers(egw.quote, `egw-q-${eIdx}`)}&rdquo;
+                              </blockquote>
+
+                              {/* 1. Elder Stephen's topic-specific commentary on the quote */}
+                              <p className="text-[15px] sm:text-base text-[#E8E4DA] leading-relaxed bg-[#101520] border border-[#C9973A]/20 rounded-lg p-3">
+                                <span className="font-bold text-[#F3CF65] mr-1.5">Elder Stephen:</span>
+                                {renderTextWithScriptureTriggers(
+                                  activeEgwCommentary ||
+                                    `When it comes to ${activeTopicTitle || scripture.reference}, no one else can open the Word for you. Searching these texts for yourself lets the Holy Spirit build a conviction that is truly your own, so you can stand firm and teach others with confidence.`,
+                                  `egw-cm-${eIdx}`
+                                )}
+                              </p>
+
+                              <div className="flex items-center justify-between text-[11px] text-stone-400 font-mono pt-1">
+                                <span>— Ellen G. White, {egw.source}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const appended = `${teachingDraftOutline}\n• EGW Insight (${egw.source}): "${egw.quote}"`;
+                                    setTeachingDraftOutline(appended);
+                                    localStorage.setItem(`stba_teach_it_outline_${scripture.id}`, appended);
+                                    triggerToast("Added Spirit of Prophecy quote to Pedagogy Notes!");
+                                  }}
+                                  className="text-[#F3CF65] hover:underline font-sans font-bold text-xs cursor-pointer"
+                                >
+                                  + Add to Pedagogy Notes
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ============================================================ */}
+                    {/* SEGMENT 4: PEDAGOGY NOTES TAB (STAGED SEGMENT IN 'ALL SLATE')*/}
+                    {/* ============================================================ */}
+                    {(activeSlateTab === "all" || activeSlateTab === "pedagogy") && (
+                      <div className="space-y-4" id="teach-slate-pedagogy-section">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
+                          <h4 className="text-sm font-serif font-bold text-amber-300 flex items-center gap-2">
+                            <GraduationCap className="w-4 h-4 text-[#C9973A]" />
+                            <span>
+                              {activeSlateTab === "all"
+                                ? `Stage ${activeStage.number} Pedagogy & Homiletic Builder`
+                                : "Pedagogy Notes & Homiletic Lesson Builder"}
+                            </span>
+                          </h4>
+
+                        </div>
+
+                        {/* Staged Pedagogical Evaluation Card(s) */}
+                        <div className={activeSlateTab === "all" ? "grid grid-cols-1 gap-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
+                          {(activeSlateTab === "all" ? [activeStage] : stagesList).map((st) => {
+                            const sc = scoreStats.stageScores[st.id] || 0;
+                            const isCurrentStage = phase === st.id;
+                            const feedback = scoreStats.stageFeedback[st.id];
+                            return (
+                              <div
+                                key={`pedagogy-stage-${st.id}`}
+                                className={`p-3.5 rounded-xl border transition-all ${
+                                  isCurrentStage
+                                    ? "bg-[#C9973A]/15 border-[#C9973A] text-white"
+                                    : sc > 0
+                                    ? "bg-emerald-500/10 border-emerald-500/30 text-stone-200"
+                                    : "bg-[#182030] border-white/10 text-stone-300"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                  <span className="text-xs font-bold">
+                                    Stage {st.number}: {st.title} — {st.subtitle}
+                                  </span>
+                                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-black/30 text-[#F3CF65]">
+                                    Mastery: {sc > 0 ? `${sc}%` : "In Progress"}
+                                  </span>
+                                </div>
+                                <p className="text-[15px] sm:text-base text-stone-300 leading-relaxed">
+                                  {renderTextWithScriptureTriggers(feedback, `ped-fb-${st.id}`)}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Homiletic Teaching Outline & Audience Adaptation */}
+                        <div className="p-4 rounded-xl bg-[#182030] border border-white/10 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-[#C9973A] font-bold block">
+                                Homiletic Teaching Outline
+                              </span>
+                              <h5 className="text-sm font-bold text-white">
+                                Structure Your Lesson for Discipleship
+                              </h5>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsOutlineCollapsed((v) => !v)}
+                                className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-stone-200 text-[11px] font-semibold cursor-pointer transition-all"
+                              >
+                                {isOutlineCollapsed ? "Expand" : "Collapse"}
+                              </button>
+                              <label className="text-xs text-stone-300 font-mono">Audience:</label>
+                              <select
+                                value={targetAudience}
+                                onChange={(e) => setTargetAudience(e.target.value as any)}
+                                className="bg-[#101520] border border-white/15 rounded-lg px-2.5 py-1 text-xs text-stone-100 outline-none focus:border-[#C9973A]"
+                              >
+                                <option value="Child">Child</option>
+                                <option value="New Believer">New Believer</option>
+                                <option value="Mature Student">Mature Student</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {!isOutlineCollapsed && (<>
+                          <textarea
+                            value={teachingDraftOutline}
+                            onChange={(e) => {
+                              setTeachingDraftOutline(e.target.value);
+                              localStorage.setItem(`stba_teach_it_outline_${scripture.id}`, e.target.value);
+                            }}
+                            placeholder="Draft your teaching outline, key scripture transitions, illustrations, and winsome appeal..."
+                            rows={Math.max(6, teachingDraftOutline.split("\n").length + 1)}
+                            className="w-full resize-none overflow-hidden bg-[#101520] border border-white/10 rounded-xl p-3.5 text-[15px] sm:text-base text-stone-100 placeholder-stone-500 focus:outline-none focus:border-[#C9973A] font-sans leading-relaxed"
+                          />
+
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[11px] font-mono text-stone-400">
+                              Keywords captured: {scoreStats.foundKeywords.length}/{scripture.keywords.length}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={teachingDraftOutline.trim().length < 15 || isGeneratingOutline}
+                              onClick={handleGenerateOutlineWithElder}
+                              className="px-4 py-2 bg-[#C9973A] hover:bg-[#B5852F] text-stone-950 font-bold rounded-xl text-xs transition-all disabled:opacity-45 cursor-pointer"
+                            >
+                              {isGeneratingOutline ? "Evaluating with Elder Stephen..." : "Verify Outline with Elder Stephen"}
+                            </button>
+                          </div>
+
+                          {outlineFeedback && (
+                            <div className="p-3.5 bg-[#101520] border-l-2 border-[#C9973A] rounded-xl text-[15px] sm:text-base leading-relaxed text-stone-200 space-y-1">
+                              <span className="text-[10px] font-mono uppercase text-[#C9973A] font-bold block">
+                                Elder Stephen Pedagogical Review:
+                              </span>
+                              <div>{renderTextWithScriptureTriggers(outlineFeedback, "outline-fb")}</div>
+                            </div>
+                          )}
+                          </>)}
+                        </div>
+                      </div>
+                    )}
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
             </motion.div>
           )}
 
@@ -2848,7 +3825,16 @@ What is the authorial setting and original context of this passage, and how woul
                       🎉 All 5 Stages Completed!
                     </h2>
                     <p className="text-stone-200 text-sm max-w-xl font-sans leading-relaxed">
-                      Congratulations on thoroughly analyzing, contextualizing, doctrinally defending, and winsomely preparing to teach <span className="font-bold text-[#C9973A]">{scripture.reference}</span>.
+                      Congratulations on thoroughly analyzing, contextualizing, doctrinally defending, and winsomely preparing to teach{" "}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenVerseModal(scripture.reference)}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#FEF9C3] text-[#78350F] border border-[#FACC15] font-mono font-bold text-xs cursor-pointer"
+                      >
+                        <BookOpen className="w-3 h-3 text-[#92400E]" />
+                        <span>{scripture.reference}</span>
+                      </button>
+                      .
                     </p>
                   </div>
 
@@ -2900,217 +3886,6 @@ What is the authorial setting and original context of this passage, and how woul
                 </div>
               </div>
 
-              {/* PRIMARY ROW: HEADER HERO SUMMARY */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-                
-                {/* Score Circular presentation badge */}
-                <div className="lg:col-span-8 bg-[#141A27] border border-white/5 rounded-[12px] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative shadow-lg">
-                  <div className="space-y-2.5">
-                    <span className="text-[9px] font-mono tracking-widest text-[#C9973A] uppercase font-bold block">
-                      Scriptural Expository Summary
-                    </span>
-                    <h3 className="font-serif text-xl sm:text-2xl font-bold text-white tracking-tight">
-                      Oral Dialogue Performance Report
-                    </h3>
-                    <p className="text-stone-300 text-xs sm:text-[12.5px] leading-relaxed max-w-[430px]">
-                      Excellent clarity and thematic integration! You structured your answers in full biblical harmony, mapped relevant Greek, and securely tied text parameters to Advent history core doctrines.
-                    </p>
-                    <div className="pt-2">
-                      <span className="text-[10px] font-mono text-stone-400 block">ACTIVE PROFILE</span>
-                      <span className="text-xs font-semibold text-stone-100">{userRole} background</span>
-                    </div>
-                  </div>
-
-                  {/* Circular score display */}
-                  <div className="flex flex-col items-center gap-1 shrink-0 bg-white/5 p-4 rounded-xl border border-white/10 text-center min-w-[130px]">
-                    <span className="text-[9px] font-mono uppercase tracking-wider text-stone-300 block font-bold">
-                      Mastery Score
-                    </span>
-                    
-                    <div className="relative w-20 h-20 flex items-center justify-center mt-1">
-                      <svg className="w-full h-full transform -rotate-90">
-                        <circle
-                          cx="40"
-                          cy="40"
-                          r="32"
-                          className="text-white/10"
-                          strokeWidth="5.5"
-                          stroke="currentColor"
-                          fill="transparent"
-                        />
-                        <circle
-                          cx="40"
-                          cy="40"
-                          r="32"
-                          className="text-[#C9973A]"
-                          strokeWidth="5.5"
-                          strokeDasharray="201"
-                          strokeDashoffset={201 - (201 * scoreStats.overallScore) / 100}
-                          strokeLinecap="round"
-                          stroke="currentColor"
-                          fill="transparent"
-                        />
-                      </svg>
-                      <span className="absolute font-sans font-extrabold text-xl text-white">
-                        {scoreStats.overallScore}%
-                      </span>
-                    </div>
-
-                    <span className="text-[10px] font-mono uppercase text-[#C9973A] mt-2 block font-extrabold">
-                      {getMasteryLevelText(scoreStats.overallScore)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* GAPS ALERT CALLOUT BOX */}
-                <div className="lg:col-span-4 bg-[#C9973A]/10 border border-[#C9973A]/20 p-5 rounded-[12px] flex flex-col justify-between">
-                  <div className="space-y-1.5 text-left">
-                    <span className="text-[9px] font-mono uppercase tracking-widest text-[#C9973A] font-extrabold flex items-center gap-1.5">
-                      <BrainCircuit className="w-3.5 h-3.5" />
-                      <span>Active Recall Gaps Track</span>
-                    </span>
-                    <h4 className="font-serif font-bold text-sm text-stone-200">
-                      Unresolved Scripture Nodes
-                    </h4>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {scoreStats.gaps.length > 0 ? (
-                        scoreStats.gaps.map((g) => (
-                          <span key={g} className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 font-mono text-[9px] px-1.5 py-0.5 rounded">
-                            • {g}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-emerald-400 font-mono text-[10px] font-bold">
-                          ✓ Perfect recall! No outstanding keyword gaps.
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <span className="text-[10px] font-mono text-[#C9973A] font-semibold pt-3 block leading-tight">
-                    Advice: Incorporate missed terms in follow-up sessions.
-                  </span>
-                </div>
-
-              </div>
-
-              {/* STAGE BY STAGE EVALUATION CHART */}
-              <div className="bg-[#141A27]/60 border border-white/5 rounded-[12px] p-5 space-y-4">
-                <span className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block pb-1 border-b border-white/5 font-extrabold flex items-center gap-1">
-                  <TrendingUp className="w-3.5 h-3.5 text-[#C9973A]" />
-                  <span>Interactive Stage Study Breakdown</span>
-                </span>
-
-                <div className="divide-y divide-white/5 space-y-3.5" id="stage-breakdown-rows">
-                  {stagesList.map((stg) => {
-                    const sc = scoreStats.stageScores[stg.id] || Math.floor(Math.random() * 15) + 70;
-                    const feedback = scoreStats.stageFeedback[stg.id];
-                    return (
-                      <div key={stg.id} className="flex flex-col sm:flex-row items-start justify-between gap-2 pt-3 font-sans text-xs">
-                        <div className="space-y-1 text-left">
-                          <span className="font-bold text-stone-200 block">{stg.title}</span>
-                          <p className="text-[11.5px] text-stone-400 leading-normal">{feedback}</p>
-                        </div>
-
-                        <div className="flex items-center gap-2 mt-1 sm:mt-0 shrink-0 select-none">
-                          <span className="font-mono text-[10.5px] font-bold text-stone-200 bg-white/5 px-2 py-0.5 border border-white/10 rounded">
-                            {sc}/100
-                          </span>
-                          <div className="w-16 bg-white/5 h-1.5 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full ${sc >= 85 ? "bg-emerald-400" : sc >= 75 ? "bg-[#C9973A]" : "bg-red-400"}`}
-                              style={{ width: `${sc}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* SPIRIT OF PROPHECY CONTEXTUAL QUOTE */}
-              <div className="bg-[#141A27] rounded-[12px] border border-white/5 p-4 text-left space-y-2 relative shadow-inner">
-                <div className="flex items-center justify-between border-b border-white/5 pb-1 select-none">
-                  <span className="text-[9.5px] font-mono tracking-wider font-extrabold text-[#C9973A] uppercase">
-                    Ellen White Writings Resource
-                  </span>
-                  <span className="text-[8px] text-stone-500 font-mono">STBA Archives #15</span>
-                </div>
-                <p className="text-xs font-serif text-stone-300 leading-relaxed max-w-[700px] select-text">
-                  "{scoreStats.ellenWhiteQuote}"
-                </p>
-              </div>
-
-              {/* --- HOMILETIC OUTLINE DRAFT & ELDER STEPHEN GENERATOR --- */}
-              <div className="bg-[#141A27]/80 border border-[#C9973A]/10 p-5 sm:p-6 rounded-[12px] text-left space-y-4">
-                <div className="border-b border-white/5 pb-2.5">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-[#C9973A] font-extrabold block">
-                    Teach‑It Studio Homilectics
-                  </span>
-                  <h3 className="font-serif font-bold text-md sm:text-lg text-white mt-0.5">
-                    Homiletic Teaching Outline
-                  </h3>
-                  <p className="text-stone-400 text-xs font-medium mt-1 font-sans">
-                    Construct your custom teaching segments. Elder Stephen will evaluate layout consistency, accuracy of division, and audience adaptations.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white/5 p-2.5 rounded-lg border border-white/10">
-                    <label className="text-xs text-stone-300 font-mono font-bold flex items-center gap-1.5">
-                      <Brain className="w-3.5 h-3.5 text-[#C9973A]" />
-                      Target Audience Adaptation:
-                    </label>
-                    <select
-                      value={targetAudience}
-                      onChange={(e) => setTargetAudience(e.target.value as any)}
-                      className="bg-[#141A27] border border-white/10 rounded px-2.5 py-1 text-xs text-stone-200 outline-none focus:border-[#C9973A] font-sans"
-                    >
-                      <option value="Child">Child</option>
-                      <option value="New Believer">New Believer</option>
-                      <option value="Mature Student">Mature Student</option>
-                    </select>
-                  </div>
-
-                  <textarea
-                    value={teachingDraftOutline}
-                    onChange={(e) => {
-                      setTeachingDraftOutline(e.target.value);
-                      localStorage.setItem(`stba_teach_it_outline_${scripture.id}`, e.target.value);
-                    }}
-                    placeholder="Enter your lecture introduction, exposition blocks, and closing calls..."
-                    rows={6}
-                    className="w-full bg-[#18181B] border border-stone-800 rounded-lg p-3 text-xs sm:text-sm text-stone-200 placeholder-stone-400 focus:outline-none focus:border-[#C9973A] font-sans leading-relaxed"
-                  />
-
-                  <div className="flex justify-between items-center">
-                    {isGeneratingOutline ? (
-                      <span className="text-[10px] font-mono text-[#C9973A] animate-pulse">
-                        Evaluating outline architecture...
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-mono text-stone-400">
-                        Evaluates structure against the Three Angels' message context
-                      </span>
-                    )}
-                    <button
-                      disabled={teachingDraftOutline.trim().length < 15 || isGeneratingOutline}
-                      onClick={handleGenerateOutlineWithElder}
-                      className="px-4 py-2 bg-[#C9973A] hover:bg-[#B5852F] text-stone-950 font-bold rounded-lg text-[10px] font-mono transition-all disabled:opacity-45"
-                    >
-                      {isGeneratingOutline ? "Coaching..." : "Verify Outline with Elder Stephen"}
-                    </button>
-                  </div>
-
-                  {outlineFeedback && (
-                    <div className="p-3.5 bg-stone-900/90 border-l-2 border-[#C9973A] rounded-lg text-xs leading-relaxed text-stone-300 italic elder-stephen-output font-['SF_Pro_Text',_-apple-system,_BlinkMacSystemFont,_'San_Francisco',_'Helvetica_Neue',_Helvetica,_sans-serif] tracking-[0.65px] antialiased">
-                      &ldquo;{outlineFeedback}&rdquo;
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {/* --- STUDY SOLEMN DEVOTIONAL REFLECTION (AFTER EVERY SESSION) --- */}
               <div className="bg-[#1C2333] border border-[#C9973A]/20 p-5 sm:p-6 rounded-[12px] text-left space-y-4">
                 <div className="border-b border-stone-800 pb-2.5">
@@ -3121,7 +3896,7 @@ What is the authorial setting and original context of this passage, and how woul
                     Devotional Reflection Prompt
                   </h3>
                   <p className="text-stone-400 text-xs font-medium mt-1 font-serif">
-                     "Scripture studied. Now respond. What is God revealing about His character? What is He asking you to trust, release, or do today?"
+                    "Scripture studied. Now respond. What is God revealing about His character? What is He asking you to trust, release, or do today?"
                   </p>
                 </div>
 
@@ -3161,9 +3936,9 @@ What is the authorial setting and original context of this passage, and how woul
                 <span className="text-[10px] text-stone-500 font-mono">
                   Bible Mastery updated. Vault sync secured.
                 </span>
-                
+
                 <div className="flex flex-wrap gap-3 w-full sm:w-auto relative">
-                  {/* Download Summary Button with dropdown options */}
+                  {/* Download Button with PDF and DOCX options */}
                   <div className="relative flex-1 sm:flex-initial">
                     <button
                       type="button"
@@ -3172,13 +3947,12 @@ What is the authorial setting and original context of this passage, and how woul
                       id="btn-download-session-summary"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>Download Summary</span>
+                      <span>Download</span>
                     </button>
-                    
+
                     <AnimatePresence>
                       {showDownloadDropdown && (
                         <>
-                          {/* Close listener overlay background */}
                           <div
                             className="fixed inset-0 z-10"
                             onClick={() => setShowDownloadDropdown(false)}
@@ -3191,40 +3965,40 @@ What is the authorial setting and original context of this passage, and how woul
                             className="absolute bottom-full mb-2 right-0 w-64 bg-[#141A27] border border-white/10 rounded-xl shadow-2xl p-2.5 z-20 space-y-1.5"
                           >
                             <span className="block text-[9px] font-mono text-stone-400 uppercase tracking-widest px-2.5 py-1 text-left font-bold">
-                              Export Specifications
+                              Export Pedagogy Notes
                             </span>
-                            
+
                             <button
                               type="button"
                               onClick={() => {
-                                downloadSummaryAsTxt();
+                                downloadNotesAsPdf();
                                 setShowDownloadDropdown(false);
                               }}
-                              className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition flex items-center gap-2.5 cursor-pointer text-xs"
+                              className="w-full text-left p-2.5 rounded-lg hover:bg-[#C9973A]/10 transition flex items-center gap-2.5 cursor-pointer text-xs"
                             >
-                              <div className="p-1.5 bg-stone-700/50 text-stone-300 rounded">
-                                <FileText className="w-3.5 h-3.5" />
+                              <div className="p-1.5 bg-[#C9973A]/15 text-[#C9973A] rounded">
+                                <Printer className="w-3.5 h-3.5" />
                               </div>
                               <div className="text-left">
-                                <span className="block font-bold text-stone-100">Plain-Text File (.txt)</span>
-                                <span className="block text-[10px] text-stone-400">Perfect for notes & print logs</span>
+                                <span className="block font-bold text-stone-100">Export as PDF (.pdf)</span>
+                                <span className="block text-[10px] text-stone-400">Formatted printable study packet</span>
                               </div>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => {
-                                downloadSummaryAsHtml();
+                                downloadNotesAsDocx();
                                 setShowDownloadDropdown(false);
                               }}
-                              className="w-full text-left p-2.5 rounded-lg hover:bg-[#C9973A]/10 transition flex items-center gap-2.5 cursor-pointer text-xs"
+                              className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition flex items-center gap-2.5 cursor-pointer text-xs"
                             >
-                              <div className="p-1.5 bg-[#C9973A]/10 text-[#C9973A] rounded">
-                                <Printer className="w-3.5 h-3.5" />
+                              <div className="p-1.5 bg-blue-500/15 text-blue-300 rounded">
+                                <FileText className="w-3.5 h-3.5" />
                               </div>
                               <div className="text-left">
-                                <span className="block font-bold text-stone-100">Printable HTML / PDF-Ready</span>
-                                <span className="block text-[10px] text-stone-400">High-Fidelity formatted transcript</span>
+                                <span className="block font-bold text-stone-100">Export as Word (.docx)</span>
+                                <span className="block text-[10px] text-stone-400">Editable Microsoft Word document</span>
                               </div>
                             </button>
                           </motion.div>
@@ -3252,13 +4026,20 @@ What is the authorial setting and original context of this passage, and how woul
                   </button>
                 </div>
               </div>
-
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </div>
 
-      </div>
+      {/* CLICK-TO-OPEN SCRIPTURE REFERENCE EXPLORER POPUP (MIRRORING SABBATH SCHOOL MODULE) */}
+      <VerseModal
+        isOpen={isVerseModalOpen}
+        reference={selectedVerseRef}
+        theme="dark"
+        onClose={() => setIsVerseModalOpen(false)}
+        onStudyDeeper={(ref) => handleStudyDeeperVerse(ref)}
+      />
     </div>
   );
 };

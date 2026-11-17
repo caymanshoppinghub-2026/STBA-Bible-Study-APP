@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { Quote, Eye, EyeOff, Bookmark, Check, Sparkles } from "lucide-react";
 import { useSabbathSchoolStore } from "../../store/useSabbathSchoolStore";
-import { formatStandardReference } from "../../utils/sabbathUtils";
+import { formatStandardReference, parseMemoryVerseString } from "../../utils/sabbathUtils";
 
 const STOP_WORDS = new Set([
   "and", "a", "an", "the", "in", "on", "at", "to", "for", "of", "with",
@@ -41,30 +41,8 @@ export const MemoryTextCard: React.FC = () => {
     }
   };
 
-  // Split reference and text
-  let reference = "1 Corinthians 10:31, NKJV";
-  let text = "Therefore, whether you eat or drink, or whatever you do, do all to the glory of God";
-
-  if (memoryVerse) {
-    const cleanVerse = memoryVerse.trim();
-    // Check pattern: "Text..." (Reference)
-    const parenMatch = cleanVerse.match(/^[“"']?(.*?)[”"']?\s*\(([^)]+)\)\.?$/);
-    if (parenMatch) {
-      text = parenMatch[1].replace(/^[“"']|[”"']$/g, "").trim();
-      reference = parenMatch[2].trim();
-    } else if (cleanVerse.includes("—")) {
-      const parts = cleanVerse.split("—");
-      reference = parts[0].trim();
-      text = parts[1].replace(/['"“”]/g, "").trim();
-    } else if (cleanVerse.includes("-")) {
-      const parts = cleanVerse.split("-");
-      reference = parts[0].trim();
-      text = parts[1].replace(/['"“”]/g, "").trim();
-    } else {
-      text = cleanVerse.replace(/['"“”]/g, "").trim();
-      reference = "Memory Verse";
-    }
-  }
+  // Dynamically parse reference and text from the active lesson's scraped memoryVerse
+  const { text, reference } = parseMemoryVerseString(memoryVerse);
 
   const [isInRecallCycle, setIsInRecallCycle] = useState<boolean>(() => {
     try {

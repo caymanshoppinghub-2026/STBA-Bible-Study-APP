@@ -200,14 +200,47 @@ export function normalizeScriptureReference(input: string | null | undefined): {
     forty: "40", fifty: "50"
   };
 
-  // Extract book name vs chapter/verse remainder
-  const bookRegex = /^(?:[1-3]\s+)?[A-Za-z]+(?:\s+of\s+[A-Za-z]+)?/i;
+  // Extract book name vs chapter/verse remainder (removing any periods from book abbreviations)
+  const bookRegex = /^(?:[1-3]\s*)?[A-Za-z]+\.?(?:\s+of\s+[A-Za-z]+)?/i;
   const match = str.match(bookRegex);
   let book = "";
   let rest = str;
   if (match) {
-    book = match[0].trim();
-    rest = str.slice(match[0].length).trim();
+    book = match[0].replace(/\./g, "").replace(/\s+/g, " ").trim();
+    rest = str.slice(match[0].length).replace(/^\.\s*/, "").trim();
+  }
+
+  // Canonicalize common Bible book abbreviations so local lookups and external APIs resolve cleanly
+  const canonicalBookMap: Record<string, string> = {
+    "gen": "Genesis", "ex": "Exodus", "exo": "Exodus", "exod": "Exodus",
+    "lev": "Leviticus", "num": "Numbers", "deut": "Deuteronomy", "deu": "Deuteronomy", "dt": "Deuteronomy",
+    "josh": "Joshua", "jos": "Joshua", "judg": "Judges", "jdg": "Judges", "rth": "Ruth",
+    "1 sam": "1 Samuel", "2 sam": "2 Samuel", "1 kgs": "1 Kings", "2 kgs": "2 Kings",
+    "1 chr": "1 Chronicles", "2 chr": "2 Chronicles", "1 chron": "1 Chronicles", "2 chron": "2 Chronicles",
+    "ezr": "Ezra", "neh": "Nehemiah", "esth": "Esther", "est": "Esther",
+    "ps": "Psalms", "psa": "Psalms", "psalm": "Psalms", "prov": "Proverbs", "pro": "Proverbs",
+    "eccl": "Ecclesiastes", "eccles": "Ecclesiastes", "ecc": "Ecclesiastes", "cant": "Song of Solomon",
+    "isa": "Isaiah", "is": "Isaiah", "jer": "Jeremiah", "lam": "Lamentations",
+    "ezek": "Ezekiel", "eze": "Ezekiel", "dan": "Daniel", "hos": "Hosea",
+    "obad": "Obadiah", "jon": "Jonah", "mic": "Micah", "nah": "Nahum",
+    "hab": "Habakkuk", "zeph": "Zephaniah", "zep": "Zephaniah", "hag": "Haggai",
+    "zech": "Zechariah", "zec": "Zechariah", "mal": "Malachi",
+    "matt": "Matthew", "mat": "Matthew", "mt": "Matthew", "mrk": "Mark", "mk": "Mark",
+    "luk": "Luke", "lk": "Luke", "joh": "John", "jhn": "John", "jn": "John",
+    "act": "Acts", "ac": "Acts", "rom": "Romans", "ro": "Romans",
+    "1 cor": "1 Corinthians", "2 cor": "2 Corinthians", "1 co": "1 Corinthians", "2 co": "2 Corinthians",
+    "gal": "Galatians", "eph": "Ephesians", "ephes": "Ephesians",
+    "phil": "Philippians", "php": "Philippians", "col": "Colossians",
+    "1 thess": "1 Thessalonians", "2 thess": "2 Thessalonians", "1 th": "1 Thessalonians", "2 th": "2 Thessalonians",
+    "1 tim": "1 Timothy", "2 tim": "2 Timothy", "1 ti": "1 Timothy", "2 ti": "2 Timothy",
+    "tit": "Titus", "philem": "Philemon", "phm": "Philemon", "heb": "Hebrews",
+    "jas": "James", "jm": "James", "1 pet": "1 Peter", "2 pet": "2 Peter", "1 pe": "1 Peter", "2 pe": "2 Peter",
+    "1 jn": "1 John", "2 jn": "2 John", "3 jn": "3 John", "1 joh": "1 John", "2 joh": "2 John", "3 joh": "3 John",
+    "jud": "Jude", "rev": "Revelation", "revel": "Revelation", "re": "Revelation"
+  };
+  const lowerBook = book.toLowerCase();
+  if (canonicalBookMap[lowerBook]) {
+    book = canonicalBookMap[lowerBook];
   }
 
   // Convert number words in remainder

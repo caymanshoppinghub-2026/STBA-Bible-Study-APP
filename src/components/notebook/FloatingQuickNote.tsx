@@ -23,17 +23,20 @@ import { loadNotes, saveNotes } from "../../data/notebookData";
 import { saveNoteToSupabase } from "../../lib/notebookSync";
 import { StudyNote, NoteCategory } from "../../types/notebook";
 import { useApp } from "../../context/AppContext";
+import { playVaultSlideSound } from "../../utils/audioFeedback";
 
 /**
  * Restricted strictly to the specified study sections:
- * STBA Study Workspace, Sabbath School, 28 Fundamental Beliefs (Doctrine),
- * Study Tracks, Active Recall Studio, Teach It Studio, and Memory Vault.
+ * STBA Study Workspace, Sabbath School, Study Tracks, Active Recall Studio,
+ * Teach It Studio, and Memory Vault (explicitly excluding Doctrine Navigator).
  */
 export function isStudyModeRoute(pathname: string): boolean {
+  if (pathname.startsWith("/doctrine")) {
+    return false;
+  }
   return (
     pathname.startsWith("/stba") ||
     pathname.startsWith("/sabbath-school") ||
-    pathname.startsWith("/doctrine") ||
     pathname.startsWith("/tracks") ||
     pathname.startsWith("/recall") ||
     pathname.startsWith("/teach") ||
@@ -122,6 +125,8 @@ export const FloatingQuickNote: React.FC = () => {
 
   // Slide-Out Discipleship Vault Side Panel States
   const [isOpen, setIsOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isDraggingState, setIsDraggingState] = useState(false);
   const [activeTab, setActiveTab] = useState<"write" | "recent">("write");
 
   // Form Fields
@@ -140,11 +145,33 @@ export const FloatingQuickNote: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const context = resolveCurrentContext(pathname);
 
+  const openVaultWithSound = () => {
+    playVaultSlideSound("open");
+    setIsOpen(true);
+    setIsHovered(false);
+  };
+
+  const closeVaultWithSound = () => {
+    playVaultSlideSound("close");
+    setIsOpen(false);
+    setIsHovered(false);
+  };
+
+  // Close vault if navigating onto an excluded route such as Doctrine Navigator
+  useEffect(() => {
+    if (!isStudy && isOpen) {
+      setIsOpen(false);
+    }
+  }, [isStudy, isOpen]);
+
   // Listen for global 'open-discipleship-vault' custom events from Daily Syllabus & Study sections
   useEffect(() => {
     const handleOpenVaultEvent = (e: Event) => {
+      if (window.location.pathname.startsWith("/doctrine")) return;
       const detail = (e as CustomEvent)?.detail;
+      playVaultSlideSound("open");
       setIsOpen(true);
+      setIsHovered(false);
       setActiveTab("write");
       if (detail?.title) {
         setNoteTitle(detail.title);
@@ -193,9 +220,13 @@ export const FloatingQuickNote: React.FC = () => {
 
       if (e.altKey && (e.key === "n" || e.key === "N")) {
         e.preventDefault();
-        setIsOpen((prev) => !prev);
+        setIsOpen((prev) => {
+          const next = !prev;
+          playVaultSlideSound(next ? "open" : "close");
+          return next;
+        });
       } else if (e.key === "Escape" && isOpen) {
-        setIsOpen(false);
+        closeVaultWithSound();
       }
     };
 
@@ -337,6 +368,7 @@ export const FloatingQuickNote: React.FC = () => {
 
   const handlePointerDownTrigger = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDraggingState(true);
     dragStateRef.current = {
       isDragging: true,
       startY: e.clientY,
@@ -366,56 +398,113 @@ export const FloatingQuickNote: React.FC = () => {
     } catch {}
     const wasMoved = dragStateRef.current.moved;
     dragStateRef.current.isDragging = false;
+    setIsDraggingState(false);
     if (wasMoved) {
       try {
         localStorage.setItem("stba_quick_note_top_pct", String(triggerTopPct));
       } catch {}
     } else {
-      setIsOpen(true);
+      openVaultWithSound();
     }
   };
 
-  // Restricted strictly to the specified study sections
+  // Restricted strictly to the specified study sections (excluding Doctrine Navigator)
   if (!isStudy) return null;
 
   return (
     <>
-      {/* RIGHT-EDGE SLIDE-OUT TRIGGER TAB (Restricted to specified study sections) */}
+      {/* RIGHT-EDGE COLLAPSED DRAGGABLE PEN ICON WITH NUDGING ANIMATION & HOVER EXPANSION */}
       {!isOpen && (
         <div
           id="floating-quick-note-trigger-wrapper"
           style={{ top: `${triggerTopPct}%`, fontFamily: "'Lato', sans-serif" }}
           className="fixed -translate-y-1/2 right-0 z-40 select-none touch-none font-['Lato',sans-serif] not-italic"
+          onMouseEnter={() => {
+            if (!isHovered) {
+              setIsHovered(true);
+              playVaultSlideSound("hover");
+            }
+          }}
+          onMouseLeave={() => setIsHovered(false)}
         >
-          <button
-            id="floating-quick-note-trigger"
-            type="button"
-            onPointerDown={handlePointerDownTrigger}
-            onPointerMove={handlePointerMoveTrigger}
-            onPointerUp={handlePointerUpTrigger}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setIsOpen(true);
-              }
-            }}
-            style={{ fontFamily: "'Lato', sans-serif" }}
-            className="flex items-center gap-2 pl-3.5 pr-3 py-3 rounded-l-2xl rounded-r-none bg-[#0B111E] hover:bg-[#131D31] text-[#F3CF65] font-['Lato',sans-serif] font-bold not-italic text-xs shadow-2xl border border-r-0 border-[#C9973A]/60 cursor-grab active:cursor-grabbing whitespace-nowrap touch-none"
-            title="Open slide-out Discipleship Vault side panel • Drag vertically to reposition (Alt+N)"
-            aria-label="Open Discipleship Vault side panel"
+          <motion.div
+            animate={
+              !isHovered && !isDraggingState
+                ? { x: [0, -6, 0, -4, 0] }
+                : { x: 0 }
+            }
+            transition={
+              !isHovered && !isDraggingState
+                ? {
+                    duration: 2.4,
+                    repeat: Infinity,
+                    repeatDelay: 3.2,
+                    ease: "easeInOut"
+                  }
+                : { duration: 0.2 }
+            }
           >
-            <div className="w-5 h-5 flex items-center justify-center shrink-0 relative">
-              <PenLine className="w-4 h-4 text-[#C9973A] stroke-[2.2]" />
-              {recentSessionNotes.length > 0 && (
-                <span className="absolute -top-2 -left-2 w-4 h-4 rounded-full bg-[#C9973A] text-stone-950 text-[9px] font-bold flex items-center justify-center">
-                  {recentSessionNotes.length}
-                </span>
-              )}
-            </div>
-            <span className="hidden sm:inline text-xs font-bold tracking-wide">
-              Discipleship Vault
-            </span>
-          </button>
+            <button
+              id="floating-quick-note-trigger"
+              type="button"
+              onPointerDown={handlePointerDownTrigger}
+              onPointerMove={handlePointerMoveTrigger}
+              onPointerUp={handlePointerUpTrigger}
+              onFocus={() => setIsHovered(true)}
+              onBlur={() => setIsHovered(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openVaultWithSound();
+                }
+              }}
+              style={{ fontFamily: "'Lato', sans-serif" }}
+              className="flex items-center pl-3.5 pr-3 py-3 rounded-l-2xl rounded-r-none bg-[#0B111E] hover:bg-[#131D31] text-[#F3CF65] font-['Lato',sans-serif] font-bold not-italic text-xs shadow-2xl border border-r-0 border-[#C9973A]/75 hover:border-[#F3CF65] cursor-grab active:cursor-grabbing whitespace-nowrap touch-none transition-colors overflow-hidden"
+              title="Hover to expand • Click to slide out Discipleship Vault • Drag vertically to reposition (Alt+N)"
+              aria-label="Open Discipleship Vault side panel"
+            >
+              <motion.div
+                animate={
+                  !isHovered && !isDraggingState
+                    ? { rotate: [0, -10, 8, -4, 0] }
+                    : { rotate: 0 }
+                }
+                transition={
+                  !isHovered && !isDraggingState
+                    ? {
+                        duration: 2.4,
+                        repeat: Infinity,
+                        repeatDelay: 3.2,
+                        ease: "easeInOut"
+                      }
+                    : { duration: 0.2 }
+                }
+                className="w-5 h-5 flex items-center justify-center shrink-0 relative"
+              >
+                <PenLine className="w-4 h-4 text-[#C9973A] stroke-[2.2]" />
+                {recentSessionNotes.length > 0 && (
+                  <span className="absolute -top-2 -left-2 w-4 h-4 rounded-full bg-[#C9973A] text-stone-950 text-[9px] font-bold flex items-center justify-center">
+                    {recentSessionNotes.length}
+                  </span>
+                )}
+              </motion.div>
+
+              <AnimatePresence initial={false}>
+                {isHovered && (
+                  <motion.span
+                    key="vault-hover-label"
+                    initial={{ width: 0, opacity: 0, marginLeft: 0 }}
+                    animate={{ width: "auto", opacity: 1, marginLeft: 8 }}
+                    exit={{ width: 0, opacity: 0, marginLeft: 0 }}
+                    transition={{ type: "spring", stiffness: 320, damping: 26 }}
+                    className="inline-block overflow-hidden text-xs font-bold tracking-wide text-[#F3CF65] whitespace-nowrap"
+                  >
+                    Discipleship Vault
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </button>
+          </motion.div>
         </div>
       )}
 
@@ -432,7 +521,7 @@ export const FloatingQuickNote: React.FC = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.6 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
+              onClick={closeVaultWithSound}
               className="absolute inset-0 bg-black/75 backdrop-blur-xs"
             />
 
@@ -472,7 +561,7 @@ export const FloatingQuickNote: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => setIsOpen(false)}
+                  onClick={closeVaultWithSound}
                   className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-white/10 border border-stone-800 transition-colors cursor-pointer"
                   title="Close Discipleship Vault (Esc)"
                   aria-label="Close Discipleship Vault"

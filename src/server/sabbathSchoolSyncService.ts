@@ -5,6 +5,36 @@
 
 import fs from "fs";
 import path from "path";
+import { removeScriptureAbbreviationPeriods } from "../utils/sabbathUtils";
+
+function sanitizeSyncPayloadScriptures(payload: SabbathSchoolSyncPayload): SabbathSchoolSyncPayload {
+  const dynamicLessonNum = `Lesson ${parseInt(payload.lessonId || "8", 10) || 8}`;
+  return {
+    ...payload,
+    memoryVerse: removeScriptureAbbreviationPeriods((payload.memoryVerse || "").replace(/^Memory\s*Text\s*:\s*/i, "").trim()),
+    readForThisWeek: removeScriptureAbbreviationPeriods(payload.readForThisWeek || ""),
+    videos: payload.videos
+      ? {
+          featured: { ...payload.videos.featured, lessonNumberText: dynamicLessonNum },
+          itiswritten: { ...payload.videos.itiswritten, lessonNumberText: dynamicLessonNum },
+          hope: { ...payload.videos.hope, lessonNumberText: dynamicLessonNum },
+          threeABN: { ...payload.videos.threeABN, lessonNumberText: dynamicLessonNum }
+        }
+      : payload.videos,
+    dailyLessons: (payload.dailyLessons || []).map(day => ({
+      ...day,
+      title: removeScriptureAbbreviationPeriods(day.title || ""),
+      lessonContent: (day.lessonContent || []).map(p => removeScriptureAbbreviationPeriods(p)),
+      egwNotes: (day.egwNotes || []).map(n => removeScriptureAbbreviationPeriods(n))
+    })),
+    theologicalTakeaways: payload.theologicalTakeaways?.map(t => ({
+      ...t,
+      description: removeScriptureAbbreviationPeriods(t.description || ""),
+      bulletPoints: t.bulletPoints?.map(b => removeScriptureAbbreviationPeriods(b)),
+      supportingVerses: (t.supportingVerses || []).map(v => removeScriptureAbbreviationPeriods(v).replace(/\./g, "").trim())
+    }))
+  };
+}
 
 export interface EgwDailyLink {
   dayName: string;
@@ -121,7 +151,7 @@ export const CANONICAL_BASELINE: SabbathSchoolSyncPayload = {
   lessonTitle: "New Testament Prophets",
   memoryVerse:
     "“There are diversities of gifts, but the same Spirit. There are differences of ministries, but the same Lord. And there are diversities of activities, but it is the same God who works all in all” (1 Corinthians 12:4–6, NKJV).",
-  readForThisWeek: "Matt. 16:13–16, Eph. 2:20, Rev. 22:6, Luke 2:36–38, Acts 21:9, Eph. 6:10–18.",
+  readForThisWeek: "Matt 16:13–16, Eph 2:20, Rev 22:6, Luke 2:36–38, Acts 21:9, Eph 6:10–18.",
   startDate: "17/10/2026",
   endDate: "23/10/2026",
   lastSyncedAt: new Date().toISOString(),
@@ -250,7 +280,7 @@ export const CANONICAL_BASELINE: SabbathSchoolSyncPayload = {
       title: "New Testament Prophets",
       lessonContent: [
         "### Memory Verse\n> “There are diversities of gifts, but the same Spirit. There are differences of ministries, but the same Lord. And there are diversities of activities, but it is the same God who works all in all” (1 Corinthians 12:4–6, NKJV).\n\n---",
-        "The New Testament church was established on the foundation of the apostles and prophets, Jesus Christ Himself being the chief cornerstone (Eph. 2:20). Through the prophetic office, God directed, comforted, and protected His early disciples.",
+        "The New Testament church was established on the foundation of the apostles and prophets, Jesus Christ Himself being the chief cornerstone (Eph 2:20). Through the prophetic office, God directed, comforted, and protected His early disciples.",
         "Just as prophets guided God's covenant people in the Old Testament, the Holy Spirit continued this divine gift in the apostolic era to build up the body of Christ."
       ],
       egwNotes: [
@@ -266,7 +296,7 @@ export const CANONICAL_BASELINE: SabbathSchoolSyncPayload = {
       dateString: "Sunday, October 18",
       title: "Jesus as Prophet",
       lessonContent: [
-        "Moses prophesied: 'The LORD your God will raise up for you a Prophet like me from your midst... Him you shall hear' (Deut. 18:15). Jesus Christ is the ultimate fulfillment of this promise.",
+        "Moses prophesied: 'The LORD your God will raise up for you a Prophet like me from your midst... Him you shall hear' (Deut 18:15). Jesus Christ is the ultimate fulfillment of this promise.",
         "Christ spoke not merely as an inspired messenger, but as the Living Word and supreme Author of all prophecy."
       ],
       egwNotes: [
@@ -298,7 +328,7 @@ export const CANONICAL_BASELINE: SabbathSchoolSyncPayload = {
       dateString: "Tuesday, October 20",
       title: "Functions of New Testament Prophets",
       lessonContent: [
-        "New Testament prophets fulfilled pastoral, foretelling, and forthtelling roles: edification, exhortation, and comfort (1 Cor. 14:3).",
+        "New Testament prophets fulfilled pastoral, foretelling, and forthtelling roles: edification, exhortation, and comfort (1 Cor 14:3).",
         "They guided church decisions (Acts 13:1-3) and warned of impending crises (Acts 11:27-30)."
       ],
       egwNotes: [
@@ -330,8 +360,8 @@ export const CANONICAL_BASELINE: SabbathSchoolSyncPayload = {
       dateString: "Thursday, October 22",
       title: "False Prophets in the New Testament",
       lessonContent: [
-        "Jesus and the apostles repeatedly warned against deceptive, self-proclaimed prophets (Matt. 7:15; 24:24; 1 John 4:1).",
-        "The biblical test of a true prophet requires: harmony with the Law and Testimony (Isa. 8:20), good moral fruits (Matt. 7:20), and confession of Christ's incarnation (1 John 4:2)."
+        "Jesus and the apostles repeatedly warned against deceptive, self-proclaimed prophets (Matt 7:15; 24:24; 1 John 4:1).",
+        "The biblical test of a true prophet requires: harmony with the Law and Testimony (Isa 8:20), good moral fruits (Matt 7:20), and confession of Christ's incarnation (1 John 4:2)."
       ],
       egwNotes: [
         "False prophets will arise and deceive many. Let all be on their guard against speculative theories that contradict the law and the testimony.—The Great Controversy, p. 583."
@@ -346,7 +376,7 @@ export const CANONICAL_BASELINE: SabbathSchoolSyncPayload = {
       dateString: "Friday, October 23",
       title: "Keeping Jesus and His Word at the Center",
       lessonContent: [
-        "The testimony of Jesus is the spirit of prophecy (Rev. 19:10). All authentic prophetic manifestations point away from self and toward Jesus Christ and His written Word.",
+        "The testimony of Jesus is the spirit of prophecy (Rev 19:10). All authentic prophetic manifestations point away from self and toward Jesus Christ and His written Word.",
         "Sabbath School is our weekly sanctuary to ground our minds in Bible truth and prepare to teach others."
       ],
       egwNotes: [
@@ -582,20 +612,26 @@ async function scrapeOfficialLesson(targetDateStr?: string): Promise<{
             if (idx === 0) {
               const memMatch = rawHtml.match(/<blockquote>([\s\S]*?)<\/blockquote>/i);
               if (memMatch) {
-                memoryVerse = memMatch[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+                memoryVerse = removeScriptureAbbreviationPeriods(
+                  memMatch[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
+                );
               }
               const readMatch = rawHtml.match(/Read for This Week’s Study<\/h3>\s*<p>([\s\S]*?)<\/p>/i);
               if (readMatch) {
-                readForThisWeek = readMatch[1].replace(/<[^>]+>/g, "").trim();
+                readForThisWeek = removeScriptureAbbreviationPeriods(
+                  readMatch[1].replace(/<[^>]+>/g, "").trim()
+                );
               }
             }
 
-            // Clean paragraphs
+            // Clean paragraphs and strip periods from all scripture book abbreviations
             const pMatches = rawHtml.match(/<(p|blockquote|h2|h3|h4)[^>]*>([\s\S]*?)<\/\1>/gi) || [];
             pMatches.forEach((block: string) => {
               const isHeading = /^<h[2-4]/i.test(block);
               const isQuote = /^<blockquote/i.test(block);
-              let clean = block.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+              let clean = removeScriptureAbbreviationPeriods(
+                block.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
+              );
               if (clean && !clean.includes("Memory Text:") && !clean.includes("Read for This Week’s Study")) {
                 const lowerClean = clean.toLowerCase();
                 if (
@@ -614,7 +650,7 @@ async function scrapeOfficialLesson(targetDateStr?: string): Promise<{
                   );
 
                 if (isEgwCitation) {
-                  egwNotes.push(clean.replace(/^Supplemental EGW Notes\s*/i, "").trim());
+                  egwNotes.push(removeScriptureAbbreviationPeriods(clean.replace(/^Supplemental EGW Notes\s*/i, "").trim()));
                 } else {
                   if (isHeading) {
                     contentParagraphs.push(`### ${clean}`);
@@ -623,7 +659,8 @@ async function scrapeOfficialLesson(targetDateStr?: string): Promise<{
                   } else {
                     clean = clean
                       .replace(/([.?!])([A-Z0-9“"’'])/g, "$1 $2")
-                      .replace(/([,;:])([A-Za-z0-9])/g, "$1 $2")
+                      .replace(/([,;])([A-Za-z])/g, "$1 $2")
+                      .replace(/(\d+)\s*:\s*(\d+)/g, "$1:$2")
                       .trim();
                     contentParagraphs.push(clean);
                   }
@@ -690,7 +727,7 @@ export async function scrapeOfficialLessonTalkingPoints(
   let quarterlyTitle = "The Gift of Prophecy (2026 Q4)";
   let lessonTitle = "New Testament Prophets";
   let memoryVerse = "“There are diversities of gifts, but the same Spirit. There are differences of ministries, but the same Lord. And there are diversities of activities, but it is the same God who works all in all” (1 Corinthians 12:4–6, NKJV).";
-  let readForThisWeek = "Matt. 16:13–16, Eph. 2:20, Rev. 22:6, Luke 2:36–38, Acts 21:9, Eph. 6:10–18.";
+  let readForThisWeek = "Matt 16:13–16, Eph 2:20, Rev 22:6, Luke 2:36–38, Acts 21:9, Eph 6:10–18.";
   let teacherOverview = "";
   let teacherCommentary = "";
   let teacherLifeApplicationQuestions: string[] = [];
@@ -715,7 +752,9 @@ export async function scrapeOfficialLessonTalkingPoints(
           if (tcRes.ok) {
             const tcData = await tcRes.json();
             const rawHtml = tcData.content || "";
-            const cleanText = rawHtml.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+            const cleanText = removeScriptureAbbreviationPeriods(
+              rawHtml.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim()
+            );
 
             const p1Idx = cleanText.indexOf("Part I: Overview");
             const p2Idx = cleanText.indexOf("Part II: Commentary");
@@ -737,7 +776,7 @@ export async function scrapeOfficialLessonTalkingPoints(
               const p3Text = cleanText.substring(p3Idx).trim();
               const qMatches = p3Text.match(/[^.?!]+\?/g) || [];
               teacherLifeApplicationQuestions = qMatches
-                .map((q: string) => q.trim())
+                .map((q: string) => removeScriptureAbbreviationPeriods(q.trim()))
                 .filter((q: string) => q.length > 20 && !q.toLowerCase().includes("choose from among them"));
             }
           }
@@ -755,7 +794,7 @@ export async function scrapeOfficialLessonTalkingPoints(
             const rawHtml = hopeData.content || "";
             const liMatches = rawHtml.match(/<li>([\s\S]*?)<\/li>/gi) || [];
             hopeSsDiscussionQuestions = liMatches
-              .map((li: string) => li.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim())
+              .map((li: string) => removeScriptureAbbreviationPeriods(li.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()))
               .filter((q: string) => q.length > 15);
           }
         } catch (hopeErr) {
@@ -773,15 +812,20 @@ export async function scrapeOfficialLessonTalkingPoints(
             if (dRes.ok) {
               const dData = await dRes.json();
               const dHtml = dData.content || "";
-              const cleanD = dHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+              const cleanD = removeScriptureAbbreviationPeriods(
+                dHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+              );
 
               if (i === 0) {
                 const memMatch = cleanD.match(/Memory Text:\s*“?([^”\n]+(?:”\s*\([^)]+\))?)/i);
-                if (memMatch) memoryVerse = memMatch[0].replace(/^Memory Text:\s*/i, "").trim();
+                if (memMatch) memoryVerse = removeScriptureAbbreviationPeriods(memMatch[0].replace(/^Memory Text:\s*/i, "").trim());
               }
 
               const scriptures = cleanD.match(/(?:[123]?\s*)?[A-Z][a-z]+\.?\s*\d+:\d+(?:–\d+|-?\d+)?/g) || [];
-              const uniqueScriptures: string[] = scriptures.filter((v: string, idx: number, arr: string[]) => arr.indexOf(v) === idx).slice(0, 4);
+              const uniqueScriptures: string[] = scriptures
+                .map((s: string) => removeScriptureAbbreviationPeriods(s).replace(/\./g, "").trim())
+                .filter((v: string, idx: number, arr: string[]) => arr.indexOf(v) === idx)
+                .slice(0, 4);
 
               dailyLessonPoints.push({
                 dayIndex: i,
@@ -881,6 +925,7 @@ export async function executeSabbathSchoolSync(forceRefresh = false): Promise<Sa
   if (!forceRefresh && inMemorySyncCache) {
     const cachedTime = new Date(inMemorySyncCache.lastSyncedAt).getTime();
     if (Date.now() - cachedTime < 3 * 60 * 60 * 1000 && !inMemorySyncCache.hasPendingRetries) {
+      inMemorySyncCache = sanitizeSyncPayloadScriptures(inMemorySyncCache);
       return inMemorySyncCache;
     }
   }
@@ -889,7 +934,8 @@ export async function executeSabbathSchoolSync(forceRefresh = false): Promise<Sa
   if (!forceRefresh) {
     try {
       if (fs.existsSync(CACHE_FILE)) {
-        const cached = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")) as SabbathSchoolSyncPayload;
+        const rawCached = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")) as SabbathSchoolSyncPayload;
+        const cached = sanitizeSyncPayloadScriptures(rawCached);
         const cachedTime = new Date(cached.lastSyncedAt).getTime();
         const now = Date.now();
         // If cached within last 3 hours and has no pending retries, return cached payload
@@ -1108,18 +1154,20 @@ export async function executeSabbathSchoolSync(forceRefresh = false): Promise<Sa
     }
   } catch (_tErr) {}
 
+  const cleanedPayload = sanitizeSyncPayloadScriptures(payload);
+
   // Store in memory cache
-  inMemorySyncCache = payload;
+  inMemorySyncCache = cleanedPayload;
 
   // Write to cache file safely
   try {
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(payload, null, 2), "utf8");
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cleanedPayload, null, 2), "utf8");
     console.log(`[Sabbath School Sync] Successfully synchronized and cached lesson "${lessonTitle}" with ${Object.keys(egwDailyBreakdown).length} EGW daily timestamps.`);
   } catch (fsErr) {
     console.warn("[Sabbath School Sync] Could not write cache file to disk (in-memory cache will be used):", fsErr);
   }
 
-  return payload;
+  return cleanedPayload;
 }
 
 /**

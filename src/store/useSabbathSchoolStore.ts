@@ -20,7 +20,7 @@ import {
 import { TheologicalTakeawayItem } from "../utils/sabbathLessonTheology";
 import { askElderStephen, ElderStephenMessage } from "../api/elderStephenApi";
 import { notifyLiveSectionUpdate } from "../utils/contentUpdatesWatcher";
-import { separateLessonAndEgwNotes } from "../utils/sabbathUtils";
+import { separateLessonAndEgwNotes, removeScriptureAbbreviationPeriods } from "../utils/sabbathUtils";
 
 export interface EGWDayTimestamp {
   dayIndex: number;
@@ -49,8 +49,10 @@ export const EGW_NOTES_LESSON_6 = EGW_NOTES_LESSON_8; // backward compatibility 
 
 export interface SabbathSchoolState {
   quarterlyTitle: string;
+  lessonId?: string;
   lessonTitle: string;
   memoryVerse: string;
+  readForThisWeek?: string;
   dailyLessons: DailyLesson[];
   deckCards: SabbathClassCard[];
   weeklyReflection: string;
@@ -76,6 +78,12 @@ export interface SabbathSchoolState {
     itiswritten?: any;
     hope?: any;
     threeABN?: any;
+  };
+  egwVideo?: {
+    videoId: string;
+    title: string;
+    fullUrl: string;
+    statusNotice?: string;
   };
   egwDailyBreakdown?: Record<string, any>;
   hasPendingRetries?: boolean;
@@ -103,9 +111,11 @@ export function formatQuarterTitle(title?: string): string {
 
 const DEFAULT_STATE: SabbathSchoolState = {
   quarterlyTitle: "The Gift of Prophecy (2026 Q4)",
-  activeLessonDate: typeof window !== "undefined" && window.localStorage ? (window.localStorage.getItem("stba_sabbath_selected_date") || "2026-10-17") : "2026-10-17",
-  lessonTitle: "Love-driven Ministry",
-  memoryVerse: "“For out of much affliction and anguish of heart I wrote to you, with many tears, not that you should be grieved, but that you might know the love which I have so abundantly for you.” — 2 Corinthians 2:4, NKJV",
+  lessonId: "08",
+  activeLessonDate: typeof window !== "undefined" && window.localStorage ? (window.localStorage.getItem("stba_sabbath_selected_date") || "2026-11-14") : "2026-11-14",
+  lessonTitle: "Interpreting Prophetic Writings",
+  memoryVerse: "“Then beginning with Moses and with all the Prophets, He explained to them the things written about Himself in all the Scriptures” (Luke 24:27, NASB).",
+  readForThisWeek: "Matt 5:17–48; 1 Cor 16:20; Matt 4:1–11; Luke 10:25–28; Luke 24:25–27, 44–49.",
   dailyLessons: [
     {
       label: "Day 1 (Saturday, August 1)",
@@ -283,12 +293,24 @@ const loadPersistedState = (): SabbathSchoolState => {
         });
       }
 
-      if (parsed.lessonTitle === "Paul's Ministry in Corinth & The Message of the Cross") {
-        parsed.lessonTitle = "Spiritual Gifts & The Prophetic Office";
+      if (
+        parsed.lessonTitle === "Paul's Ministry in Corinth & The Message of the Cross" ||
+        parsed.lessonTitle === "Love-driven Ministry" ||
+        parsed.lessonTitle === "The Conditions of Fellowship"
+      ) {
+        parsed.lessonId = "08";
+        parsed.lessonTitle = "Interpreting Prophetic Writings";
         parsed.quarterlyTitle = "The Gift of Prophecy (2026 Q4)";
+        parsed.memoryVerse = DEFAULT_STATE.memoryVerse;
+        parsed.readForThisWeek = DEFAULT_STATE.readForThisWeek;
       }
       if (parsed.quarterlyTitle && parsed.quarterlyTitle.toLowerCase().includes("corinthians")) {
         parsed.quarterlyTitle = "The Gift of Prophecy (2026 Q4)";
+      }
+      if (parsed.memoryVerse) {
+        parsed.memoryVerse = removeScriptureAbbreviationPeriods(
+          String(parsed.memoryVerse).replace(/^Memory\s*Text\s*:\s*/i, "").trim()
+        );
       }
       // Filter out any stale structured initial welcome messages from elderDiscussion
       let cleanDiscussion = parsed.elderDiscussion || DEFAULT_STATE.elderDiscussion;
@@ -335,6 +357,7 @@ const loadPersistedState = (): SabbathSchoolState => {
 
 // Global store state container
 let globalStateStore: SabbathSchoolState = loadPersistedState();
+let hasInitialWeeklySyncRun = false;
 const globalListeners = new Set<(state: SabbathSchoolState) => void>();
 
 const saveStateAndNotify = (nextState: SabbathSchoolState) => {
@@ -356,8 +379,9 @@ export const useSabbathSchoolStore = () => {
     // Initialize state on mount to handle updates in other parts
     setState(globalStateStore);
 
-    // Initial background check for master synced content if not yet loaded
-    if (!globalStateStore.weeklyVideos || !globalStateStore.egwDailyBreakdown) {
+    // Always synchronize with the server's latest scraped lesson on first session mount
+    if (!hasInitialWeeklySyncRun || !globalStateStore.weeklyVideos || !globalStateStore.egwDailyBreakdown) {
+      hasInitialWeeklySyncRun = true;
       fetchWeeklySyncData(false);
     }
 
@@ -575,16 +599,28 @@ export const useSabbathSchoolStore = () => {
           });
         }
 
-        const upcomingSabbathDate = "2026-10-17";
+        let upcomingSabbathDate = "2026-11-14";
+        if (payload.startDate && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(payload.startDate)) {
+          const [dd, mm, yyyy] = payload.startDate.split("/");
+          upcomingSabbathDate = `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+        }
+
+        const cleanMem = removeScriptureAbbreviationPeriods(
+          String(payload.memoryVerse || globalStateStore.memoryVerse || "").replace(/^Memory\s*Text\s*:\s*/i, "").trim()
+        );
+
         saveStateAndNotify({
           ...globalStateStore,
           isSyncing: false,
           activeLessonDate: forceRefresh ? upcomingSabbathDate : (globalStateStore.activeLessonDate || upcomingSabbathDate),
           quarterlyTitle: payload.quarterlyTitle ? formatQuarterTitle(payload.quarterlyTitle) : globalStateStore.quarterlyTitle,
+          lessonId: payload.lessonId || globalStateStore.lessonId || "08",
           lessonTitle: payload.lessonTitle || globalStateStore.lessonTitle,
-          memoryVerse: payload.memoryVerse || globalStateStore.memoryVerse,
+          memoryVerse: cleanMem,
+          readForThisWeek: removeScriptureAbbreviationPeriods(payload.readForThisWeek || globalStateStore.readForThisWeek || ""),
           dailyLessons: mappedDailyLessons.length === 7 ? mappedDailyLessons : globalStateStore.dailyLessons,
           weeklyVideos: payload.videos || globalStateStore.weeklyVideos,
+          egwVideo: payload.egwVideo || globalStateStore.egwVideo,
           egwDailyBreakdown: payload.egwDailyBreakdown || globalStateStore.egwDailyBreakdown,
           theologicalTakeaways: (Array.isArray(payload.theologicalTakeaways) && payload.theologicalTakeaways.length === 3)
             ? payload.theologicalTakeaways
@@ -734,15 +770,40 @@ ${contextSummary ? `Special Context: ${contextSummary}` : ""}`;
       localStorage.setItem("stba_sabbath_selected_date", dateStr);
     } catch (_e) {}
     try {
-      const res = await fetchLessonByDate(dateStr);
+      const res: any = await fetchLessonByDate(dateStr);
+      const cleanMem = removeScriptureAbbreviationPeriods(
+        String(res.memoryVerse || "").replace(/^Memory\s*Text\s*:\s*/i, "").trim()
+      );
+      const resolvedLessonId = res.lessonId || globalStateStore.lessonId || "08";
+      const dynamicLessonNum = `Lesson ${parseInt(String(resolvedLessonId), 10) || 8}`;
+      const updatedVideos = globalStateStore.weeklyVideos
+        ? {
+            featured: globalStateStore.weeklyVideos.featured
+              ? { ...globalStateStore.weeklyVideos.featured, lessonNumberText: dynamicLessonNum }
+              : undefined,
+            itiswritten: globalStateStore.weeklyVideos.itiswritten
+              ? { ...globalStateStore.weeklyVideos.itiswritten, lessonNumberText: dynamicLessonNum }
+              : undefined,
+            hope: globalStateStore.weeklyVideos.hope
+              ? { ...globalStateStore.weeklyVideos.hope, lessonNumberText: dynamicLessonNum }
+              : undefined,
+            threeABN: globalStateStore.weeklyVideos.threeABN
+              ? { ...globalStateStore.weeklyVideos.threeABN, lessonNumberText: dynamicLessonNum }
+              : undefined
+          }
+        : undefined;
+
       saveStateAndNotify({
         ...globalStateStore,
         isParsing: false,
         activeLessonDate: dateStr,
         quarterlyTitle: formatQuarterTitle(res.quarterlyTitle),
+        lessonId: resolvedLessonId,
         lessonTitle: res.lessonTitle,
-        memoryVerse: res.memoryVerse,
+        memoryVerse: cleanMem,
+        readForThisWeek: removeScriptureAbbreviationPeriods(res.read_for_this_weeks_study || res.readForThisWeek || globalStateStore.readForThisWeek || ""),
         dailyLessons: res.dailyLessons && res.dailyLessons.length === 7 ? res.dailyLessons : globalStateStore.dailyLessons,
+        weeklyVideos: updatedVideos,
         deckCards: res.deckCards || globalStateStore.deckCards
       });
       return res;

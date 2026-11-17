@@ -49,13 +49,14 @@ export function reformatParagraphText(rawText: string): string[] {
 
   // Check if this block is a blockquote
   if (decoded.startsWith(">")) {
-    return [decoded];
+    return [removeScriptureAbbreviationPeriods(decoded)];
   }
 
-  // Fix common run-together punctuation from web scrapers: e.g. "word.Next" -> "word. Next"
-  let cleaned = decoded
+  // Strip periods from scripture book abbreviations first so sentence splitters and parsers recognize verses cleanly
+  let cleaned = removeScriptureAbbreviationPeriods(decoded)
     .replace(/([.?!])([A-Z0-9“"’'])/g, "$1 $2")
-    .replace(/([,;:])([A-Za-z0-9])/g, "$1 $2")
+    .replace(/([,;])([A-Za-z])/g, "$1 $2")
+    .replace(/(\d+)\s*:\s*(\d+)/g, "$1:$2")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -131,10 +132,11 @@ export function formatEgwNoteSentenceStructure(rawNote: string): {
     text = text.substring(0, dashPos).trim();
   }
 
-  // Fix punctuation spacing: e.g. "heart.The" -> "heart. The"
-  text = text
+  // Strip periods from scripture book abbreviations first, then fix punctuation spacing
+  text = removeScriptureAbbreviationPeriods(text)
     .replace(/([.?!])([A-Z“"’'])/g, "$1 $2")
-    .replace(/([,;:])([A-Za-z0-9])/g, "$1 $2")
+    .replace(/([,;])([A-Za-z])/g, "$1 $2")
+    .replace(/(\d+)\s*:\s*(\d+)/g, "$1:$2")
     .trim();
 
   // Ensure initial letter is capitalized if starting a sentence
@@ -163,7 +165,7 @@ export function formatEgwNoteSentenceStructure(rawNote: string): {
 export function formatEgwParagraphChunks(rawQuote: string): string[] {
   if (!rawQuote || !rawQuote.trim()) return [];
 
-  const clean = decodeHtmlEntities(rawQuote).trim();
+  const clean = removeScriptureAbbreviationPeriods(decodeHtmlEntities(rawQuote).trim());
 
   // If explicit newlines already exist, honor them
   if (clean.includes("\n")) {
@@ -238,10 +240,26 @@ export const SCRIPTURE_BOOKS_PATTERN =
   "Jude|Jud|Revelation|Revel|Rev|Re";
 
 /**
+ * Removes periods from all scripture book abbreviations (e.g. "Matt. 16:13" -> "Matt 16:13",
+ * "1 Cor. 14:3" -> "1 Cor 14:3", "Exod. 17:14" -> "Exod 17:14", "2 Tim. 3:16" -> "2 Tim 3:16")
+ * and normalizes chapter:verse colon spacing so the parser can accurately identify and retrieve verses.
+ */
+export function removeScriptureAbbreviationPeriods(text: string): string {
+  if (!text || typeof text !== "string") return "";
+  const bookAbbrPeriodRegex = new RegExp(
+    `(\\b(?:[1-3][\\s\\u00A0]*)?(?:${SCRIPTURE_BOOKS_PATTERN}))\\.(?=[\\s\\u00A0]*\\d)`,
+    "gi"
+  );
+  return text
+    .replace(bookAbbrPeriodRegex, "$1")
+    .replace(/(\d+)\s*:\s*(\d+)/g, "$1:$2");
+}
+
+/**
  * Returns a global case-insensitive RegExp matching Bible references across all 66 books:
- * - Abbreviations: e.g. "Exod. 17:14", "Ezek. 4:1–8", "2 Tim. 3:15–17"
- * - Multi-verse ranges: e.g. "Heb. 1:1 , 2", "Matt. 26:36 , 37", "John 3:16, 17"
- * - Chapter ranges: e.g. "1 Cor. 8–10"
+ * - Abbreviations: e.g. "Exod 17:14", "Ezek 4:1–8", "2 Tim 3:15–17"
+ * - Multi-verse ranges: e.g. "Heb 1:1 , 2", "Matt 26:36 , 37", "John 3:16, 17"
+ * - Chapter ranges: e.g. "1 Cor 8–10"
  * - Supports normal and non-breaking spaces (\\u00A0)
  */
 export function getScriptureRegex(): RegExp {
@@ -253,6 +271,7 @@ export function getScriptureRegex(): RegExp {
 
 /**
  * Mandates standard character and token spacing for scripture references:
+ * - Removes periods from book abbreviations (e.g. "Matt. 16:13" -> "Matt 16:13")
  * - Replaces non-breaking spaces (\u00A0) with standard spaces
  * - Standardizes range dashes (en-dash, em-dash, minus) to clean en-dashes without surrounding gaps
  * - Removes extra spaces around colons (e.g. "17 : 14" -> "17:14")
@@ -262,7 +281,8 @@ export function getScriptureRegex(): RegExp {
  */
 export function formatStandardReference(ref: string | null | undefined): string {
   if (!ref || typeof ref !== "string") return "";
-  return ref
+  return removeScriptureAbbreviationPeriods(ref)
+    .replace(/\./g, "")
     .replace(/\u00A0/g, " ")
     .replace(/\s+/g, " ")
     .replace(/\s*:\s*/g, ":")
@@ -450,11 +470,85 @@ export function separateLessonAndEgwNotes(
 
   if (mainParagraphs.length === 0) {
     mainParagraphs.push(
-      "### 1. Introduction to 1 Corinthians 8–10\nFirst Corinthians 8–10 brings the discussion on sexuality (in chapters 5–6) to a conclusion at the same time that it introduces Paul’s answers to specific questions asked through a letter (1 Cor. 7:1) from the Corinthians.",
-      "### 2. Sexual Immorality and Idolatry\nThe transitional nature of 1 Corinthians 7 indicates that sexual immorality (chapters 5–7) and idolatry (chapters 8–10) are related topics. Indeed, they are often mentioned together in the New Testament (see Acts 15:20, 29; 1 Cor. 6:9; Eph. 5:5; Rev. 21:8).",
-      "### 3. Fleeing From Idolatry\nIn general, while in 1 Corinthians 5–7 Paul deals with the problem of sexual immorality, in 1 Corinthians 8–10 his main concern is the issue of idolatry. He states that Christians must flee from both (1 Cor. 6:18, 1 Cor. 10:14). We can flee from idolatry by doing “all to the glory of God” (1 Cor. 10:31, NKJV)."
+      "### 1. Introduction to 1 Corinthians 8–10\nFirst Corinthians 8–10 brings the discussion on sexuality (in chapters 5–6) to a conclusion at the same time that it introduces Paul’s answers to specific questions asked through a letter (1 Cor 7:1) from the Corinthians.",
+      "### 2. Sexual Immorality and Idolatry\nThe transitional nature of 1 Corinthians 7 indicates that sexual immorality (chapters 5–7) and idolatry (chapters 8–10) are related topics. Indeed, they are often mentioned together in the New Testament (see Acts 15:20, 29; 1 Cor 6:9; Eph 5:5; Rev 21:8).",
+      "### 3. Fleeing From Idolatry\nIn general, while in 1 Corinthians 5–7 Paul deals with the problem of sexual immorality, in 1 Corinthians 8–10 his main concern is the issue of idolatry. He states that Christians must flee from both (1 Cor 6:18, 1 Cor 10:14). We can flee from idolatry by doing “all to the glory of God” (1 Cor 10:31, NKJV)."
     );
   }
 
   return { mainParagraphs, egwParagraphs };
+}
+
+/**
+ * Dynamically extracts the clean verse quote and reference citation from a scraped memoryVerse string.
+ */
+export function parseMemoryVerseString(memoryVerse?: string | null): {
+  text: string;
+  reference: string;
+} {
+  const defaultRef = "Luke 24:27, NASB";
+  const defaultText =
+    "Then beginning with Moses and with all the Prophets, He explained to them the things written about Himself in all the Scriptures.";
+
+  if (!memoryVerse || !memoryVerse.trim()) {
+    return { text: defaultText, reference: defaultRef };
+  }
+
+  const cleanVerse = removeScriptureAbbreviationPeriods(
+    memoryVerse
+      .replace(/^Memory\s*Text\s*:\s*/i, "")
+      .trim()
+  );
+
+  // 1. Pattern: “Verse text...” (Book Ch:V, Version).
+  const parenMatch = cleanVerse.match(/^[“"']?(.*?)[”"']?\s*\(([^)]+)\)\.?$/s);
+  if (parenMatch) {
+    return {
+      text: parenMatch[1].replace(/^[“"'\s]+|[”"'\s]+$/g, "").trim(),
+      reference: removeScriptureAbbreviationPeriods(parenMatch[2].trim())
+    };
+  }
+
+  // 2. Pattern: “Verse text...” — Book Ch:V, Version
+  if (cleanVerse.includes("—")) {
+    const parts = cleanVerse.split("—");
+    if (parts.length >= 2) {
+      const right = parts.slice(1).join("—").trim();
+      const left = parts[0].trim();
+      if (/\d+:\d+/.test(right) || /\b(KJV|NKJV|ESV|NASB|NIV)\b/i.test(right)) {
+        return {
+          text: left.replace(/^[“"'\s]+|[”"'\s]+$/g, "").trim(),
+          reference: removeScriptureAbbreviationPeriods(right)
+        };
+      }
+      return {
+        reference: removeScriptureAbbreviationPeriods(left),
+        text: right.replace(/^[“"'\s]+|[”"'\s]+$/g, "").trim()
+      };
+    }
+  }
+
+  // 3. Pattern: “Verse text...” - Book Ch:V (only split on " - " with spaces so verse ranges like 12:4-6 are preserved)
+  if (cleanVerse.includes(" - ")) {
+    const parts = cleanVerse.split(" - ");
+    if (parts.length >= 2) {
+      const right = parts.slice(1).join(" - ").trim();
+      const left = parts[0].trim();
+      if (/\d+:\d+/.test(right) || /\b(KJV|NKJV|ESV|NASB|NIV)\b/i.test(right)) {
+        return {
+          text: left.replace(/^[“"'\s]+|[”"'\s]+$/g, "").trim(),
+          reference: removeScriptureAbbreviationPeriods(right)
+        };
+      }
+      return {
+        reference: removeScriptureAbbreviationPeriods(left),
+        text: right.replace(/^[“"'\s]+|[”"'\s]+$/g, "").trim()
+      };
+    }
+  }
+
+  return {
+    text: cleanVerse.replace(/^[“"'\s]+|[”"'\s]+$/g, "").trim(),
+    reference: defaultRef
+  };
 }

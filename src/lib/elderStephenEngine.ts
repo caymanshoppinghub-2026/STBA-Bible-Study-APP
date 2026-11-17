@@ -272,6 +272,111 @@ export const ElderStephenMemoryEngine = {
     const patterns = current.userStudyPatterns ? { ...current.userStudyPatterns } : { ...defaultSettings.userStudyPatterns };
     patterns.stuckCount = (patterns.stuckCount || 0) + 1;
     return this.updateMemory({ userStudyPatterns: patterns as any });
+  },
+
+  /**
+   * Checks persistent session storage for prior Teach It / Elder Stephen study history
+   * and returns the last studied topic & passage if available.
+   */
+  getPriorTeachItSessionHistory(): {
+    hasPriorSession: boolean;
+    lastStudiedTopic: string;
+    lastStudiedReference: string;
+    totalSessions: number;
+  } {
+    try {
+      const teachItRaw = localStorage.getItem("stba_teach_it_last_session");
+      if (teachItRaw) {
+        const parsedTeach = JSON.parse(teachItRaw);
+        const topic = String(parsedTeach?.topic || "").trim();
+        const ref = String(parsedTeach?.reference || "").trim();
+        if (topic || ref) {
+          return {
+            hasPriorSession: true,
+            lastStudiedTopic: topic || ref,
+            lastStudiedReference: ref || topic,
+            totalSessions: Number(parsedTeach?.sessionCount) || 1
+          };
+        }
+      }
+    } catch {}
+
+    const mem = this.getMemory();
+    const memConcept = String(mem.userStudyPatterns?.lastConceptStudied || "").trim();
+    const memPassage = String(mem.currentPassage || "").trim();
+    const hasMemHistory =
+      Boolean(memConcept) ||
+      Boolean(memPassage) ||
+      (Array.isArray(mem.historyLog) && mem.historyLog.length > 0);
+
+    if (hasMemHistory) {
+      const topic = memConcept || memPassage;
+      return {
+        hasPriorSession: true,
+        lastStudiedTopic: topic,
+        lastStudiedReference: memPassage || topic,
+        totalSessions: mem.userStudyPatterns?.totalSessions || 1
+      };
+    }
+
+    try {
+      const persistentRaw = localStorage.getItem("stba_elder_stephen_persistent_state_v2");
+      if (persistentRaw) {
+        const parsed = JSON.parse(persistentRaw);
+        const flow = parsed?.studyFlow;
+        const msgCount = Array.isArray(parsed?.messages) ? parsed.messages.length : 0;
+        const flowTopic = String(flow?.currentTopic || "").trim();
+        const flowPassage = String(flow?.currentPassage || "").trim();
+        if (msgCount > 1 && (flowTopic || flowPassage)) {
+          return {
+            hasPriorSession: true,
+            lastStudiedTopic: flowTopic !== "Scripture Study & Meditation" ? flowTopic : flowPassage,
+            lastStudiedReference: flowPassage || flowTopic,
+            totalSessions: 1
+          };
+        }
+      }
+    } catch {}
+
+    return {
+      hasPriorSession: false,
+      lastStudiedTopic: "",
+      lastStudiedReference: "",
+      totalSessions: 0
+    };
+  },
+
+  /**
+   * Persists the latest studied topic & scripture reference for future session recall.
+   */
+  saveTeachItSessionTopic(topic: string, reference?: string): void {
+    const cleanTopic = String(topic || "").trim();
+    const cleanRef = String(reference || "").trim();
+    if (!cleanTopic && !cleanRef) return;
+
+    try {
+      const prevRaw = localStorage.getItem("stba_teach_it_last_session");
+      const prevCount = prevRaw ? Number(JSON.parse(prevRaw)?.sessionCount || 0) : 0;
+      localStorage.setItem(
+        "stba_teach_it_last_session",
+        JSON.stringify({
+          topic: cleanTopic || cleanRef,
+          reference: cleanRef || cleanTopic,
+          sessionCount: prevCount + 1,
+          updatedAt: new Date().toISOString()
+        })
+      );
+    } catch {}
+
+    const current = this.getMemory();
+    this.updateMemory({
+      currentPassage: cleanRef || current.currentPassage,
+      userStudyPatterns: {
+        ...current.userStudyPatterns,
+        totalSessions: (current.userStudyPatterns?.totalSessions || 0) + 1,
+        lastConceptStudied: cleanTopic || cleanRef
+      } as any
+    });
   }
 };
 

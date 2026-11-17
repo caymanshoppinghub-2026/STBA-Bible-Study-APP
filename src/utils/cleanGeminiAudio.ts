@@ -134,7 +134,13 @@ export function decodeAndCleanGeminiPcm(
     samples[i] = dataView.getInt16(i * 2, true) / 32768.0;
   }
 
-  // Remove DC offset so zero-crossing and silence detection are accurate
+  // For real-time streaming PCM chunks, preserve exact sample-accurate waveform continuity
+  // across chunk boundaries without per-chunk DC offset shifts or frame trimming.
+  if (isStreamingChunk) {
+    return samples;
+  }
+
+  // Remove DC offset on complete unary buffers so zero-crossing and silence detection are accurate
   let mean = 0;
   for (let i = 0; i < sampleCount; i++) {
     mean += samples[i];

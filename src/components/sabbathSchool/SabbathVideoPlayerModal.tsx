@@ -39,6 +39,7 @@ import {
   saveVideoQuizAttempt
 } from "../../utils/sabbathVideoQuizManager";
 import { playCorrectAnswerSound } from "../../utils/audioFeedback";
+import { parseMemoryVerseString } from "../../utils/sabbathUtils";
 import percyHarroldThumbImg from "../../assets/images/percy_harrold_thumb_1789229104504.jpg";
 
 interface SabbathVideoPlayerModalProps {
@@ -56,7 +57,9 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
 }) => {
   const {
     quarterlyTitle,
+    lessonId,
     lessonTitle,
+    readForThisWeek,
     dailyLessons,
     selectedDayIndex,
     readingTheme,
@@ -64,13 +67,24 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
     setActiveMediaSource,
     setCurrentEgwTimestampIndex,
     weeklyVideos,
+    egwVideo,
     egwDailyBreakdown,
+    theologicalTakeaways,
+    deckCards,
     hasPendingRetries,
     pendingChannels
   } = useSabbathSchoolStore();
 
   const isLight = readingTheme === "light";
   const activeDay = dailyLessons[selectedDayIndex] || dailyLessons[0];
+  const parsedMemory = useMemo(() => parseMemoryVerseString(memoryVerse), [memoryVerse]);
+  const dynamicLessonNumber = useMemo(() => {
+    if (lessonId) {
+      const num = parseInt(String(lessonId), 10);
+      if (!isNaN(num) && num > 0) return `Lesson ${num}`;
+    }
+    return weeklyVideos?.featured?.lessonNumberText || "Lesson 8";
+  }, [lessonId, weeklyVideos]);
 
   // Active Tab state: 'Video' | 'Notes' | 'Resources' | 'Discussion'
   const [activeTab, setActiveTab] = useState<"video" | "notes" | "resources" | "discussion">("video");
@@ -162,8 +176,9 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
   const currentDayKey = daysKeys[selectedEgwDayIdx] || "Sabbath Afternoon";
   const syncedEgwDay = egwDailyBreakdown ? egwDailyBreakdown[currentDayKey] : null;
   const egwSec = syncedEgwDay?.seconds ?? (EGW_NOTES_LESSON_8.days[selectedEgwDayIdx]?.timestampSeconds ?? 0);
-  const egwUrl = syncedEgwDay?.url ?? (EGW_NOTES_LESSON_8.days[selectedEgwDayIdx]?.url ?? EGW_NOTES_LESSON_8.directUrl);
-  const egwVideoId = syncedEgwDay?.url?.match(/[?&]v=([^&]+)/)?.[1] || "d17oRa_jCHg";
+  const egwUrl = syncedEgwDay?.url ?? egwVideo?.fullUrl ?? (EGW_NOTES_LESSON_8.days[selectedEgwDayIdx]?.url ?? EGW_NOTES_LESSON_8.directUrl);
+  const egwVideoId = egwVideo?.videoId || syncedEgwDay?.url?.match(/[?&]v=([^&]+)/)?.[1] || "QHTf1LiOFH4";
+  const activeLessonTitle = lessonTitle || "Interpreting Prophetic Writings";
 
   const videoFeeds: Record<string, {
     name: string;
@@ -175,47 +190,47 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
     isPending?: boolean;
   }> = {
     egwNotes: {
-      name: `EGW Notes – ${currentDayKey} (${syncedEgwDay?.timestampText || "0:00"})`,
+      name: `EGW Notes – ${currentDayKey} (${syncedEgwDay?.timestampText || "00:00"})`,
       embedUrl: `https://www.youtube-nocookie.com/embed/${egwVideoId}?autoplay=1&controls=1&enablejsapi=1&start=${egwSec}`,
       directUrl: egwUrl,
       teacher: "Ellen G. White Daily Commentary",
-      lessonNumber: "Lesson 4",
-      lessonTitleText: `${lessonTitle || "New Testament Prophets"} – ${currentDayKey}`
+      lessonNumber: dynamicLessonNumber,
+      lessonTitleText: `${activeLessonTitle} – ${currentDayKey}`
     },
     featured: {
-      name: weeklyVideos?.featured?.title || "Featured Video – Claudio Carneiro",
-      embedUrl: weeklyVideos?.featured?.embedUrl || "https://www.youtube-nocookie.com/embed/M8jssNYGAJc?autoplay=1&controls=1&enablejsapi=1",
-      directUrl: weeklyVideos?.featured?.url || "https://www.youtube.com/watch?v=M8jssNYGAJc",
+      name: weeklyVideos?.featured?.title || `Featured Video – ${activeLessonTitle}`,
+      embedUrl: weeklyVideos?.featured?.embedUrl || "https://www.youtube-nocookie.com/embed/LQVA_ZWKZW0?autoplay=1&controls=1&enablejsapi=1",
+      directUrl: weeklyVideos?.featured?.url || "https://www.youtube.com/watch?v=LQVA_ZWKZW0",
       teacher: "Pastor Clive Nash / Claudio Carneiro",
-      lessonNumber: weeklyVideos?.featured?.lessonNumberText || "Lesson 4",
-      lessonTitleText: lessonTitle || "New Testament Prophets",
+      lessonNumber: weeklyVideos?.featured?.lessonNumberText || dynamicLessonNumber,
+      lessonTitleText: activeLessonTitle,
       isPending: weeklyVideos?.featured && !weeklyVideos.featured.isCurrentWeek
     },
     itiswritten: {
-      name: weeklyVideos?.itiswritten?.title || "It Is Written Sabbath School Study",
-      embedUrl: weeklyVideos?.itiswritten?.embedUrl || "https://www.youtube-nocookie.com/embed/2NyUKNOOkPM?autoplay=1&controls=1&enablejsapi=1",
-      directUrl: weeklyVideos?.itiswritten?.url || "https://www.youtube.com/watch?v=2NyUKNOOkPM",
+      name: weeklyVideos?.itiswritten?.title || `It Is Written – ${activeLessonTitle}`,
+      embedUrl: weeklyVideos?.itiswritten?.embedUrl || "https://www.youtube-nocookie.com/embed/oRPEa8MIgk0?autoplay=1&controls=1&enablejsapi=1",
+      directUrl: weeklyVideos?.itiswritten?.url || "https://www.youtube.com/watch?v=oRPEa8MIgk0",
       teacher: "Pastor John Bradshaw",
-      lessonNumber: weeklyVideos?.itiswritten?.lessonNumberText || "Lesson 4",
-      lessonTitleText: lessonTitle || "New Testament Prophets",
+      lessonNumber: weeklyVideos?.itiswritten?.lessonNumberText || dynamicLessonNumber,
+      lessonTitleText: activeLessonTitle,
       isPending: weeklyVideos?.itiswritten && !weeklyVideos.itiswritten.isCurrentWeek
     },
     hope: {
-      name: weeklyVideos?.hope?.title || "Hope Sabbath School",
-      embedUrl: weeklyVideos?.hope?.embedUrl || "https://www.youtube-nocookie.com/embed/EyMutcCbyEY?autoplay=1&controls=1&enablejsapi=1",
-      directUrl: weeklyVideos?.hope?.url || "https://www.youtube.com/watch?v=EyMutcCbyEY",
+      name: weeklyVideos?.hope?.title || `Hope Sabbath School – ${activeLessonTitle}`,
+      embedUrl: weeklyVideos?.hope?.embedUrl || "https://www.youtube-nocookie.com/embed/QNk_o4EwMS8?autoplay=1&controls=1&enablejsapi=1",
+      directUrl: weeklyVideos?.hope?.url || "https://www.youtube.com/watch?v=QNk_o4EwMS8",
       teacher: "Pastor Derek Morris",
-      lessonNumber: weeklyVideos?.hope?.lessonNumberText || "Lesson 4",
-      lessonTitleText: lessonTitle || "New Testament Prophets",
+      lessonNumber: weeklyVideos?.hope?.lessonNumberText || dynamicLessonNumber,
+      lessonTitleText: activeLessonTitle,
       isPending: weeklyVideos?.hope && !weeklyVideos.hope.isCurrentWeek
     },
     threeABN: {
-      name: weeklyVideos?.threeABN?.title || "3ABN Sabbath School Panel",
-      embedUrl: weeklyVideos?.threeABN?.embedUrl || "https://www.youtube-nocookie.com/embed/cMGfnocp2qk?autoplay=1&controls=1&enablejsapi=1",
-      directUrl: weeklyVideos?.threeABN?.url || "https://www.youtube.com/watch?v=cMGfnocp2qk",
+      name: weeklyVideos?.threeABN?.title || `3ABN Sabbath School Panel – ${activeLessonTitle}`,
+      embedUrl: weeklyVideos?.threeABN?.embedUrl || "https://www.youtube-nocookie.com/embed/u8sA8dAhJN4?autoplay=1&controls=1&enablejsapi=1",
+      directUrl: weeklyVideos?.threeABN?.url || "https://www.youtube.com/watch?v=u8sA8dAhJN4",
       teacher: "3ABN Pastoral Panel",
-      lessonNumber: weeklyVideos?.threeABN?.lessonNumberText || "Lesson 4",
-      lessonTitleText: lessonTitle || "New Testament Prophets",
+      lessonNumber: weeklyVideos?.threeABN?.lessonNumberText || dynamicLessonNumber,
+      lessonTitleText: activeLessonTitle,
       isPending: weeklyVideos?.threeABN && !weeklyVideos.threeABN.isCurrentWeek
     }
   };
@@ -231,7 +246,7 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
     try {
       const dynamicQuestions = await fetchVideoQuizQuestions({
         channel: normKey,
-        lessonTitle: lessonTitle || "The Conditions of Fellowship",
+        lessonTitle: activeLessonTitle,
         quarterlyTitle,
         dayTopic: activeDay?.title || activeDay?.label,
         memoryVerse,
@@ -243,7 +258,7 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
     } catch (e) {
       console.warn("Using curated Sabbath School quiz:", e);
     }
-  }, [lessonTitle, quarterlyTitle, activeDay, memoryVerse]);
+  }, [activeLessonTitle, quarterlyTitle, activeDay, memoryVerse]);
 
   // Channel & reset logic
   useEffect(() => {
@@ -507,7 +522,7 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
           scriptureRef: currentQ.scriptureRef,
           channel: selectedChannel,
           channelName: CHANNEL_NAMES[selectedChannel] || currentFeed.name,
-          lessonTitle: "The Conditions of Fellowship"
+          lessonTitle: activeLessonTitle
         });
       } catch (err) {
         console.error("Failed to save quiz attempt:", err);
@@ -563,7 +578,7 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
       const normKey = selectedChannel === "featured" ? "percy" : selectedChannel;
       const dynamic = await fetchVideoQuizQuestions({
         channel: normKey,
-        lessonTitle: lessonTitle || "The Conditions of Fellowship",
+        lessonTitle: activeLessonTitle,
         quarterlyTitle,
         dayTopic: activeDay?.title || activeDay?.label,
         memoryVerse,
@@ -668,7 +683,7 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
                 SABBATH SCHOOL
               </span>
               <h3 className="text-xs sm:text-sm md:text-base font-serif font-bold tracking-tight text-neutral-200 truncate">
-                Epistles to the Corinthians (2026 Q3)
+                {quarterlyTitle || "The Gift of Prophecy (2026 Q4)"}
               </h3>
             </div>
           </div>
@@ -1049,12 +1064,12 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
 
                 {/* Verse Quote */}
                 <p className="font-serif text-base sm:text-lg md:text-xl text-neutral-100 leading-relaxed max-w-2xl mx-auto my-2">
-                  “For out of much affliction and anguish of heart I wrote to you, with many tears, not that you should be grieved, but that you might know the love which I have so abundantly for you.”
+                  “{parsedMemory.text}”
                 </p>
 
                 {/* Verse Reference */}
                 <p className="font-sans font-bold text-xs sm:text-sm text-amber-400 uppercase tracking-widest mt-3">
-                  2 CORINTHIANS 2:4, NKJV
+                  {parsedMemory.reference.toUpperCase()}
                 </p>
               </div>
             </div>
@@ -1066,49 +1081,55 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
           <div className="rounded-3xl border border-[#1B2B48] bg-[#071124] p-5 sm:p-7 md:p-9 shadow-xl space-y-6 animate-fade-in text-slate-200">
             <div className="border-b border-[#1B2B48] pb-4">
               <span className="text-xs font-sans font-bold uppercase tracking-wider text-amber-400">
-                Lesson 9 Comprehensive Study Notes
+                {dynamicLessonNumber} Comprehensive Study Notes
               </span>
               <h3 className="text-xl sm:text-2xl font-serif font-bold text-white mt-1">
-                The Conditions of Fellowship (2 Corinthians 2:4–17)
+                {activeLessonTitle}{readForThisWeek ? ` (${readForThisWeek.replace(/\.$/, "")})` : ""}
               </h3>
             </div>
 
             <div className="space-y-4 text-sm sm:text-base leading-relaxed font-lato font-['Lato',sans-serif]">
-              <div className="p-4 rounded-2xl bg-[#091533] border border-[#1B2B48]">
-                <h4 className="font-bold text-amber-300 mb-2 font-serif text-base">
-                  1. The Ministry of Tears and Sacred Anguish (v. 4)
-                </h4>
-                <p>
-                  Paul’s severe letter to Corinth was not penned in anger or judicial vindictiveness, but out of profound affliction (thlipsis) and tears. True pastoral rebuke must always flow from a heart overflowing with redemptive love.
-                </p>
-              </div>
+              {(dailyLessons || []).slice(0, 4).map((day, idx) => {
+                const blocks = Array.isArray(day.content)
+                  ? day.content
+                  : String(day.content || "").split("\n\n");
+                const rawSummary =
+                  blocks.find(
+                    (p: string) =>
+                      p &&
+                      !p.startsWith("###") &&
+                      !p.startsWith(">") &&
+                      !/^[1-3]?\s*[A-Za-z]+\.?\s+\d+:\s*\d+.*[;,]/.test(p.trim())
+                  ) ||
+                  blocks[0] ||
+                  "";
+                const cleanSummary = rawSummary.replace(/^#+\s*/, "").replace(/^>\s*/, "").trim();
+                return (
+                  <div key={idx} className="p-4 rounded-2xl bg-[#091533] border border-[#1B2B48]">
+                    <h4 className="font-bold text-amber-300 mb-2 font-serif text-base">
+                      {idx + 1}. {day.title || day.label || `Day ${idx + 1}`}
+                    </h4>
+                    <p>{cleanSummary}</p>
+                  </div>
+                );
+              })}
 
-              <div className="p-4 rounded-2xl bg-[#091533] border border-[#1B2B48]">
-                <h4 className="font-bold text-amber-300 mb-2 font-serif text-base">
-                  2. Forgiveness and Reaffirming Love in Fellowship (v. 5–8)
-                </h4>
-                <p>
-                  Discipline in the Seventh-day Adventist church aims at salvation, not destruction. When a believer turns in repentance, church members must forgive (charizomai) and comfort them, lest Satan swallow them up in despair.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-[#091533] border border-[#1B2B48]">
-                <h4 className="font-bold text-amber-300 mb-2 font-serif text-base">
-                  3. Outsmarting Satan's Schemes through Reconciliation (v. 9–11)
-                </h4>
-                <p>
-                  Satan frequently exploits unforgiveness and factional pride to fracture Christian community. We are not ignorant of his devices (noemata); mutual grace disarms the adversary.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-[#091533] border border-[#1B2B48]">
-                <h4 className="font-bold text-amber-300 mb-2 font-serif text-base">
-                  4. Ellen G. White Spirit of Prophecy Commentary
-                </h4>
-                <blockquote className="border-l-2 border-amber-400 pl-3 text-slate-200 my-2 italic font-lato font-['Lato',sans-serif]">
-                  “Christians who love Christ will love one another. If a brother or sister errs, do not turn away from them with cold disdain. Go to them in the spirit of meekness, remembering that you too are frail.” — Testimonies, Vol. 5, p. 605.
-                </blockquote>
-              </div>
+              {(() => {
+                const firstEgwNote =
+                  activeDay?.egwNotes?.find((n: string) => n && n.trim().length > 10) ||
+                  dailyLessons?.flatMap((d) => d.egwNotes || []).find((n: string) => n && n.trim().length > 10);
+                if (!firstEgwNote) return null;
+                return (
+                  <div className="p-4 rounded-2xl bg-[#091533] border border-[#1B2B48]">
+                    <h4 className="font-bold text-amber-300 mb-2 font-serif text-base">
+                      Ellen G. White Spirit of Prophecy Commentary
+                    </h4>
+                    <blockquote className="border-l-2 border-amber-400 pl-3 text-slate-200 my-2 italic font-lato font-['Lato',sans-serif]">
+                      {firstEgwNote}
+                    </blockquote>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -1118,10 +1139,10 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
           <div className="rounded-3xl border border-[#1B2B48] bg-[#071124] p-5 sm:p-7 md:p-9 shadow-xl space-y-6 animate-fade-in text-slate-200">
             <div className="border-b border-[#1B2B48] pb-4">
               <span className="text-xs font-sans font-bold uppercase tracking-wider text-amber-400">
-                Sabbath School Lesson Resources
+                Sabbath School Lesson Resources • {dynamicLessonNumber}
               </span>
               <h3 className="text-xl sm:text-2xl font-serif font-bold text-white mt-1">
-                Study Outlines, Teacher Helps & Audio Guides
+                {activeLessonTitle} — Study Outlines, Teacher Helps & Audio Guides
               </h3>
             </div>
 
@@ -1134,7 +1155,7 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
                     <span className="font-sans font-bold text-sm">Adult Bible Study Guide (PDF)</span>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed mb-4 font-sans">
-                    Full official General Conference Adult Teachers Bible Study Guide: The Gift of Prophecy.
+                    Full official General Conference Adult Teachers Bible Study Guide: {quarterlyTitle || "The Gift of Prophecy"} — {activeLessonTitle}.
                   </p>
                 </div>
                 <button
@@ -1155,7 +1176,7 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
                     <span className="font-sans font-bold text-sm">Teacher Exegetical Slides</span>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed mb-4 font-sans">
-                    Classroom presentation slides with Greek word breakdowns and discussion deck prompts.
+                    Classroom presentation slides for {activeLessonTitle} with original word breakdowns and discussion prompts.
                   </p>
                 </div>
                 <button
@@ -1176,7 +1197,7 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
                     <span className="font-sans font-bold text-sm">Ellen White Daily Notes Audio</span>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed mb-4 font-sans">
-                    Daily Spirit of Prophecy commentary narrated for each day of the current quarterly.
+                    Daily Spirit of Prophecy commentary narrated for {activeLessonTitle} ({quarterlyTitle || "The Gift of Prophecy"}).
                   </p>
                 </div>
                 <button
@@ -1200,7 +1221,7 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
                     <span className="font-sans font-bold text-sm">AI Study Quiz Generator</span>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed mb-4 font-sans">
-                    Generate fresh customized interactive questions grounded in historic Adventist hermeneutics.
+                    Generate fresh customized interactive questions for {activeLessonTitle} grounded in historic Adventist hermeneutics.
                   </p>
                 </div>
                 <button
@@ -1222,40 +1243,57 @@ export const SabbathVideoPlayerModal: React.FC<SabbathVideoPlayerModalProps> = (
           <div className="rounded-3xl border border-[#1B2B48] bg-[#071124] p-5 sm:p-7 md:p-9 shadow-xl space-y-6 animate-fade-in text-slate-200">
             <div className="border-b border-[#1B2B48] pb-4">
               <span className="text-xs font-sans font-bold uppercase tracking-wider text-amber-400">
-                Classroom & Small Group Discussion
+                Classroom & Small Group Discussion • {dynamicLessonNumber}
               </span>
               <h3 className="text-xl sm:text-2xl font-serif font-bold text-white mt-1">
-                Elder Stephen Pastoral Discussion Probes
+                {activeLessonTitle} — Elder Stephen Pastoral Discussion Probes
               </h3>
             </div>
 
             <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-[#091533] border border-[#1B2B48]">
-                <span className="text-[11px] font-sans font-bold text-amber-400 uppercase tracking-wider block mb-1">
-                  Discussion Prompt 1 • Restoration vs. Punishment
-                </span>
-                <p className="text-sm sm:text-base font-serif font-medium text-white">
-                  “How can a local church maintain doctrinal purity while genuinely practicing the restorative, forgiving love Paul advocates in 2 Corinthians 2:7–8?”
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-[#091533] border border-[#1B2B48]">
-                <span className="text-[11px] font-sans font-bold text-amber-400 uppercase tracking-wider block mb-1">
-                  Discussion Prompt 2 • Unmasking the Enemy's Devices
-                </span>
-                <p className="text-sm sm:text-base font-serif font-medium text-white">
-                  “Paul warns that withholding forgiveness allows Satan to take advantage of the congregation (v. 11). What specific devices does Satan use today to breed division among believers?”
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-[#091533] border border-[#1B2B48]">
-                <span className="text-[11px] font-sans font-bold text-amber-400 uppercase tracking-wider block mb-1">
-                  Discussion Prompt 3 • The Fragrance of Life
-                </span>
-                <p className="text-sm sm:text-base font-serif font-medium text-white">
-                  “What does it mean practically for our Sabbath School class to be an ‘aroma of Christ’ (v. 15) in our wider community?”
-                </p>
-              </div>
+              {(() => {
+                // Extract questions directly from the scraped dailyLessons or theologicalTakeaways or deckCards
+                const extractedPrompts: Array<{ label: string; question: string }> = [];
+                if (Array.isArray(dailyLessons)) {
+                  for (const d of dailyLessons) {
+                    const textStr = Array.isArray(d.content) ? d.content.join(" ") : String(d.content || "");
+                    const qMatches = textStr.match(/[^.?!]+\?/g) || [];
+                    const validQ = qMatches.map(q => q.trim()).find(q => q.length > 35);
+                    if (validQ && extractedPrompts.length < 3) {
+                      extractedPrompts.push({
+                        label: `${d.title || d.label || "Lesson Study"}`,
+                        question: validQ
+                      });
+                    }
+                  }
+                }
+                if (extractedPrompts.length === 0 && Array.isArray(deckCards) && deckCards.length > 0) {
+                  deckCards.slice(0, 3).forEach((c) => {
+                    extractedPrompts.push({
+                      label: c.category || activeLessonTitle,
+                      question: c.question
+                    });
+                  });
+                }
+                if (extractedPrompts.length === 0 && Array.isArray(theologicalTakeaways)) {
+                  theologicalTakeaways.slice(0, 3).forEach((t) => {
+                    extractedPrompts.push({
+                      label: t.title,
+                      question: t.description
+                    });
+                  });
+                }
+                return extractedPrompts.map((prompt, idx) => (
+                  <div key={idx} className="p-4 rounded-2xl bg-[#091533] border border-[#1B2B48]">
+                    <span className="text-[11px] font-sans font-bold text-amber-400 uppercase tracking-wider block mb-1">
+                      Discussion Prompt {idx + 1} • {prompt.label}
+                    </span>
+                    <p className="text-sm sm:text-base font-serif font-medium text-white">
+                      “{prompt.question}”
+                    </p>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
         )}

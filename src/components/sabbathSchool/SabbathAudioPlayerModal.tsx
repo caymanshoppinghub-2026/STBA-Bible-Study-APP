@@ -42,11 +42,14 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
   initialSource
 }) => {
   const {
+    lessonId,
     quarterlyTitle,
     lessonTitle,
     dailyLessons,
     selectedDayIndex,
     readingTheme,
+    egwVideo,
+    egwDailyBreakdown,
     activeMediaSource,
     setActiveMediaSource,
     isEgwAudioPlaying,
@@ -57,6 +60,21 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
 
   const isLight = readingTheme === "light";
   const activeDay = dailyLessons[selectedDayIndex] || dailyLessons[0];
+  const dynamicLessonNumber = lessonId ? `Lesson ${parseInt(String(lessonId), 10) || lessonId}` : "Lesson 8";
+  const activeQuarterBadge = quarterlyTitle.match(/\(([^)]+)\)/)?.[1] || "2026 Q4";
+  const dynamicEgwTitle = egwVideo?.title || `EGW Notes (${activeQuarterBadge}) — ${dynamicLessonNumber}: ${lessonTitle}`;
+  const dynamicEgwDays = EGW_NOTES_LESSON_8.days.map((day, idx) => {
+    const storeDay = dailyLessons[idx];
+    const breakdownTopic = egwDailyBreakdown[idx];
+    return {
+      ...day,
+      label: storeDay?.label ? `${storeDay.label}${storeDay.dateStr ? `, ${storeDay.dateStr}` : ""}` : day.label,
+      topic: storeDay?.title || breakdownTopic?.replace(/^[^:]+:\s*/, "") || day.topic,
+      url: egwVideo?.baseUrl
+        ? `${egwVideo.baseUrl}${day.startSeconds > 0 ? `&t=${day.startSeconds}s` : ""}`
+        : day.url
+    };
+  });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -99,7 +117,7 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
     }
   }, [isOpen, initialSource, activeMediaSource]);
 
-  const activeEgwDay = EGW_NOTES_LESSON_8.days[selectedEgwIdx] || EGW_NOTES_LESSON_8.days[0];
+  const activeEgwDay = dynamicEgwDays[selectedEgwIdx] || dynamicEgwDays[0];
 
   // Only bind a verified external MP3 stream URL when present; otherwise use built-in narration
   const audioSourceUrl = selectedAudioTab === "standard" ? retrievedStreamUrl : null;
@@ -158,7 +176,7 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
     window.speechSynthesis.cancel();
     const rawNarration =
       selectedAudioTab === "egwNotes"
-        ? `${EGW_NOTES_LESSON_8.title}. ${activeEgwDay.label}. ${activeEgwDay.topic}.`
+        ? `${dynamicEgwTitle}. ${activeEgwDay.label}. ${activeEgwDay.topic}.`
         : `${quarterlyTitle}. ${lessonTitle}. ${activeDay?.label || ""}: ${activeDay?.title || ""}. ${(activeDay as any)?.content || (activeDay as any)?.summary || ""}`;
     const cleanSpeech = cleanLessonTextForSpokenNarration(rawNarration);
     const utterance = new SpeechSynthesisUtterance(cleanSpeech);
@@ -300,7 +318,7 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
                 {selectedAudioTab === "egwNotes" ? "Ellen White Notes Audio Stream" : "Adventech Sabbath School Audio"}
               </span>
               <h3 className="text-sm font-bold font-sans tracking-tight">
-                {selectedAudioTab === "egwNotes" ? EGW_NOTES_LESSON_8.title : "Official Lesson Audio Stream"}
+                {selectedAudioTab === "egwNotes" ? dynamicEgwTitle : `${dynamicLessonNumber}: ${lessonTitle}`}
               </h3>
             </div>
           </div>
@@ -359,7 +377,7 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
             <BookOpen size={13} />
             <span>EGW Notes Audio</span>
             <span className="text-[9px] px-1.5 py-0.2 bg-amber-950/20 dark:bg-amber-400/20 text-amber-900 dark:text-amber-200 rounded-full font-mono">
-              2026 Q3
+              {activeQuarterBadge}
             </span>
           </button>
         </div>
@@ -372,7 +390,7 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
               <span>{activeEgwDay.label}</span>
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-              {EGW_NOTES_LESSON_8.days.map((day, idx) => (
+              {dynamicEgwDays.map((day, idx) => (
                 <button
                   key={day.dayIndex}
                   type="button"
@@ -404,7 +422,7 @@ export const SabbathAudioPlayerModal: React.FC<SabbathAudioPlayerModalProps> = (
         >
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
             <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 font-extrabold block">
-              {selectedAudioTab === "egwNotes" ? EGW_NOTES_LESSON_8.title : quarterlyTitle}
+              {selectedAudioTab === "egwNotes" ? dynamicEgwTitle : quarterlyTitle}
             </span>
             <a
               id="sabbath-audio-source-link"

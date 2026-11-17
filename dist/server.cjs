@@ -1258,13 +1258,125 @@ function normalizeScriptureReference(input) {
     forty: "40",
     fifty: "50"
   };
-  const bookRegex = /^(?:[1-3]\s+)?[A-Za-z]+(?:\s+of\s+[A-Za-z]+)?/i;
+  const bookRegex = /^(?:[1-3]\s*)?[A-Za-z]+\.?(?:\s+of\s+[A-Za-z]+)?/i;
   const match = str.match(bookRegex);
   let book = "";
   let rest = str;
   if (match) {
-    book = match[0].trim();
-    rest = str.slice(match[0].length).trim();
+    book = match[0].replace(/\./g, "").replace(/\s+/g, " ").trim();
+    rest = str.slice(match[0].length).replace(/^\.\s*/, "").trim();
+  }
+  const canonicalBookMap = {
+    "gen": "Genesis",
+    "ex": "Exodus",
+    "exo": "Exodus",
+    "exod": "Exodus",
+    "lev": "Leviticus",
+    "num": "Numbers",
+    "deut": "Deuteronomy",
+    "deu": "Deuteronomy",
+    "dt": "Deuteronomy",
+    "josh": "Joshua",
+    "jos": "Joshua",
+    "judg": "Judges",
+    "jdg": "Judges",
+    "rth": "Ruth",
+    "1 sam": "1 Samuel",
+    "2 sam": "2 Samuel",
+    "1 kgs": "1 Kings",
+    "2 kgs": "2 Kings",
+    "1 chr": "1 Chronicles",
+    "2 chr": "2 Chronicles",
+    "1 chron": "1 Chronicles",
+    "2 chron": "2 Chronicles",
+    "ezr": "Ezra",
+    "neh": "Nehemiah",
+    "esth": "Esther",
+    "est": "Esther",
+    "ps": "Psalms",
+    "psa": "Psalms",
+    "psalm": "Psalms",
+    "prov": "Proverbs",
+    "pro": "Proverbs",
+    "eccl": "Ecclesiastes",
+    "eccles": "Ecclesiastes",
+    "ecc": "Ecclesiastes",
+    "cant": "Song of Solomon",
+    "isa": "Isaiah",
+    "is": "Isaiah",
+    "jer": "Jeremiah",
+    "lam": "Lamentations",
+    "ezek": "Ezekiel",
+    "eze": "Ezekiel",
+    "dan": "Daniel",
+    "hos": "Hosea",
+    "obad": "Obadiah",
+    "jon": "Jonah",
+    "mic": "Micah",
+    "nah": "Nahum",
+    "hab": "Habakkuk",
+    "zeph": "Zephaniah",
+    "zep": "Zephaniah",
+    "hag": "Haggai",
+    "zech": "Zechariah",
+    "zec": "Zechariah",
+    "mal": "Malachi",
+    "matt": "Matthew",
+    "mat": "Matthew",
+    "mt": "Matthew",
+    "mrk": "Mark",
+    "mk": "Mark",
+    "luk": "Luke",
+    "lk": "Luke",
+    "joh": "John",
+    "jhn": "John",
+    "jn": "John",
+    "act": "Acts",
+    "ac": "Acts",
+    "rom": "Romans",
+    "ro": "Romans",
+    "1 cor": "1 Corinthians",
+    "2 cor": "2 Corinthians",
+    "1 co": "1 Corinthians",
+    "2 co": "2 Corinthians",
+    "gal": "Galatians",
+    "eph": "Ephesians",
+    "ephes": "Ephesians",
+    "phil": "Philippians",
+    "php": "Philippians",
+    "col": "Colossians",
+    "1 thess": "1 Thessalonians",
+    "2 thess": "2 Thessalonians",
+    "1 th": "1 Thessalonians",
+    "2 th": "2 Thessalonians",
+    "1 tim": "1 Timothy",
+    "2 tim": "2 Timothy",
+    "1 ti": "1 Timothy",
+    "2 ti": "2 Timothy",
+    "tit": "Titus",
+    "philem": "Philemon",
+    "phm": "Philemon",
+    "heb": "Hebrews",
+    "jas": "James",
+    "jm": "James",
+    "1 pet": "1 Peter",
+    "2 pet": "2 Peter",
+    "1 pe": "1 Peter",
+    "2 pe": "2 Peter",
+    "1 jn": "1 John",
+    "2 jn": "2 John",
+    "3 jn": "3 John",
+    "1 joh": "1 John",
+    "2 joh": "2 John",
+    "3 joh": "3 John",
+    "jud": "Jude",
+    "rev": "Revelation",
+    "revel": "Revelation",
+    "re": "Revelation"
+  };
+  const lowerBook = book.toLowerCase();
+  if (canonicalBookMap[lowerBook]) {
+    book = canonicalBookMap[lowerBook];
   }
   rest = rest.replace(/\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\b/gi, (m) => {
     return wordMap[m.toLowerCase()] || m;
@@ -4400,6 +4512,45 @@ PRELOADED_SDABC_DATA["exodus 25:1-9"] = PRELOADED_SDABC_DATA["exodus 25:1-9"];
 // src/server/sabbathSchoolSyncService.ts
 var import_fs = __toESM(require("fs"), 1);
 var import_path = __toESM(require("path"), 1);
+
+// src/utils/sabbathUtils.ts
+var SCRIPTURE_BOOKS_PATTERN = "Genesis|Gen|Exodus|Exod?|Exo|Ex|Leviticus|Lev|Le|Numbers|Num|Nu|Deuteronomy|Deut|Deu|Dt|Joshua|Josh|Jos|Judges|Judg|Jdg|Jdgs|Ruth|Rth|Ru|1\\s*Samuel|2\\s*Samuel|1\\s*Sam|2\\s*Sam|1\\s*Sa|2\\s*Sa|1\\s*Kings|2\\s*Kings|1\\s*Kgs|2\\s*Kgs|1\\s*Ki|2\\s*Ki|1\\s*Chronicles|2\\s*Chronicles|1\\s*Chron?|2\\s*Chron?|1\\s*Chr|2\\s*Chr|1\\s*Ch|2\\s*Ch|Ezra|Ezr|Nehemiah|Neh|Ne|Esther|Esth|Est|Job|Jb|Psalms?|Psa|Ps|Proverbs|Prov|Pro|Pr|Ecclesiastes|Eccles|Eccl|Ecc|Ec|Qoh|Song\\s+of\\s+(?:Solomon|Songs)|Song|Canticles|Cant|Isaiah|Isa|Is|Jeremiah|Jer|Je|Lamentations|Lam|La|Ezekiel|Ezek|Eze|Ezk|Daniel|Dan|Da|Hosea|Hos|Ho|Joel|Joe|Jl|Amos|Am|Obadiah|Obad|Ob|Jonah|Jon|Jnh|Micah|Mic|Nahum|Nah|Na|Habakkuk|Hab|Zephaniah|Zeph|Zep|Haggai|Hag|Zechariah|Zech|Zec|Malachi|Mal|Matthew|Matt?|Mat|Mt|Mark|Mrk|Mk|Luke|Luk|Lk|John|Joh|Jhn|Jn|Acts|Act|Ac|Romans|Rom|Ro|1\\s*Corinthians|2\\s*Corinthians|1\\s*Cor|2\\s*Cor|1\\s*Co|2\\s*Co|Galatians|Gal|Ga|Ephesians|Ephes|Eph|Philippians|Phil|Php|Pp|Colossians|Col|1\\s*Thessalonians|2\\s*Thessalonians|1\\s*Thess|2\\s*Thess|1\\s*Th|2\\s*Th|1\\s*Timothy|2\\s*Timothy|1\\s*Tim|2\\s*Tim|1\\s*Ti|2\\s*Ti|Titus|Tit|Ti|Philemon|Philem|Phm|Hebrews|Heb|He|James|Jas|Jm|1\\s*Peter|2\\s*Peter|1\\s*Pet|2\\s*Pet|1\\s*Pe|2\\s*Pe|1\\s*P|2\\s*P|1\\s*John|2\\s*John|3\\s*John|1\\s*Joh|2\\s*Joh|3\\s*Joh|1\\s*Jn|2\\s*Jn|3\\s*Jn|1\\s*Jo|2\\s*Jo|3\\s*Jo|Jude|Jud|Revelation|Revel|Rev|Re";
+function removeScriptureAbbreviationPeriods(text) {
+  if (!text || typeof text !== "string") return "";
+  const bookAbbrPeriodRegex = new RegExp(
+    `(\\b(?:[1-3][\\s\\u00A0]*)?(?:${SCRIPTURE_BOOKS_PATTERN}))\\.(?=[\\s\\u00A0]*\\d)`,
+    "gi"
+  );
+  return text.replace(bookAbbrPeriodRegex, "$1").replace(/(\d+)\s*:\s*(\d+)/g, "$1:$2");
+}
+
+// src/server/sabbathSchoolSyncService.ts
+function sanitizeSyncPayloadScriptures(payload) {
+  const dynamicLessonNum = `Lesson ${parseInt(payload.lessonId || "8", 10) || 8}`;
+  return {
+    ...payload,
+    memoryVerse: removeScriptureAbbreviationPeriods((payload.memoryVerse || "").replace(/^Memory\s*Text\s*:\s*/i, "").trim()),
+    readForThisWeek: removeScriptureAbbreviationPeriods(payload.readForThisWeek || ""),
+    videos: payload.videos ? {
+      featured: { ...payload.videos.featured, lessonNumberText: dynamicLessonNum },
+      itiswritten: { ...payload.videos.itiswritten, lessonNumberText: dynamicLessonNum },
+      hope: { ...payload.videos.hope, lessonNumberText: dynamicLessonNum },
+      threeABN: { ...payload.videos.threeABN, lessonNumberText: dynamicLessonNum }
+    } : payload.videos,
+    dailyLessons: (payload.dailyLessons || []).map((day) => ({
+      ...day,
+      title: removeScriptureAbbreviationPeriods(day.title || ""),
+      lessonContent: (day.lessonContent || []).map((p) => removeScriptureAbbreviationPeriods(p)),
+      egwNotes: (day.egwNotes || []).map((n) => removeScriptureAbbreviationPeriods(n))
+    })),
+    theologicalTakeaways: payload.theologicalTakeaways?.map((t) => ({
+      ...t,
+      description: removeScriptureAbbreviationPeriods(t.description || ""),
+      bulletPoints: t.bulletPoints?.map((b) => removeScriptureAbbreviationPeriods(b)),
+      supportingVerses: (t.supportingVerses || []).map((v) => removeScriptureAbbreviationPeriods(v).replace(/\./g, "").trim())
+    }))
+  };
+}
 var STORAGE_DIR = import_path.default.join(process.cwd(), "data", "sabbath-school-sync");
 var CACHE_FILE = import_path.default.join(STORAGE_DIR, "current_week.json");
 var TAKEAWAYS_CACHE_FILE = import_path.default.join(STORAGE_DIR, "theological_takeaways.json");
@@ -4409,7 +4560,7 @@ var CANONICAL_BASELINE = {
   lessonId: "04",
   lessonTitle: "New Testament Prophets",
   memoryVerse: "\u201CThere are diversities of gifts, but the same Spirit. There are differences of ministries, but the same Lord. And there are diversities of activities, but it is the same God who works all in all\u201D (1 Corinthians 12:4\u20136, NKJV).",
-  readForThisWeek: "Matt. 16:13\u201316, Eph. 2:20, Rev. 22:6, Luke 2:36\u201338, Acts 21:9, Eph. 6:10\u201318.",
+  readForThisWeek: "Matt 16:13\u201316, Eph 2:20, Rev 22:6, Luke 2:36\u201338, Acts 21:9, Eph 6:10\u201318.",
   startDate: "17/10/2026",
   endDate: "23/10/2026",
   lastSyncedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -4538,7 +4689,7 @@ var CANONICAL_BASELINE = {
       title: "New Testament Prophets",
       lessonContent: [
         "### Memory Verse\n> \u201CThere are diversities of gifts, but the same Spirit. There are differences of ministries, but the same Lord. And there are diversities of activities, but it is the same God who works all in all\u201D (1 Corinthians 12:4\u20136, NKJV).\n\n---",
-        "The New Testament church was established on the foundation of the apostles and prophets, Jesus Christ Himself being the chief cornerstone (Eph. 2:20). Through the prophetic office, God directed, comforted, and protected His early disciples.",
+        "The New Testament church was established on the foundation of the apostles and prophets, Jesus Christ Himself being the chief cornerstone (Eph 2:20). Through the prophetic office, God directed, comforted, and protected His early disciples.",
         "Just as prophets guided God's covenant people in the Old Testament, the Holy Spirit continued this divine gift in the apostolic era to build up the body of Christ."
       ],
       egwNotes: [
@@ -4554,7 +4705,7 @@ var CANONICAL_BASELINE = {
       dateString: "Sunday, October 18",
       title: "Jesus as Prophet",
       lessonContent: [
-        "Moses prophesied: 'The LORD your God will raise up for you a Prophet like me from your midst... Him you shall hear' (Deut. 18:15). Jesus Christ is the ultimate fulfillment of this promise.",
+        "Moses prophesied: 'The LORD your God will raise up for you a Prophet like me from your midst... Him you shall hear' (Deut 18:15). Jesus Christ is the ultimate fulfillment of this promise.",
         "Christ spoke not merely as an inspired messenger, but as the Living Word and supreme Author of all prophecy."
       ],
       egwNotes: [
@@ -4586,7 +4737,7 @@ var CANONICAL_BASELINE = {
       dateString: "Tuesday, October 20",
       title: "Functions of New Testament Prophets",
       lessonContent: [
-        "New Testament prophets fulfilled pastoral, foretelling, and forthtelling roles: edification, exhortation, and comfort (1 Cor. 14:3).",
+        "New Testament prophets fulfilled pastoral, foretelling, and forthtelling roles: edification, exhortation, and comfort (1 Cor 14:3).",
         "They guided church decisions (Acts 13:1-3) and warned of impending crises (Acts 11:27-30)."
       ],
       egwNotes: [
@@ -4618,8 +4769,8 @@ var CANONICAL_BASELINE = {
       dateString: "Thursday, October 22",
       title: "False Prophets in the New Testament",
       lessonContent: [
-        "Jesus and the apostles repeatedly warned against deceptive, self-proclaimed prophets (Matt. 7:15; 24:24; 1 John 4:1).",
-        "The biblical test of a true prophet requires: harmony with the Law and Testimony (Isa. 8:20), good moral fruits (Matt. 7:20), and confession of Christ's incarnation (1 John 4:2)."
+        "Jesus and the apostles repeatedly warned against deceptive, self-proclaimed prophets (Matt 7:15; 24:24; 1 John 4:1).",
+        "The biblical test of a true prophet requires: harmony with the Law and Testimony (Isa 8:20), good moral fruits (Matt 7:20), and confession of Christ's incarnation (1 John 4:2)."
       ],
       egwNotes: [
         "False prophets will arise and deceive many. Let all be on their guard against speculative theories that contradict the law and the testimony.\u2014The Great Controversy, p. 583."
@@ -4634,7 +4785,7 @@ var CANONICAL_BASELINE = {
       dateString: "Friday, October 23",
       title: "Keeping Jesus and His Word at the Center",
       lessonContent: [
-        "The testimony of Jesus is the spirit of prophecy (Rev. 19:10). All authentic prophetic manifestations point away from self and toward Jesus Christ and His written Word.",
+        "The testimony of Jesus is the spirit of prophecy (Rev 19:10). All authentic prophetic manifestations point away from self and toward Jesus Christ and His written Word.",
         "Sabbath School is our weekly sanctuary to ground our minds in Bible truth and prepare to teach others."
       ],
       egwNotes: [
@@ -4824,18 +4975,24 @@ async function scrapeOfficialLesson(targetDateStr) {
             if (idx === 0) {
               const memMatch = rawHtml.match(/<blockquote>([\s\S]*?)<\/blockquote>/i);
               if (memMatch) {
-                memoryVerse = memMatch[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+                memoryVerse = removeScriptureAbbreviationPeriods(
+                  memMatch[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
+                );
               }
               const readMatch = rawHtml.match(/Read for This Week’s Study<\/h3>\s*<p>([\s\S]*?)<\/p>/i);
               if (readMatch) {
-                readForThisWeek = readMatch[1].replace(/<[^>]+>/g, "").trim();
+                readForThisWeek = removeScriptureAbbreviationPeriods(
+                  readMatch[1].replace(/<[^>]+>/g, "").trim()
+                );
               }
             }
             const pMatches = rawHtml.match(/<(p|blockquote|h2|h3|h4)[^>]*>([\s\S]*?)<\/\1>/gi) || [];
             pMatches.forEach((block) => {
               const isHeading = /^<h[2-4]/i.test(block);
               const isQuote = /^<blockquote/i.test(block);
-              let clean = block.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+              let clean = removeScriptureAbbreviationPeriods(
+                block.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
+              );
               if (clean && !clean.includes("Memory Text:") && !clean.includes("Read for This Week\u2019s Study")) {
                 const lowerClean = clean.toLowerCase();
                 if (lowerClean.includes("quotations are taken from ellen") || lowerClean.includes("published by pacific press")) {
@@ -4845,14 +5002,14 @@ async function scrapeOfficialLesson(targetDateStr) {
                   clean
                 );
                 if (isEgwCitation) {
-                  egwNotes.push(clean.replace(/^Supplemental EGW Notes\s*/i, "").trim());
+                  egwNotes.push(removeScriptureAbbreviationPeriods(clean.replace(/^Supplemental EGW Notes\s*/i, "").trim()));
                 } else {
                   if (isHeading) {
                     contentParagraphs.push(`### ${clean}`);
                   } else if (isQuote) {
                     contentParagraphs.push(`> ${clean}`);
                   } else {
-                    clean = clean.replace(/([.?!])([A-Z0-9“"’'])/g, "$1 $2").replace(/([,;:])([A-Za-z0-9])/g, "$1 $2").trim();
+                    clean = clean.replace(/([.?!])([A-Z0-9“"’'])/g, "$1 $2").replace(/([,;])([A-Za-z])/g, "$1 $2").replace(/(\d+)\s*:\s*(\d+)/g, "$1:$2").trim();
                     contentParagraphs.push(clean);
                   }
                 }
@@ -4910,13 +5067,15 @@ async function executeSabbathSchoolSync(forceRefresh = false) {
   if (!forceRefresh && inMemorySyncCache) {
     const cachedTime = new Date(inMemorySyncCache.lastSyncedAt).getTime();
     if (Date.now() - cachedTime < 3 * 60 * 60 * 1e3 && !inMemorySyncCache.hasPendingRetries) {
+      inMemorySyncCache = sanitizeSyncPayloadScriptures(inMemorySyncCache);
       return inMemorySyncCache;
     }
   }
   if (!forceRefresh) {
     try {
       if (import_fs.default.existsSync(CACHE_FILE)) {
-        const cached = JSON.parse(import_fs.default.readFileSync(CACHE_FILE, "utf8"));
+        const rawCached = JSON.parse(import_fs.default.readFileSync(CACHE_FILE, "utf8"));
+        const cached = sanitizeSyncPayloadScriptures(rawCached);
         const cachedTime = new Date(cached.lastSyncedAt).getTime();
         const now = Date.now();
         if (now - cachedTime < 3 * 60 * 60 * 1e3 && !cached.hasPendingRetries) {
@@ -5106,14 +5265,15 @@ async function executeSabbathSchoolSync(forceRefresh = false) {
     }
   } catch (_tErr) {
   }
-  inMemorySyncCache = payload;
+  const cleanedPayload = sanitizeSyncPayloadScriptures(payload);
+  inMemorySyncCache = cleanedPayload;
   try {
-    import_fs.default.writeFileSync(CACHE_FILE, JSON.stringify(payload, null, 2), "utf8");
+    import_fs.default.writeFileSync(CACHE_FILE, JSON.stringify(cleanedPayload, null, 2), "utf8");
     console.log(`[Sabbath School Sync] Successfully synchronized and cached lesson "${lessonTitle}" with ${Object.keys(egwDailyBreakdown).length} EGW daily timestamps.`);
   } catch (fsErr) {
     console.warn("[Sabbath School Sync] Could not write cache file to disk (in-memory cache will be used):", fsErr);
   }
-  return payload;
+  return cleanedPayload;
 }
 function initSabbathSchoolCronScheduler() {
   console.log("[Sabbath School Scheduler] Initializing master automation scheduler (America/Cayman EST)...");
@@ -7009,30 +7169,167 @@ function safeParseAnyJSON(input) {
   return null;
 }
 app.post("/api/teach/chat", async (req, res) => {
-  const { scripture, messages, stage, userRole, isEvangelist } = req.body;
+  const {
+    scripture,
+    messages,
+    stage,
+    userRole,
+    isEvangelist,
+    userName: rawUserName,
+    isTopicSelection: explicitTopicSelection,
+    isSessionInit = false,
+    hasPriorSession = false,
+    lastStudiedTopic = ""
+  } = req.body;
   if (!scripture) {
     return res.status(400).json({ error: "Scripture context is required." });
   }
+  const studentName = String(rawUserName || "Noble Berean").trim();
+  const priorTopic = String(lastStudiedTopic || "").trim();
+  const hasPriorHistory = Boolean(hasPriorSession && priorTopic);
   const currentStageNum = stage ? stage.replace("stage", "") : "1";
   const stageNames = {
-    "stage1": "Exegesis & Original Context",
-    "stage2": "The Great Controversy Lens",
-    "stage3": "Doctrinal Implication & Fundamental Beliefs",
-    "stage4": "Practical Life-Reforming Application",
-    "stage5": "Graceful Evangelistic Invitation"
+    stage1: "Exegesis & Original Context",
+    stage2: "The Cosmic Lens & The Great Controversy",
+    stage3: "Doctrinal Connections & Fundamental Beliefs",
+    stage4: "Practical Life-Reforming Application",
+    stage5: "Graceful Evangelistic Invitation"
   };
-  const stageText = stageNames[stage] || "Exegesis";
+  const stageText = stageNames[stage] || "Exegesis & Original Context";
   const aiClient = getGeminiClient();
+  const buildStageFoundationalScriptures = (targetStage, ref) => {
+    const cleanRef = removeScriptureAbbreviationPeriods(String(ref || "2 Timothy 2:15").trim());
+    if (targetStage === "stage1") {
+      return [
+        {
+          reference: cleanRef,
+          role: "Primary Focal Passage",
+          stageInsight: "Establishes the authorial setting, grammatical structure, and lexical root of our primary text."
+        },
+        {
+          reference: "Isaiah 28:9-10",
+          role: "Biblical Hermeneutic",
+          stageInsight: "Defines the 'line upon line, precept upon precept' principle whereby Scripture interprets Scripture."
+        },
+        {
+          reference: "Luke 24:27",
+          role: "Christocentric Exegesis",
+          stageInsight: "Models how Christ expounded Moses and all the Prophets to reveal their unified fulfillment in Him."
+        },
+        {
+          reference: "Nehemiah 8:8",
+          role: "Expository Clarity",
+          stageInsight: "Illustrates reading the law of God distinctly and giving the sense so the people understand the reading."
+        }
+      ];
+    }
+    if (targetStage === "stage2") {
+      return [
+        {
+          reference: cleanRef,
+          role: "Primary Focal Passage",
+          stageInsight: "Serves as our spiritual bulwark against deception in the cosmic conflict over God's character."
+        },
+        {
+          reference: "Genesis 3:1-5",
+          role: "Origin of Deception",
+          stageInsight: "Exposes how the serpent initiated the Great Controversy by questioning and twisting God's spoken word."
+        },
+        {
+          reference: "Matthew 4:4",
+          role: "Wilderness Victory",
+          stageInsight: "Demonstrates Christ defeating Satan's out-of-context temptations by appealing to every word of God."
+        },
+        {
+          reference: "Revelation 12:9",
+          role: "Cosmic Unmasking",
+          stageInsight: "Unmasks the adversary's global warfare against truth and the testimony of Jesus."
+        }
+      ];
+    }
+    if (targetStage === "stage3") {
+      return [
+        {
+          reference: cleanRef,
+          role: "Primary Focal Passage",
+          stageInsight: "Anchors our doctrinal pillar in the infallible authority of the Holy Scriptures."
+        },
+        {
+          reference: "2 Timothy 3:16-17",
+          role: "Fundamental Belief #1",
+          stageInsight: "Confirms that all Scripture is God-breathed (theopneustos) and equips the believer for every good work."
+        },
+        {
+          reference: "Hebrews 8:1-2",
+          role: "Heavenly Sanctuary",
+          stageInsight: "Unites apostolic doctrine with Christ's high-priestly ministry in the true heavenly tabernacle."
+        },
+        {
+          reference: "Daniel 8:14",
+          role: "Prophetic Timeline",
+          stageInsight: "Grounds the Advent movement in the cleansing of the heavenly sanctuary and pre-advent judgment."
+        }
+      ];
+    }
+    if (targetStage === "stage4") {
+      return [
+        {
+          reference: cleanRef,
+          role: "Primary Focal Passage",
+          stageInsight: "Calls the disciple from passive reading to daily, life-reforming heart obedience."
+        },
+        {
+          reference: "Psalm 119:11",
+          role: "Internalized Word",
+          stageInsight: "Shows how treasuring God's Word in the heart guards daily thought and conduct from sin."
+        },
+        {
+          reference: "1 Timothy 4:15-16",
+          role: "Personal Sanctification",
+          stageInsight: "Urges wholehearted meditation and taking heed to doctrine for both personal and hearers' salvation."
+        },
+        {
+          reference: "James 1:22-25",
+          role: "Doers of the Word",
+          stageInsight: "Contrasts forgetful hearers with those who look into the perfect law of liberty and practice it daily."
+        }
+      ];
+    }
+    return [
+      {
+        reference: cleanRef,
+        role: "Primary Focal Passage",
+        stageInsight: "Equips the ambassador of Christ to share truth with clarity, humility, and winsome grace."
+      },
+      {
+        reference: "2 Timothy 2:2",
+        role: "Discipleship Multiplication",
+        stageInsight: "Commissions believers to entrust biblical truth to faithful witnesses who will teach others also."
+      },
+      {
+        reference: "1 Peter 3:15",
+        role: "Winsome Apologetics",
+        stageInsight: "Instructs us to give a reason for our hope with meekness and reverence toward every seeker."
+      },
+      {
+        reference: "Revelation 14:12",
+        role: "Final Remnant Appeal",
+        stageInsight: "Unites commandment-keeping loyalty with the living faith and loving character of Jesus."
+      }
+    ];
+  };
   const runFallback = () => {
     let reply = "";
     let stageFeedback = "";
-    let score = 80;
+    let score = 85;
+    let shouldAdvance = true;
+    let nextStageId = stage;
     let foundKeywords = [];
     let gaps = [];
     let ellenWhiteQuote = "";
     let devotionalPrompt = "";
     const userMessage = messages && messages.length > 0 ? messages[messages.length - 1].text : "";
-    const lowerMsg = userMessage ? userMessage.toLowerCase() : "";
+    const lowerMsg = userMessage ? userMessage.toLowerCase().trim() : "";
     if (scripture.keywords) {
       scripture.keywords.forEach((kw) => {
         if (lowerMsg.includes(kw.toLowerCase())) {
@@ -7042,94 +7339,127 @@ app.post("/api/teach/chat", async (req, res) => {
         }
       });
     }
-    if (stage === "stage1") {
-      const isSelectionTurn = lowerMsg.length < 35 || lowerMsg.includes("john") || lowerMsg.includes("3:16") || lowerMsg.includes("timothy") || lowerMsg.includes("exodus") || lowerMsg.includes("revelation") || lowerMsg.includes("daniel");
-      if (isSelectionTurn && !lowerMsg.includes("greek") && !lowerMsg.includes("context") && !lowerMsg.includes("author") && !lowerMsg.includes("meaning")) {
-        reply = `Excellent choice! Let us examine **${scripture.reference}**: *"${scripture.text}"*
+    const isSelectionTurn = Boolean(explicitTopicSelection) || stage === "stage1" && messages && messages.filter((m) => m.sender === "user").length <= 1 && (lowerMsg.length < 45 || !lowerMsg.includes("because") && !lowerMsg.includes("means") && !lowerMsg.includes("context") && !lowerMsg.includes("author"));
+    const topicOverview = `In our study of ${scripture.reference} ("${scripture.text}"), we examine how divine revelation equips the believer to rightly divide the Word of truth, trace the Great Controversy, anchor Seventh-day Adventist doctrine, and teach others with Christlike clarity.`;
+    const exegesisDemonstration = `Worked Exegesis Example (${scripture.reference}): In the original Koine Greek of 2 Timothy 2:15, Paul uses the compound verb "orthotomeo" (from orthos, "straight," and temno, "to cut"), picturing a craftsman cutting a straight stone or a plowman driving a straight furrow. Rather than reading human opinions into the text (eisegesis), the approved workman extracts the straight, intended meaning of Scripture in its historical and canonical context.`;
+    if (isSessionInit) {
+      shouldAdvance = false;
+      score = 0;
+      reply = hasPriorHistory ? `Welcome back, **${studentName}**! It is a blessing to study with you again in Teach It Studio. In our last session, we were exploring **${priorTopic}**. Our session adapts completely to your pace with no time limits\u2014you may pause and resume whenever you wish.
 
-To help us think through the exegetical process for **Stage 1: Exegesis & Original Context**:
-1. **Historical Background**: What is the authorial setting and original context of this passage?
-2. **Key Terms & Structure**: What are the key original terms or words in this text, and what do they signify?
-3. **Core Exegesis**: In your own words, how would you summarize the central meaning of this passage?
+**Would you like to continue our study on ${priorTopic}, or is there a new biblical topic or scripture verse you would like us to discuss today?**` : `Welcome, **${studentName}**! I am Elder Stephen, your pastoral mentor in Teach It Studio. Our session adapts completely to your pace with no time limits\u2014you may pause and resume whenever you wish.
 
-Please share your thoughts on these questions!`;
-        stageFeedback = `Passage ${scripture.reference} selected for Stage 1. Awaiting student's exegetical response.`;
-        score = 80;
-        ellenWhiteQuote = `"The Bible is its own expositor. Scripture is to be compared with scripture." - Education, p. 190`;
-        devotionalPrompt = "What is God revealing about His character in this text today?";
-      } else {
-        reply = `Thank you for sharing your exegesis on **${scripture.reference}**. You've laid out a solid, thoughtful foundation!
+**What biblical topic or scripture verse would you like us to discuss and prepare to teach today?**`;
+      stageFeedback = hasPriorHistory ? `Session resumed \u2014 recalled prior topic: ${priorTopic}.` : "Session initialized \u2014 awaiting topic or scripture selection.";
+      ellenWhiteQuote = `"The Bible is its own expositor. One passage will prove to be a key that will unlock other passages, and in this way light will be shed upon the hidden meaning of the word." \u2014 Fundamentals of Christian Education, p. 187`;
+      devotionalPrompt = "What is God revealing about His character of truth in this text today?";
+    } else if (isSelectionTurn) {
+      shouldAdvance = false;
+      score = 0;
+      reply = `Wonderful choice, ${studentName}! I have loaded **${scripture.reference}** onto your right-hand content slate along with a clear overview and **4 foundational scriptures** to anchor our study.
 
-Now, let us automatically proceed to the next step: **Stage 2: The Cosmic Lens & The Great Controversy**.
+### 1. Topic & Passage Overview
+We are examining **${scripture.reference}**: *"${scripture.text}"*\u2014exploring how God's Word serves as its own expositor and equips us as faithful teachers of truth.
 
-**Why is this step important?**
-The Cosmic Lens views scriptures through the grand perspective of the cosmic conflict between Christ and Satan over the character of God's love and law. This is critically important because it unveils the underlying spiritual warfare behind theological errors and exposes the adversary's efforts to counterfeit divine truth.
+### 2. Exegesis Demonstration on the Primary Text
+* **Historical & Literary Context**: Writing from his final Roman imprisonment, the Apostle Paul charges young Timothy to stand firm against speculative false teachings in Ephesus.
+* **Lexical Root Example**: The phrase *"rightly dividing"* translates the Greek verb **orthotome\u014D** (*\u1F40\u03C1\u03B8\u03BF\u03C4\u03BF\u03BC\u03AD\u03C9*), literally meaning *"to cut straight"* or *"to lay out a straight road"*\u2014teaching us to handle Scripture with precision and honesty rather than bending texts out of context.
 
-**Here is your question for Stage 2:**
-How does this passage fit into the cosmic conflict between Christ and Satan? How does rightly dividing this truth guard against theological compromises and spiritual deceptions?`;
-        stageFeedback = "Demonstrated clear recognition of authorial context and core keywords.";
-        score = 88;
-        ellenWhiteQuote = `"Diligent, prayerful study of the Scriptures will be rewarded. Every true seeker of truth will find that as he searches, new treasures will open before his understanding." - Signs of the Times, 1906`;
-        devotionalPrompt = "What is God calling you to study more deeply today?";
-      }
-    } else if (stage === "stage2") {
-      reply = `That is a profound Great Controversy integration! In the cosmic conflict, scripture is the primary tool used to vindicate God's character against Satan's accusations. By 'rightly dividing' the word of truth, we dismantle the sophistry and errors designed to lead people astray.
-
-Let us automatically proceed to the next step: **Step 3: Doctrinal Implication & Fundamental Beliefs**.
-
-**Why is this step important?**
-Doctrinal Connections systematically link our exegetical findings to the foundational pillars of our faith, specifically Seventh-day Adventist Fundamental Beliefs. Why is this important? Because it builds a cohesive, unified system of theology (line upon line, precept upon precept) so that we stay grounded as one body and are not shaken by temporary or deceptive teachings.
-
-**Here is your question for Step 3:**
-Connect this passage to Seventh-day Adventist Fundamental Beliefs (such as Fundamental Belief #1: Holy Scriptures). How does understanding this text shape our theological foundations?`;
-      stageFeedback = "Excellent framing of the cosmic scope. Connected the preservation of scriptural accuracy to vindicating the character of God.";
-      score = 82;
-      ellenWhiteQuote = `"The scripture is God's shield against the deceptive power of spiritual errors. Men must stand upon the rock of God's word, and division will cease as they submit to its guidance." - The Great Controversy, p. 593`;
-      devotionalPrompt = "In what ways can you actively stand as a witness for God's truth in your circle of influence this week?";
-    } else if (stage === "stage3") {
-      reply = `Superb connections! Connecting this to Fundamental Belief #1 (Holy Scriptures) is natural and correct. It shows that Scripture is the supreme standard of character, the test of experience, and the reliable revealer of doctrines.
-
-Let us automatically proceed to the next step: **Step 4: Practical Life-Reforming Application**.
-
-**Why is this step important?**
-Practical Application brings the intellectual and doctrinal content down to our individual daily walking experience. This is vital because scripture study is not an academic game; it is meant to sanctify the soul, reforming our actual behavior, habits, and daily schedules so we live an active testament of Christ's character.
-
-**Here is your question for Step 4:**
-How does this scripture reform your personal life, habits, mindset, or schedule tomorrow morning? Share concrete, direct real-life action steps.`;
-      stageFeedback = "Perfect theological alignment with Fundamental Belief #1. Highly coherent doctrinal outline.";
-      score = 90;
-      ellenWhiteQuote = `"A character aligned with the principles of Holy Scriptures is a character that God approves. He calls for workman who love truth because it sanctifies the soul." - Testimony of Jesus, Vol 4`;
-      devotionalPrompt = "Is your practical schedule reflecting detailed biblical study, or is it getting lost in the busyness of life?";
-    } else if (stage === "stage4") {
-      reply = `Outstanding practical study blueprint! Specifying deep focus rather than passive reading is standard-setting.
-
-Let us automatically proceed to the next step: **Step 5: Graceful Evangelistic Invitation**.
-
-**Why is this step important?**
-The Evangelistic Invitation prepares us to effectively and winsomely share our study discoveries with others. This is essential because disciples are called to teach others. Presenting deep truths with gentleness, winsomeness, and respect vindicates God's beautiful character of love and successfully draws seekers to Jesus.
-
-**Here is your question for Step 5:**
-How would you explain this truth gently and respectfully to a seeker, neighbor, or friend who doesn't share our faith background? Frame a warm, winsome appeal.`;
-      stageFeedback = "Excellent practical clarity. Provided concrete, actionable life reforms instead of generic advice.";
+### 3. Stage 1 Discussion Question (Self-Paced)
+Take all the time you need\u2014our session has no time limits, and you may pause or resume whenever you wish. **In your own words, ${studentName}, how does understanding the historical setting and the meaning of "cutting straight" (*orthotome\u014D*) shape the way we approach ${scripture.reference}?**`;
+      stageFeedback = `Topic & primary passage (${scripture.reference}) initialized on the right-hand slate with 4 foundational scriptures and a worked exegesis example.`;
+      ellenWhiteQuote = `"The Bible is its own expositor. One passage will prove to be a key that will unlock other passages, and in this way light will be shed upon the hidden meaning of the word." \u2014 Fundamentals of Christian Education, p. 187`;
+      devotionalPrompt = "What is God revealing about His character of truth in this text today?";
+    } else if (stage === "stage1") {
       score = 88;
-      ellenWhiteQuote = `"True religion is practical in its nature. It leads to self-discipline, meticulous faithfulness in daily labor, and a Christlike interest in others." - Christ's Object Lessons, p. 341`;
-      devotionalPrompt = "Who in your life needs to see this practical, gentle, active faith lived out in your actions?";
-    } else {
-      reply = `Wonderful evangelistic appeal! It was exceptionally winsome, filled with respect, and focused on Jesus as our personal Advocate.
+      shouldAdvance = true;
+      nextStageId = "stage2";
+      reply = `### Stage 1 Mastery Evaluation: ${score}%
+Excellent exegesis, ${studentName}! You clearly grasped the historical setting and how *orthotome\u014D* calls us to handle God's Word with integrity and precision. Because you have demonstrated strong comprehension, let us transition to **Stage 2: The Cosmic Lens & The Great Controversy**.
 
-This concludes our 5-stage interactive study cycle! I've compiled your diagnostic scorecard report below. You have proven yourself a true workman who is approved and unashamed!`;
-      stageFeedback = "Warm, balanced, and grace-filled appeal. Exceptional focus on Christ's character.";
+### Stage 2 Focus & Demonstration
+* **The Cosmic Lens**: Views ${scripture.reference} within the overarching conflict between Christ and Satan over God's character and law.
+* **Example**: From Genesis 3:1\u20135 to the wilderness of temptation (Matthew 4:4), the adversary has sought to subvert faith by quoting Scripture out of context, whereas Christ triumphed by standing upon the full harmony of the Word.
+
+### Stage 2 Engaging Question
+**How does ${scripture.reference} serve as a spiritual safeguard against deception and compromise in the Great Controversy today?**`;
+      stageFeedback = "Demonstrated clear comprehension of authorial context and lexical exegesis (88% mastery).";
+      ellenWhiteQuote = `"None but those who have fortified the mind with the truths of the Bible will stand through the last great conflict." \u2014 The Great Controversy, p. 593`;
+      devotionalPrompt = "How does God's Word shield your mind from subtle spiritual compromises today?";
+    } else if (stage === "stage2") {
+      score = 90;
+      shouldAdvance = true;
+      nextStageId = "stage3";
+      reply = `### Stage 2 Mastery Evaluation: ${score}%
+Profound Great Controversy insight, ${studentName}! You connected scriptural fidelity directly to vindicating God's character against deception. Having demonstrated solid comprehension, we now advance to **Stage 3: Doctrinal Connections & Fundamental Beliefs**.
+
+### Stage 3 Focus & Demonstration
+* **Doctrinal Harmony**: Connects our exegesis of ${scripture.reference} to Seventh-day Adventist Fundamental Beliefs (such as **Belief #1: The Holy Scriptures** and **Belief #24: Christ's Ministry in the Heavenly Sanctuary**).
+* **Example**: Comparing ${scripture.reference} with 2 Timothy 3:16\u201317 and Hebrews 8:1\u20132 shows that every true doctrine is anchored in Sola Scriptura and centers upon Jesus our High Priest.
+
+### Stage 3 Engaging Question
+**How would you connect ${scripture.reference} to the foundational pillars of Seventh-day Adventist doctrine so a student sees the unity of Scripture?**`;
+      stageFeedback = "Strong grasp of the Great Controversy framework and spiritual discernment (90% mastery).";
+      ellenWhiteQuote = `"The subject of the sanctuary was the key which unlocked the mystery of the disappointment of 1844. It opened to view a complete system of truth, connected and harmonious." \u2014 The Great Controversy, p. 423`;
+      devotionalPrompt = "How does seeing Christ at the center of every doctrine deepen your love for Him?";
+    } else if (stage === "stage3") {
+      score = 91;
+      shouldAdvance = true;
+      nextStageId = "stage4";
+      reply = `### Stage 3 Mastery Evaluation: ${score}%
+Superb doctrinal synthesis, ${studentName}! You clearly linked ${scripture.reference} to the foundational pillars of our faith. Let us now transition to **Stage 4: Practical Life-Reforming Application**.
+
+### Stage 4 Focus & Demonstration
+* **Sanctifying Application**: Translates sound doctrine into daily heart transformation and habits (Psalm 119:11; James 1:22\u201325).
+* **Example**: Rather than rushing through a chapter mechanically, an approved workman sets aside dedicated, prayerful study time to let the Word reform speech, priorities, and character.
+
+### Stage 4 Engaging Question
+**What concrete, practical step will you take in your daily routine tomorrow morning to live out the truth of ${scripture.reference}?**`;
+      stageFeedback = "Coherent doctrinal alignment with Fundamental Belief #1 and sanctuary truth (91% mastery).";
+      ellenWhiteQuote = `"True religion is practical in its nature. It leads to self-discipline, meticulous faithfulness in daily labor, and a Christlike interest in others." \u2014 Christ's Object Lessons, p. 341`;
+      devotionalPrompt = "What specific habit or priority is the Holy Spirit inviting you to reform through this text?";
+    } else if (stage === "stage4") {
       score = 92;
-      ellenWhiteQuote = `"In presenting truth with gentleness and respect, we represent Christ. Let our speech be seasoned with salt, showing that we have been with Jesus." - Evangelism, p. 483`;
+      shouldAdvance = true;
+      nextStageId = "stage5";
+      reply = `### Stage 4 Mastery Evaluation: ${score}%
+Wonderful, practical commitment, ${studentName}! True exegesis always blossoms into sanctified living. Let us now advance to our final stage\u2014**Stage 5: Graceful Evangelistic Invitation & Appeal**.
+
+### Stage 5 Focus & Demonstration
+* **Winsome Witness**: Prepares us to share ${scripture.reference} gently and clearly with a seeker, friend, or neighbor (2 Timothy 2:2; 1 Peter 3:15).
+* **Example**: Instead of arguing dogmatically, we invite a friend to open the Bible together and discover how God's Word speaks peace and hope to their heart.
+
+### Stage 5 Engaging Question
+**How would you frame a warm, Christ-centered invitation using ${scripture.reference} to encourage a seeker or neighbor to study the Bible with you?**`;
+      stageFeedback = "Clear, actionable life application rooted in personal sanctification (92% mastery).";
+      ellenWhiteQuote = `"In the common things of nature and of life, Jesus found the lessons with which He illustrated the highest truths." \u2014 Christ's Object Lessons, p. 335`;
+      devotionalPrompt = "Who has God placed in your life this week who needs a gentle, encouraging word from Scripture?";
+    } else {
+      score = 94;
+      shouldAdvance = true;
+      nextStageId = "feedback";
+      reply = `### Stage 5 Mastery Evaluation: ${score}%
+Beautiful, Christ-centered evangelistic appeal, ${studentName}! Your words reflect both doctrinal clarity and the tender, winsome love of Jesus.
+
+You have demonstrated outstanding comprehension across all 5 stages of our Teach It Studio journey! I have compiled your complete mastery report and pedagogy notes so you can review or download them as a PDF or DOCX file.`;
+      stageFeedback = "Winsome, grace-filled evangelistic invitation centered on Jesus Christ (94% mastery).";
+      ellenWhiteQuote = `"In presenting truth with gentleness and respect, we represent Christ. Let our speech be seasoned with salt, showing that we have been with Jesus." \u2014 Evangelism, p. 483`;
       devotionalPrompt = "Scripture studied. Now respond: What is God revealing about His character? What is He asking you to trust, release, or do?";
     }
-    reply += `
-
-*(Note: This is a structured local theological simulation. To make this 100% dynamic, connect your real GEMINI_API_KEY in the **Settings > Secrets** panel in AI Studio!)*`;
+    const activeOrNextStage = shouldAdvance && nextStageId !== "feedback" ? nextStageId : stage || "stage1";
+    const topicImportance = `Understanding ${scripture.reference} is vital because it anchors our faith in Sola Scriptura, prevents pulling texts out of context (eisegesis), and equips believers to discern God's character and share His truth faithfully.`;
     return res.json({
       reply,
       stageFeedback,
       score,
+      shouldAdvance,
+      isSessionInit,
+      isTopicSelection: Boolean(explicitTopicSelection) || stage === "stage1" && !isSessionInit && (!messages || messages.filter((m) => m.sender === "user").length <= 1),
+      topicTitle: `${scripture.reference} \u2014 Rightly Dividing the Word`,
+      topicOverview,
+      topicImportance,
+      exegesisDemonstration,
+      foundationalScriptures: buildStageFoundationalScriptures(activeOrNextStage, scripture.reference),
       foundKeywords,
       gaps,
       ellenWhiteQuote,
@@ -7140,77 +7470,70 @@ This concludes our 5-stage interactive study cycle! I've compiled your diagnosti
     return runFallback();
   }
   try {
-    const formattedHistory = (messages || []).map((m) => {
-      return {
-        role: m.sender === "ai" ? "model" : "user",
-        parts: [{ text: m.text }]
-      };
-    });
-    const systemInstruction = `You are the ultimate Scripture Active Recall interactive study tutor and pastoral mentor, Elder Stephen, inside the "Study To Be Approved" (STBA) application.
-Your mission is to guide Christians (such as SDA students, pastors, lay-evangelists, teachers, and scholars) in mastering Bible scripture passages through active recall and theological dialogue.
+    const formattedHistory = (messages || []).map((m) => ({
+      role: m.sender === "ai" ? "model" : "user",
+      parts: [{ text: m.text }]
+    }));
+    const userTurnsCount = (messages || []).filter((m) => m.sender === "user").length;
+    const isFirstTopicTurn = !isSessionInit && (Boolean(explicitTopicSelection) || stage === "stage1" && userTurnsCount <= 1);
+    const systemInstruction = `You are Elder Stephen, the pastoral mentor and Teach It Studio instructor inside the "Study To Be Approved" (STBA) ecosystem.
+You are guiding ${studentName} (Role: ${userRole || "Student"}) in a self-paced, no-time-limit interactive session on "${scripture.reference}" ("${scripture.text}").
+Session State: ${isSessionInit ? hasPriorHistory ? `SESSION_INIT_RETURNING (Last studied topic: "${priorTopic}")` : "SESSION_INIT_NEW_USER" : "ACTIVE_DIALOGUE"}
 
-Our methodology follows a rigorous, non-gamified 5-stage critical review cycle. For each step, the chat flow operates in a strict, progression loop:
-1. You analyze and evaluate the student's latest answer for the CURRENT stage, scoring it (from 0 to 100).
-2. You provide encouraging, deep, and scholastically sound pastoral feedback on their answer.
-3. You then IMMEDIATELY and automatically transition to the NEXT stage.
-4. For the NEXT stage, you MUST write down:
-   - A brief, clear explanation of what the stage is.
-   - Why it is of vital importance to true, deep Bible study and spiritual maturity.
-   - The specific study questions for that next stage, prompting the student to answer.
-5. If the student has just answered Stage 5, do NOT transition to a next stage. Instead, provide final evaluation, a warm pastoral blessing, and invite them to view the compiled diagnostic scorecard below!
+CORE TEACH IT STUDIO INSTRUCTIONAL PROTOCOL:
+0. Session Initiation (ONLY when Session State is SESSION_INIT_RETURNING or SESSION_INIT_NEW_USER):
+   - If SESSION_INIT_RETURNING: Output a warm, dynamic "Welcome back, ${studentName}!" greeting recalling their last studied topic ("${priorTopic}"), remind them the session adapts to their pace without time limits, and ask whether they would like to continue studying "${priorTopic}" or explore a new topic or verse today.
+   - If SESSION_INIT_NEW_USER: Warmly welcome ${studentName} by name, remind them the session adapts to their pace without time limits, and ask what biblical topic or scripture verse they would like to discuss today.
+   - Set "shouldAdvance": false and "score": 0.
 
-Here is the exact structure of the 5-Stage Exegetical Process:
+1. Welcome & Topic/Verse Selection (When isFirstTopicTurn is true or the user just named a topic/verse to study):
+   - Greet ${studentName} warmly by name and affirm their chosen topic or scripture ("${scripture.reference}").
+   - Provide a clear, concise overview of the topic or verse ("topicOverview") and 3 to 5 foundational scriptures ("foundationalScriptures") for the right-hand content slate.
+   - Demonstrate exegesis on the primary text ("${scripture.reference}") using a clear, concrete worked example (unpacking historical context, authorial intent, and a key Hebrew/Greek word root) in both "exegesisDemonstration" and your "reply".
+   - Conclude your "reply" by asking ${studentName} ONE clear, engaging question for Stage 1 (Exegesis & Original Context) to prompt discussion, reminding them that the session adapts to their pace with no time limits.
+   - Set "shouldAdvance": false and "score": 0 on this initial topic-selection turn so ${studentName} can answer your Stage 1 question first.
 
-- Stage 1: Exegesis & Original Context
-  - Focus: Analyzing the literal word meaning, original Greek/Hebrew terms (like 'orthotomeo' for 'rightly dividing' in 2 Timothy), historical setting, and original authorial intent.
-  - Why it's important: It is the indispensable foundation of study because it prevents us from pulling verses out of context or projecting our own preconceptions into God's Word (eisegesis).
-  - Questions: "What is the historical context of Paul writing to Timothy, and what does it mean to be a 'workman approved', 'rightly dividing' the word of truth?"
+2. Stage Transition Mechanism (When ${studentName} is responding to your stage question in Stage ${currentStageNum}: ${stageText}):
+   - Evaluate ${studentName}'s understanding through their response to your question.
+   - Assign a mastery rating percentage ("score": integer 0 to 100).
+   - If ${studentName} demonstrates sufficient comprehension ("score" >= 70):
+     * Set "shouldAdvance": true.
+     * In your "reply", warmly affirm their answer, state their Mastery Rating Percentage (e.g. "Stage ${currentStageNum} Mastery Rating: 90%"), and transition to the NEXT stage (or conclude if Stage 5 is complete).
+     * Provide a brief demonstration/example for the new stage and conclude with an engaging question for that next stage.
+   - If ${studentName} asks for clarification or has not yet demonstrated sufficient comprehension ("score" < 70):
+     * Set "shouldAdvance": false.
+     * Offer encouraging pastoral guidance and a clearer illustration for Stage ${currentStageNum}, then ask a helpful follow-up question to help them master the current stage at their own pace.
 
-- Stage 2: The Cosmic Lens & The Great Controversy
-  - Focus: Reading the scripture in light of the cosmic conflict between Christ and Satan over the character of God's love and law.
-  - Why it's important: It exposes the hidden spiritual warfare and deceptions behind theological errors, guarding us against compromises and keeping us vigilant.
-  - Questions: "How does this passage fit into the cosmic conflict between Christ and Satan? How is 'rightly dividing truth' essential to guarding against theological compromises and spiritual deceptions?"
+3. Right-Hand Information-Centric Slate Requirements:
+   - Return "foundationalScriptures": an array of 3 to 5 foundational scriptures for "${scripture.reference}".
+   - Each item in "foundationalScriptures" MUST have:
+     * "reference": Clean scripture citation with no periods in book abbreviations (e.g., "2 Timothy 2:15", "Isaiah 28:9-10").
+     * "role": Short 2-4 word role badge (e.g., "Primary Focal Passage", "Biblical Hermeneutic").
+     * "stageInsight": A concise 1-sentence insight directly tied to the active study stage (no generic boilerplate).
 
-- Stage 3: Doctrinal Implication & Fundamental Beliefs
-  - Focus: Connecting the exegetical findings to the systematic pillars of faith, specifically Seventh-day Adventist Fundamental Beliefs (e.g. Fundamental Belief #1: Holy Scriptures, #18: Prophecy, #24: Heavenly Sanctuary).
-  - Why it's important: It builds theological consistency and global unity of doctrine, ensuring we are not tossed about by every wind of doctrine.
-  - Questions: "Connect this passage to Seventh-day Adventist Fundamental Beliefs (such as Fundamental Belief #1: Holy Scriptures). How does understanding this text shape our theological foundations?"
-
-- Stage 4: Practical Life-Reforming Application
-  - Focus: Translating high-quality theology into actual personal transformation, self-discipline, and lifestyle reforms tomorrow morning.
-  - Why it's important: True religion is practical. Scripture study is not an academic game; it is meant to sanctify the soul and reform our habits, schedules, and behaviors to reflect Christ.
-  - Questions: "How does this scripture reform your personal life, habits, mindset, or schedule tomorrow morning? Share concrete, direct real-life action steps."
-
-- Stage 5: Graceful Evangelistic Invitation
-  - Focus: Framing study discoveries into a warm, winsome appeal to share with seekers, neighbors, or friends.
-  - Why it's important: Disciples are called to teach others. Presenting deep truths with gentleness, winsomeness, and respect vindicates God's character and draws seekers to Jesus.
-  - Questions: "How would you explain this truth gently and respectfully to a seeker, neighbor, or friend who doesn't share our faith background? Frame a warm, winsome appeal."
-
-Active target Scripture details:
-Reference: "${scripture.reference}"
-Text: "${scripture.text}"
-Target Keywords to look for in user response: ${JSON.stringify(scripture.keywords)}
-Current study stage answered: Stage ${currentStageNum} (${stageText})
-User Role background setting: ${userRole || "Student"}
-Evangelist scoring active: ${isEvangelist ? "YES - score specifically for clarity, grace, and doctrinal accuracy" : "NO"}
-
-CONVERSATION TASK:
-Analyze the user's latest response. You must evaluate their performance in the CURRENT study stage (Stage ${currentStageNum}), formulate an encouraging, scholarly reply, point out which target keywords were found or missed, cite an Ellen White / SDA Bible Commentary clarifying quote, provide a soul-stirring devotional reflection question, AND transition to explain and ask the next stage questions in your "reply".
-
-IMPORTANT RESPONSE CONSTRAINT:
-You must respond ONLY with a valid, clean JSON object matching the following TypeScript interface structure. Do NOT enclose it in markdown blocks or write any text before/after the JSON. It must be directly parseable.
-
-INTERFACE STRUCTURE:
+Return ONLY a valid JSON object matching this exact structure:
 {
-  "reply": "First, your warm, scholarly encouragement and feedback evaluating their response for Stage ${currentStageNum}. State your score. Then, announce the automatic progression to the next Stage. Provide a brief explanation of the next Stage in the 5-step exegesis, why it is of vital importance, and pose the next stage question organically.",
-  "stageFeedback": "A concise 1-2 sentence assessment of their level of depth and accuracy for this specific stage (Stage ${currentStageNum}).",
-  "score": 85, // An integer from 0 to 100 assessing this response's theological alignment and depth
-  "foundKeywords": ["keyword1", "keyword2"], // Array of strings from the scripture keyword list that they successfully mentioned, implied, or addressed
-  "gaps": ["keyword3"], // Array of target scripture keywords or primary doctrines they missed in their response
-  "ellenWhiteQuote": "A beautiful, relevant quote from Ellen White or the SDA Bible Commentary (with correct citation link) explaining this specific Bible verse in relation to light, truth, or the sanctuary.",
-  "devotionalPrompt": "What is God revealing about His character in this text? What is He asking you to trust, release, or do today?"
+  "reply": "Markdown-formatted pastoral response following the protocol above.",
+  "stageFeedback": "Concise 1-2 sentence pedagogical note for Stage ${currentStageNum}.",
+  "score": 88,
+  "shouldAdvance": ${isFirstTopicTurn ? "false" : "true"},
+  "isTopicSelection": ${isFirstTopicTurn ? "true" : "false"},
+  "topicTitle": "Concise title for the topic and ${scripture.reference}",
+  "topicOverview": "Clear 2-3 sentence overview of the topic or verse being studied.",
+  "topicImportance": "Clear 1-2 sentence explanation of why this topic or verse is important for faith and discipleship.",
+  "exegesisDemonstration": "Worked 2-3 sentence example demonstrating exegesis on ${scripture.reference} for the active stage.",
+  "foundationalScriptures": [
+    {
+      "reference": "${removeScriptureAbbreviationPeriods(scripture.reference)}",
+      "role": "Primary Focal Passage",
+      "stageInsight": "Concise 1-sentence theological relevance tied directly to the active study stage."
+    }
+  ],
+  "foundKeywords": ["study", "approved"],
+  "gaps": [],
+  "ellenWhiteQuote": "Relevant Ellen G. White quotation with book and page citation.",
+  "devotionalPrompt": "Reflective devotional question."
 }`;
-    if (!aiClient) return runFallback();
     const response = await generateContentWithFallback(aiClient, {
       model: "gemini-3.8-flash",
       contents: [
@@ -7229,22 +7552,17 @@ INTERFACE STRUCTURE:
     if (!outputText) {
       throw new Error("No response text received from Gemini server.");
     }
-    try {
-      const parsedJson = JSON.parse(outputText.trim());
-      return res.json(parsedJson);
-    } catch (parseError) {
-      console.error("Gemini output was not valid JSON:", outputText);
-      const cleaned = outputText.replace(/```json/g, "").replace(/```/g, "").trim();
-      try {
-        const parsedCleaned = JSON.parse(cleaned);
-        return res.json(parsedCleaned);
-      } catch (innerErr) {
-        return res.status(500).json({
-          error: "Failed to parse AI response into JSON format",
-          raw: outputText
-        });
-      }
-    }
+    const cleaned = outputText.replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsedJson = JSON.parse(cleaned);
+    const activeOrNextStage = parsedJson.shouldAdvance && Number(currentStageNum) < 5 ? `stage${Number(currentStageNum) + 1}` : stage || "stage1";
+    return res.json({
+      ...parsedJson,
+      foundationalScriptures: Array.isArray(parsedJson.foundationalScriptures) && parsedJson.foundationalScriptures.length >= 3 ? parsedJson.foundationalScriptures.slice(0, 5).map((s) => ({
+        reference: removeScriptureAbbreviationPeriods(String(s.reference || scripture.reference)),
+        role: String(s.role || "Foundational Text"),
+        stageInsight: String(s.stageInsight || "Illuminates the active study stage.")
+      })) : buildStageFoundationalScriptures(activeOrNextStage, scripture.reference)
+    });
   } catch (gemError) {
     console.log("[Gemini Fallback Status] In /api/teach/chat, gracefully activating local offline hermeneutics engine.");
     return runFallback();
@@ -10306,6 +10624,80 @@ Note constraints: generate EXACTLY 4 or 5 high-yield discussion cards in deckCar
     return runFallback();
   }
 });
+app.post("/api/sabbath/daily-syllabus-ai", async (req, res) => {
+  const {
+    dayIndex = 0,
+    dayTitle = "Daily Lesson Study",
+    lessonTitle = "Interpreting Prophetic Writings",
+    quarterlyTitle = "The Gift of Prophecy",
+    paragraphs = [],
+    references = []
+  } = req.body || {};
+  const cleanQuarter = String(quarterlyTitle || "The Gift of Prophecy").replace(/\s*\([^)]+\)\s*$/, "").trim();
+  const safeIdx = Number.isFinite(Number(dayIndex)) ? Number(dayIndex) : 0;
+  const refList = Array.isArray(references) ? references.map((r) => removeScriptureAbbreviationPeriods(String(r || "").trim())).filter(Boolean) : [];
+  const buildFallbackResponse = () => {
+    const refClause = refList.length > 0 ? ` (${refList.slice(0, 4).join("; ")})` : "";
+    const narrativeParagraphs = [
+      `In Lesson ${safeIdx + 1}, focusing on "${cleanQuarter}" and "${dayTitle}," we examine how the prophetic and apostolic witness of "${lessonTitle}"${refClause} illuminates Christ's redemptive mission. Rather than reading passages in isolation, comparing Scripture with Scripture within its historical and literary context opens our minds and hearts to the unified meaning of God's Word.`
+    ];
+    const scriptureInsights = {};
+    for (const ref of refList) {
+      scriptureInsights[ref] = `Explains the theological foundation of "${dayTitle}" within "${lessonTitle}," demonstrating how ${ref} reveals Christ's covenant faithfulness and guides sound biblical interpretation.`;
+    }
+    return { narrativeParagraphs, scriptureInsights };
+  };
+  const aiClient = getGeminiClient();
+  if (!aiClient) {
+    return res.json(buildFallbackResponse());
+  }
+  try {
+    const prompt = `You are the theological synthesizer for the Sabbath School Daily Syllabus in "Study To Be Approved" (STBA).
+Synthesize the following daily Sabbath School lesson into:
+1. "narrativeParagraphs": An array of 1 or 2 cohesive, multi-sentence narrative paragraphs (NO bullet points) that synthesize all key theological points and verse references from the day's lesson.
+   Follow this exact narrative style and tone:
+   Example: "In Lesson 1, focusing on \\"The Gift of Prophecy,\\" we examine Christ's interaction with two disciples on the road to Emmaus. Christ dispelled their disappointment by explaining scriptures in a broader context, opening their minds and hearts to the true meaning of Old Testament prophecies regarding his mission."
+2. "scriptureInsights": A JSON object mapping each scripture reference in [${refList.map((r) => `"${r}"`).join(", ")}] to a specific, 1-2 sentence theological insight explaining the theological relevance of that specific scripture in the context of today's lesson ("${dayTitle}").
+   CRITICAL: Do NOT include verbatim scripture quotes, do NOT copy raw sentences from the lesson, and do NOT use generic filler connections. Explain the specific theological relevance of each passage to the day's theme.
+
+Lesson Context:
+- Lesson Number: Lesson ${safeIdx + 1}
+- Quarterly Title: "${cleanQuarter}"
+- Weekly Lesson Title: "${lessonTitle}"
+- Day Title: "${dayTitle}"
+- Referenced Scriptures: ${refList.join(", ") || "None"}
+- Lesson Paragraphs:
+${Array.isArray(paragraphs) ? paragraphs.join("\n\n") : String(paragraphs || "")}
+
+Return ONLY valid JSON matching:
+{
+  "narrativeParagraphs": ["Paragraph 1...", "Paragraph 2..."],
+  "scriptureInsights": {
+    "Reference 1": "Specific theological insight..."
+  }
+}`;
+    const response = await generateContentWithFallback(aiClient, {
+      model: "gemini-3.8-flash",
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        systemInstruction: CSMS_SYSTEM_INSTRUCTION,
+        responseMimeType: "application/json",
+        thinkingConfig: {
+          thinkingLevel: import_genai.ThinkingLevel.LOW
+        }
+      },
+      timeoutMs: 15e3
+    });
+    const rawText = (response?.text || "").replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(rawText);
+    return res.json({
+      narrativeParagraphs: Array.isArray(parsed?.narrativeParagraphs) ? parsed.narrativeParagraphs.map((p) => removeScriptureAbbreviationPeriods(String(p))) : buildFallbackResponse().narrativeParagraphs,
+      scriptureInsights: parsed?.scriptureInsights || buildFallbackResponse().scriptureInsights
+    });
+  } catch (err) {
+    return res.json(buildFallbackResponse());
+  }
+});
 var FALLBACK_SABBATH_DAYS = [
   {
     label: "Day 1",
@@ -10653,11 +11045,15 @@ async function fetchSabbathSchoolLessonCore(options) {
         if (idx === 0 || !memory_text) {
           const memMatch = contentHtml.match(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/i);
           if (memMatch) {
-            memory_text = memMatch[1].replace(/<p[^>]*>\s*Memory Text:\s*<\/p>/gi, "").replace(/<[^>]+>/g, "").replace(/^Memory Text:\s*/i, "").trim();
+            memory_text = removeScriptureAbbreviationPeriods(
+              memMatch[1].replace(/<p[^>]*>\s*Memory Text:\s*<\/p>/gi, "").replace(/<[^>]+>/g, "").replace(/^Memory Text:\s*/i, "").trim()
+            );
           }
           const readMatch = contentHtml.match(/<h3[^>]*>Read for This Week’s Study<\/h3>\s*<p>([\s\S]*?)<\/p>/i);
           if (readMatch) {
-            read_for_this_weeks_study = readMatch[1].replace(/<[^>]+>/g, "").trim();
+            read_for_this_weeks_study = removeScriptureAbbreviationPeriods(
+              readMatch[1].replace(/<[^>]+>/g, "").trim()
+            );
           }
         }
       });
@@ -10677,7 +11073,9 @@ async function fetchSabbathSchoolLessonCore(options) {
           egwBlockMatch.forEach((block) => {
             const pMatches = block.match(/<p>([\s\S]*?)<\/p>/gi) || [];
             pMatches.forEach((p) => {
-              const txt = p.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+              const txt = removeScriptureAbbreviationPeriods(
+                p.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
+              );
               if (txt && !txt.toLowerCase().includes("quotations are taken from ellen g. white notes")) {
                 eg_white_notes.push(txt);
               }
@@ -10696,12 +11094,14 @@ async function fetchSabbathSchoolLessonCore(options) {
         contentBlockMatches.forEach((block) => {
           const isHeading = /^<h[2-4]/i.test(block);
           const isQuote = /^<blockquote/i.test(block);
-          let txt = block.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+          let txt = removeScriptureAbbreviationPeriods(
+            block.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
+          );
           if (txt) {
             if (txt.includes("Memory Text:")) return;
             if (txt.includes("Supplemental EGW Notes") || txt.includes("\u2014Sons and Daughters of God") || txt.includes("\u2014Ye Shall Receive Power")) {
               if (!txt.includes("quotations are taken from")) {
-                eg_white_notes.push(txt.replace(/^Supplemental EGW Notes\s*/i, "").trim());
+                eg_white_notes.push(removeScriptureAbbreviationPeriods(txt.replace(/^Supplemental EGW Notes\s*/i, "").trim()));
               }
             } else {
               if (isHeading) {
@@ -10709,15 +11109,15 @@ async function fetchSabbathSchoolLessonCore(options) {
               } else if (isQuote) {
                 lesson_content.push(`> ${txt}`);
               } else {
-                txt = txt.replace(/([.?!])([A-Z0-9“"’'])/g, "$1 $2").replace(/([,;:])([A-Za-z0-9])/g, "$1 $2").trim();
+                txt = txt.replace(/([.?!])([A-Z0-9“"’'])/g, "$1 $2").replace(/([,;])([A-Za-z])/g, "$1 $2").replace(/(\d+)\s*:\s*(\d+)/g, "$1:$2").trim();
                 lesson_content.push(txt);
               }
             }
           }
         });
         const fallbackDay = FALLBACK_SABBATH_DATA.dailyLessons[idx];
-        const finalContent = lesson_content && lesson_content.length > 0 ? lesson_content : fallbackDay?.content || ["Study the daily Scripture lesson diligently."];
-        const finalEgw = eg_white_notes && eg_white_notes.length > 0 ? eg_white_notes : fallbackDay?.egwNotes || [];
+        const finalContent = lesson_content && lesson_content.length > 0 ? lesson_content : (fallbackDay?.content || ["Study the daily Scripture lesson diligently."]).map((c) => removeScriptureAbbreviationPeriods(c));
+        const finalEgw = eg_white_notes && eg_white_notes.length > 0 ? eg_white_notes : (fallbackDay?.egwNotes || []).map((n) => removeScriptureAbbreviationPeriods(n));
         structuredDays[dayKey] = {
           title: d.title || `Day ${idx + 1}`,
           date: formattedDate,
@@ -10736,9 +11136,10 @@ async function fetchSabbathSchoolLessonCore(options) {
       return {
         selectedDate: targetDateStr,
         quarterlyTitle: cleanQuarterlyTitle,
+        lessonId,
         lessonTitle: overallLessonTitle,
         memoryVerse: memory_text,
-        read_for_this_weeks_study: read_for_this_weeks_study || "1 Corinthians 12, Eph. 4:11\u201313, 1 Corinthians 13, 1 Pet. 4:8\u201311.",
+        read_for_this_weeks_study: read_for_this_weeks_study || "1 Corinthians 12, Eph 4:11\u201313, 1 Corinthians 13, 1 Pet 4:8\u201311.",
         ...structuredDays,
         dailyLessons: dailyLessonsArray.length === 7 ? dailyLessonsArray : FALLBACK_SABBATH_DATA.dailyLessons,
         deckCards: FALLBACK_SABBATH_DATA.deckCards,
@@ -10752,9 +11153,10 @@ async function fetchSabbathSchoolLessonCore(options) {
   return {
     selectedDate: targetDateStr,
     quarterlyTitle: cleanQuarterlyTitle,
+    lessonId,
     lessonTitle: "Spiritual Gifts",
     memoryVerse: "\u201CPursue love, and earnestly desire the spiritual gifts, especially that you may prophesy\u201D (1 Corinthians 14:1, ESV).",
-    read_for_this_weeks_study: "1 Corinthians 12, Eph. 4:11\u201313, 1 Corinthians 13, 1 Pet. 4:8\u201311.",
+    read_for_this_weeks_study: "1 Corinthians 12, Eph 4:11\u201313, 1 Corinthians 13, 1 Pet 4:8\u201311.",
     dailyLessons: FALLBACK_SABBATH_DATA.dailyLessons,
     deckCards: FALLBACK_SABBATH_DATA.deckCards,
     lastScrapedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -13439,6 +13841,9 @@ wss.on("connection", async (clientWs, request) => {
   const activeTool = url.searchParams.get("tool") || url.searchParams.get("activeTool") || "Bible Reader";
   const lastPassage = url.searchParams.get("lastPassage") || "";
   const isNewUser = url.searchParams.get("isNewUser") === "true";
+  const hasPriorSession = url.searchParams.get("hasPriorSession") === "true";
+  const isContinuing = url.searchParams.get("isContinuing") === "true";
+  const priorStudiedTopic = contextTopic || lastPassage || scriptureRef;
   let doctrineContext = "";
   if (doctrineId) {
     if (doctrineId === "fundamental-beliefs") {
@@ -13613,57 +14018,45 @@ ${supporting.map((s) => `- ${s.reference}: ${s.text}`).join("\n")}
   }
   let liveSystemInstruction = "";
   if (isTeachMode) {
-    liveSystemInstruction = (doctrineContext ? doctrineContext + "\n\n" : "") + `You are the "Study To Be Approved" (STBA) oral exegesis vocal coach and pastoral mentor, Elder Stephen. Your voice is warm, calm, reverent, friendly, and supportive.
+    const priorStudiedTopic2 = isContinuing || hasPriorSession ? (contextTopic || lastPassage || "").trim() : "";
+    const missionPassageLine = priorStudiedTopic2 ? `on "${priorStudiedTopic2}"` : `on whatever biblical topic or scripture verse ${userName} chooses (do NOT pick or mention any verse yourself until ${userName} chooses one)`;
+    liveSystemInstruction = (doctrineContext && priorStudiedTopic2 ? doctrineContext + "\n\n" : "") + `You are Elder Stephen, the pastoral mentor and Teach It Studio instructor inside the "Study To Be Approved" (STBA) ecosystem. Your voice is warm, calm, reverent, friendly, and supportive.
 
-Your mission is to guide ${userName} vocally through a seamless, 5-stage Bible exegesis study session on ${scriptureRef || "2 Timothy 2:15"}${passageText ? ` ("${passageText}")` : ""}.
+Your mission is to guide ${userName} vocally through a self-paced, no-time-limit 5-stage Bible study and teaching preparation session ${missionPassageLine}.
 
-CRITICAL MANDATE: PROACTIVE GREETING & AUTOMATIC STAGE PROGRESSION (NO USER INITIATION NEEDED)
+CORE TEACH IT STUDIO PROTOCOL:
 
-1. Initiate with Greeting and Introduction:
-   - You MUST begin speaking proactively to greet ${userName} by name warmly: "Hello ${userName}, welcome to today\u2019s study session!"
-   - Immediately outline the five stages briefly so ${userName} knows what to expect:
-     \u2022 Stage 1: Exegesis & Original Context
-     \u2022 Stage 2: The Cosmic Lens & The Great Controversy
-     \u2022 Stage 3: Doctrinal Connections & Fundamental Beliefs
-     \u2022 Stage 4: Practical Life-Reforming Application
-     \u2022 Stage 5: Graceful Evangelistic Invitation & Appeal
-   - Do NOT wait for ${userName} to ask to begin or prompt you. Immediately introduce Stage 1 (Exegesis & Original Context) on our passage (${scriptureRef || "2 Timothy 2:15"}), explain the first concept, and invite their thoughts.
+1. Welcome by Name & Topic Inquiry:
+   - ${priorStudiedTopic2 ? `CONTINUING SESSION: Briefly say "Welcome back, ${userName}." and continue from where you left off on "${priorStudiedTopic2}" with one short follow-up question.` : `NEW SESSION: Your very first words must be exactly: "Welcome, ${userName}. What topic or verse would you like us to discuss today?" \u2014 then STOP talking and wait for ${userName} to answer. Do not add anything else, do not mention any verse, and do not call any tools before ${userName} answers.`}
+   - Reassure ${userName} that the session adapts completely to their pace without time limits, and can be paused or resumed at any time.
 
-2. Automatic Stage Progression (Stage 1 through Stage 5 without friction):
-   - Whenever ${userName} engages with a stage, you will acknowledge their understanding with warm, encouraging feedback and reassure them that they are progressing.
-   - Crucially, state an evaluation score out of 100 for their response and immediately announce the move to the next stage using this exact structure:
-     * After Stage 1: "I evaluate your Stage 1 response at 90% out of 100! Let's move on to Stage 2: The Cosmic Lens & The Great Controversy."
-     * After Stage 2: "I evaluate your Stage 2 response at 92% out of 100! Let's move on to Stage 3: Doctrinal Connections & Fundamental Beliefs."
-     * After Stage 3: "I evaluate your Stage 3 response at 90% out of 100! Let's move on to Stage 4: Practical Life-Reforming Application."
-     * After Stage 4: "I evaluate your Stage 4 response at 94% out of 100! Let's move on to Stage 5: Graceful Evangelistic Invitation & Appeal."
+2. Overview, 3\u20135 Foundational Scriptures, Exegesis Demonstration & Engaging Question:
+   - Once ${userName} chooses or confirms a topic or scripture:
+     a) IMMEDIATELY call the \`populateRightSlate\` tool as you initiate your explanation so the right-hand instructional board displays: (1) a clear outline/overview of the topic (\`topicOverview\`), (2) why it is important to study it (\`topicImportance\`), (3) 3 to 5 supporting foundational verses (\`foundationalScriptures\`), (4) a primary-text exegesis example (\`exegesisDemo\`), and (5) a 1-2 sentence pastoral reflection (\`egwCommentary\`) on why each believer must study and understand this topic for themselves from the Word.
+     b) Provide a clear, concise vocal overview of the topic or verse and note that the outline, importance rationale, and 3 to 5 foundational scriptures are now displayed on their right-hand content slate.
+     c) Demonstrate exegesis on the primary text YOU selected for ${userName}'s chosen topic (never default to 2 Timothy 2:15 unless ${userName} chose it), unpacking its historical context, authorial intent, and a key Hebrew or Greek word root.
+     d) Conclude by asking ${userName} ONE engaging question to prompt discussion for Stage 1 (Exegesis & Original Context).
+     e) Whenever you advance to a new stage or ${userName}'s responses deepen the study, call \`populateRightSlate\` again to keep the right-hand slate dynamically updated.
+
+3. Comprehension-Gated Stage Transition Mechanism (Stages 1 through 5):
+   - Evaluate ${userName}'s understanding through their response to your question.
+   - Assign a mastery rating percentage out of 100 (e.g., "I evaluate your Stage 1 response at 90%!") and transition to the next stage once ${userName} demonstrates sufficient comprehension (score >= 70%):
+     * Stage 1 -> Stage 2: "I evaluate your Stage 1 response at 90% out of 100! Let's move on to Stage 2: The Cosmic Lens & The Great Controversy."
+     * Stage 2 -> Stage 3: "I evaluate your Stage 2 response at 92% out of 100! Let's move on to Stage 3: Doctrinal Connections & Fundamental Beliefs."
+     * Stage 3 -> Stage 4: "I evaluate your Stage 3 response at 90% out of 100! Let's move on to Stage 4: Practical Life-Reforming Application."
+     * Stage 4 -> Stage 5: "I evaluate your Stage 4 response at 94% out of 100! Let's move on to Stage 5: Graceful Evangelistic Invitation & Appeal."
      * After Stage 5: "I evaluate your final Stage 5 response at 95% out of 100! Praise God! You have successfully completed all five stages of our study journey today!"
-   - Always state the evaluation score and announce the move to the next stage so the student's study interface advances in unison with your voice.
-
-3. No User Initiation Needed:
-   - The AI will NOT wait for the user to prompt or ask to proceed. You will NEVER say "Should we move on?" or wait for the user to ask to advance. Instead, smoothly guide ${userName} directly from one stage to the next.
+   - If ${userName} asks a clarifying question or needs more guidance before advancing, gently clarify with a clear example and ask a supportive follow-up question at their pace.
 
 4. The Five Stages:
-   - Stage 1: Exegesis & Original Context
-     * Explain: Uncovering what the text says in its original setting, authorial intent, and key Greek/Hebrew terms (e.g., 'orthotomeo' - rightly dividing / cutting a straight path).
-     * Question: Ask ${userName} how they understand the central meaning of this passage in its original setting.
-   - Stage 2: The Cosmic Lens & The Great Controversy
-     * Explain: Viewing the passage through the grand conflict between Christ and Satan over God's love and law, exposing deception.
-     * Question: Ask ${userName} how this truth guards against spiritual compromise in the cosmic war.
-   - Stage 3: Doctrinal Connections & Fundamental Beliefs
-     * Explain: Anchoring the scripture to Seventh-day Adventist Fundamental Beliefs (such as Belief #1: Holy Scriptures, Christ's sanctuary ministry, or the Sabbath).
-     * Question: Ask ${userName} how this passage connects to the broader pillars of biblical doctrine.
-   - Stage 4: Practical Life-Reforming Application
-     * Explain: Bringing the truth into our personal daily schedule, habits, and sanctification.
-     * Question: Ask ${userName} how this scripture reforms their personal habits, prayers, or routine tomorrow morning.
-   - Stage 5: Graceful Evangelistic Invitation & Appeal
-     * Explain: Preparing the disciple to teach others and share God's love winsomely with seekers.
-     * Question: Ask ${userName} how they would share this truth with a seeker or friend with kindness and clarity.
+   - Stage 1: Exegesis & Original Context \u2014 Historical setting, authorial intent, and original Greek/Hebrew terms.
+   - Stage 2: The Cosmic Lens & The Great Controversy \u2014 Viewing the text through the conflict between Christ and Satan over God's character and law.
+   - Stage 3: Doctrinal Connections & Fundamental Beliefs \u2014 Anchoring the passage to Seventh-day Adventist Fundamental Beliefs and Christ's sanctuary ministry.
+   - Stage 4: Practical Life-Reforming Application \u2014 Applying the truth to daily habits, prayer, and sanctification.
+   - Stage 5: Graceful Evangelistic Invitation & Appeal \u2014 Preparing to share the truth winsomely and gently with seekers.
 
 Overall Requirements:
-\u2022 Ensure the entire flow feels like a natural and intuitive journey through the stages.
-\u2022 Keep ${userName} engaged and reassured that they\u2019re progressing with each step.
-\u2022 Maintain a friendly, supportive tone while guiding ${userName} forward.
-\u2022 Speak ONLY the exact intended spoken response directly to ${userName} without reading any preliminary instructions or stage directions out loud, and finish every sentence cleanly without any trailing sound effects, sighs, or 'shh' noises.`;
+\u2022 Speak ONLY the exact intended spoken response directly to ${userName} without reading any preliminary instructions or stage directions out loud, and finish every sentence cleanly.`;
   } else {
     liveSystemInstruction = `You are Elder Stephen, the unified brain across all app modules in the "Study To Be Approved" (STBA) ecosystem. Deliver lead-driven exegesis, adapt guidance based on the workspace tool in use, and support smooth playback with click-state controls. Manage transitions to Teach It sessions, recalling active passages, and greet new users warmly to master the Bible.
 
@@ -13778,6 +14171,40 @@ UNIFIED BRAIN & DYNAMIC TOOL ADAPTATION:
                 }
               }).catch(() => {
               });
+            } else if (call.name === "populateRightSlate") {
+              const args = call.args || {};
+              const slateUpdate = {
+                topicTitle: String(args.topicTitle || scriptureRef || "Scripture Study"),
+                topicOverview: String(args.topicOverview || ""),
+                topicImportance: String(args.topicImportance || ""),
+                exegesisDemo: String(args.exegesisDemo || ""),
+                primaryReference: String(args.primaryReference || ""),
+                primaryText: String(args.primaryText || ""),
+                egwCommentary: String(args.egwCommentary || ""),
+                foundationalScriptures: Array.isArray(args.foundationalScriptures) ? args.foundationalScriptures.slice(0, 5).map((s) => ({
+                  reference: String(s?.reference || ""),
+                  role: String(s?.role || "Supporting Text"),
+                  stageInsight: String(s?.stageInsight || "")
+                })).filter((s) => s.reference) : []
+              };
+              console.log(`[STBA Live DEV] Tool Call populateRightSlate triggered for "${slateUpdate.topicTitle}" (${slateUpdate.foundationalScriptures.length} verses)`);
+              clientWs.send(JSON.stringify({ slateUpdate }));
+              sessionPromise.then((activeSession) => {
+                try {
+                  activeSession.sendToolResponse({
+                    functionResponses: [
+                      {
+                        id: call.id,
+                        name: call.name,
+                        response: { output: { success: true, topicTitle: slateUpdate.topicTitle } }
+                      }
+                    ]
+                  });
+                } catch (toolErr) {
+                  console.warn("[STBA Live DEV] populateRightSlate tool response dispatch error:", toolErr);
+                }
+              }).catch(() => {
+              });
             }
           }
         }
@@ -13835,6 +14262,57 @@ UNIFIED BRAIN & DYNAMIC TOOL ADAPTATION:
                 },
                 required: ["evaluatedStage", "score", "nextStage"]
               }
+            },
+            {
+              name: "populateRightSlate",
+              description: "Populates or updates the right-hand instructional board in Teach It Studio with the topic outline/overview, why the topic is important to study, 3 to 5 supporting foundational scriptures, and a primary-text exegesis example. Call this immediately when initiating your explanation of a chosen topic or verse, and whenever advancing stages.",
+              parameters: {
+                type: import_genai.Type.OBJECT,
+                properties: {
+                  topicTitle: {
+                    type: import_genai.Type.STRING,
+                    description: "Concise title of the biblical topic or primary scripture being studied"
+                  },
+                  topicOverview: {
+                    type: import_genai.Type.STRING,
+                    description: "Clear structured outline and overview of the topic or passage"
+                  },
+                  topicImportance: {
+                    type: import_genai.Type.STRING,
+                    description: "Why it is important for the disciple/teacher to study and master this topic"
+                  },
+                  primaryReference: {
+                    type: import_genai.Type.STRING,
+                    description: "The single best primary Bible text for THIS specific topic or verse the user chose (e.g. for 'Prophetic Ministry of Ellen White' use Revelation 12:17 or Revelation 19:10 \u2014 never default to 2 Timothy 2:15 unless the user chose it)"
+                  },
+                  primaryText: {
+                    type: import_genai.Type.STRING,
+                    description: "The KJV wording of the primary text"
+                  },
+                  egwCommentary: {
+                    type: import_genai.Type.STRING,
+                    description: "Elder Stephen's 1-2 sentence pastoral commentary on why it is essential for each disciple to understand the Bible and this specific topic for themselves, following the Ellen White quotation"
+                  },
+                  exegesisDemo: {
+                    type: import_genai.Type.STRING,
+                    description: "Concrete primary-text exegesis example unpacking historical context and original Hebrew/Greek terms"
+                  },
+                  foundationalScriptures: {
+                    type: import_genai.Type.ARRAY,
+                    description: "3 to 5 foundational supporting Bible verses for this topic",
+                    items: {
+                      type: import_genai.Type.OBJECT,
+                      properties: {
+                        reference: { type: import_genai.Type.STRING, description: "Bible verse reference, e.g. Matthew 25:41" },
+                        role: { type: import_genai.Type.STRING, description: "Short role label, e.g. Core Anchor, Prophetic Parallel" },
+                        stageInsight: { type: import_genai.Type.STRING, description: "Concise theological relevance of this verse to the current stage" }
+                      },
+                      required: ["reference", "role", "stageInsight"]
+                    }
+                  }
+                },
+                required: ["topicTitle", "topicOverview", "topicImportance", "primaryReference", "primaryText", "foundationalScriptures"]
+              }
             }
           ]
         }
@@ -13865,10 +14343,10 @@ UNIFIED BRAIN & DYNAMIC TOOL ADAPTATION:
       setTimeout(() => {
         try {
           if (session && !clientClosed && clientWs.readyState === import_ws.WebSocket.OPEN) {
-            console.log(`[STBA DEV LOG] Proactively triggering Live Gemini AI session intro for ${userName}...`);
-            session.sendRealtimeInput({
-              text: `[SYSTEM INSTRUCTION: Proactively begin speaking immediately out loud now. Greet ${userName} warmly by name: "Hello ${userName}, welcome to today's study session!" Immediately outline the five stages briefly so ${userName} knows what to expect: Stage 1: Exegesis & Original Context, Stage 2: The Cosmic Lens & The Great Controversy, Stage 3: Doctrinal Connections & Fundamental Beliefs, Stage 4: Practical Life-Reforming Application, and Stage 5: Graceful Evangelistic Invitation & Appeal. Then smoothly introduce Stage 1 (Exegesis & Original Context) on our target passage "${scriptureRef || "2 Timothy 2:15"}"${passageText ? ` ("${passageText}")` : ""}, explain the first concept, and invite their thoughts. Do NOT wait for ${userName} to speak or prompt you to start.]`
-            });
+            const continuingTopic = isContinuing || hasPriorSession ? (contextTopic || lastPassage || "").trim() : "";
+            console.log(`[STBA DEV LOG] Proactively triggering Live Gemini AI session intro for ${userName} (continuingTopic="${continuingTopic}")...`);
+            const kickoffPrompt = continuingTopic ? `[SYSTEM INSTRUCTION: Speak out loud now. Say "Welcome back, ${userName}." and continue briefly from where you left off on "${continuingTopic}", then ask one short follow-up question and wait.]` : `[SYSTEM INSTRUCTION: Speak out loud now. Say exactly and only: "Welcome, ${userName}. What topic or verse would you like us to discuss today?" Then stop and wait silently for ${userName} to answer. Do not mention any verse or topic and do not call any tools yet.]`;
+            session.sendRealtimeInput({ text: kickoffPrompt });
           }
         } catch (kickoffErr) {
           console.warn("[STBA DEV LOG] Proactive kickoff error:", kickoffErr);
