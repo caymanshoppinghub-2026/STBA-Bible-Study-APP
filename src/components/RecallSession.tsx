@@ -33,9 +33,121 @@ import {
 } from "lucide-react";
 import { Scripture } from "../types";
 import { callElderStephen } from "../lib/callElderStephen";
+import confetti from "canvas-confetti";
+import { playTransitionChime, playCelebrationChime, playGentleNudge } from "../utils/pleasantSounds";
 import { useApp } from "../context/AppContext";
 import { recordActivity } from "../utils/activityTracker";
 import { SCRIPTURE_DATABASE } from "../data/scriptureDb";
+import { bibleService } from "../services/bibleService";
+import { autoCompleteThirtyDayByScripture, ACTIVE_VERSE_REF_KEY } from "./recall/ThirtyDayRecallPlan";
+
+const CANONICAL_BIBLE_BOOKS: string[] = [
+  "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth",
+  "1 Samuel", "2 Samuel", "1 Kings", "2 Kings", "1 Chronicles", "2 Chronicles", "Ezra", "Nehemiah",
+  "Esther", "Job", "Psalm", "Psalms", "Proverbs", "Ecclesiastes", "Song of Solomon", "Isaiah",
+  "Jeremiah", "Lamentations", "Ezekiel", "Daniel", "Hosea", "Joel", "Amos", "Obadiah",
+  "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai", "Zechariah", "Malachi",
+  "Matthew", "Mark", "Luke", "John", "Acts", "Romans", "1 Corinthians", "2 Corinthians",
+  "Galatians", "Ephesians", "Philippians", "Colossians", "1 Thessalonians", "2 Thessalonians",
+  "1 Timothy", "2 Timothy", "Titus", "Philemon", "Hebrews", "James", "1 Peter", "2 Peter",
+  "1 John", "2 John", "3 John", "Jude", "Revelation"
+];
+
+const POPULAR_SUGGESTED_REFS: string[] = [
+  "Jeremiah 33:3",
+  "Jeremiah 29:11",
+  "John 3:16",
+  "Revelation 14:12",
+  "2 Timothy 3:16",
+  "Psalm 119:105",
+  "Daniel 8:14",
+  "Exodus 20:8-11",
+  "Isaiah 8:20",
+  "Ephesians 2:8-9",
+  "Philippians 4:13",
+  "Romans 8:28",
+  "Matthew 11:28",
+  "Hebrews 4:12",
+  "Proverbs 3:5-6"
+];
+
+function levenshteinDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[m][n];
+}
+
+function normalizeTypedBibleRef(raw: string): string {
+  let s = raw
+    .trim()
+    .replace(/\bchapter\s+/gi, "")
+    .replace(/\bverses?\s+/gi, ":")
+    .replace(/\s*:\s*/g, ":")
+    .replace(/\s+/g, " ")
+    .trim();
+  // Convert "Jeremiah 33 3" -> "Jeremiah 33:3"
+  s = s.replace(/^([1-3]?\s*[a-zA-Z]+(?:\s+[a-zA-Z]+)*)\s+(\d+)\s+(\d+(?:-\d+)?)$/, "$1 $2:$3");
+  return s;
+}
+
+function suggestMatchingReferences(rawInput: string): string[] {
+  const cleaned = normalizeTypedBibleRef(rawInput);
+  const lower = cleaned.toLowerCase();
+  if (!lower) return POPULAR_SUGGESTED_REFS.slice(0, 5);
+
+  const matchParts = cleaned.match(/^([1-3]?\s*[a-zA-Z]+(?:\s+[a-zA-Z]+)*)\s*(\d+(?::\d+(?:-\d+)?)?)?$/);
+  const bookPart = (matchParts?.[1] || cleaned).trim().toLowerCase();
+  const chapterVersePart = matchParts?.[2] || "";
+
+  const suggestions: string[] = [];
+
+  // 1. Fuzzy match canonical Bible books and preserve typed chapter:verse
+  const scoredBooks = CANONICAL_BIBLE_BOOKS.map((book) => {
+    const bl = book.toLowerCase();
+    const startsWith = bl.startsWith(bookPart) ? 0 : 1;
+    const dist = levenshteinDistance(bookPart, bl.slice(0, Math.max(bookPart.length, 3)));
+    const fullDist = levenshteinDistance(bookPart, bl);
+    return { book, score: startsWith * 10 + Math.min(dist, fullDist) };
+  })
+    .filter((b) => b.score <= 13)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 3);
+
+  for (const b of scoredBooks) {
+    if (chapterVersePart) {
+      const candidate = `${b.book} ${chapterVersePart.includes(":") ? chapterVersePart : `${chapterVersePart}:1`}`;
+      if (!suggestions.includes(candidate)) suggestions.push(candidate);
+    } else {
+      const popularForBook = POPULAR_SUGGESTED_REFS.filter((r) =>
+        r.toLowerCase().startsWith(b.book.toLowerCase())
+      );
+      for (const p of popularForBook) {
+        if (!suggestions.includes(p)) suggestions.push(p);
+      }
+      if (popularForBook.length === 0) {
+        suggestions.push(`${b.book} 1:1`);
+      }
+    }
+  }
+
+  // 2. Also include matching curated references
+  for (const r of POPULAR_SUGGESTED_REFS) {
+    if (r.toLowerCase().includes(bookPart) && !suggestions.includes(r)) {
+      suggestions.push(r);
+    }
+  }
+
+  return suggestions.slice(0, 5);
+}
 
 // Comprehensive catalog of curated SDA memory verses for instant lookup
 const ALL_LIBRARY_SCRIPTURES: Scripture[] = [
@@ -159,27 +271,96 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
   const location = useLocation();
   const locationScripture = location.state?.scripture as Scripture | undefined;
   
-  // Starting scripture context selection
-  const [selectedScripture, setSelectedScripture] = useState<Scripture>(() => {
-    return propScripture || locationScripture || PRESET_SCRIPTURES[0];
+  const GYM_SEQUENCE_STORAGE_KEY = "stba_gym_verse_sequence_v1";
+  const normalizeRefKey = (ref: string) => ref.toLowerCase().replace(/\s+/g, "").trim();
+
+  const prependVersesToSequence = (incoming: Scripture[], currentList: Scripture[]): Scripture[] => {
+    const seen = new Set<string>();
+    const result: Scripture[] = [];
+    for (const s of [...incoming, ...currentList]) {
+      if (!s?.reference || !s?.text) continue;
+      const key = normalizeRefKey(s.reference);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(s);
+    }
+    return result;
+  };
+
+  // Starting scripture context selection (supports single incoming verse OR full study track queue)
+  const incomingScripture = propScripture || locationScripture;
+  const incomingQueue = queue && queue.length > 0 ? queue : undefined;
+  const [verseSequence, setVerseSequence] = useState<Scripture[]>(() => {
+    let baseList: Scripture[] = [...PRESET_SCRIPTURES];
+    try {
+      const saved = localStorage.getItem(GYM_SEQUENCE_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          baseList = prependVersesToSequence(parsed, PRESET_SCRIPTURES);
+        }
+      }
+    } catch {}
+    const priorityBatch: Scripture[] = [
+      ...(incomingScripture ? [incomingScripture] : []),
+      ...(incomingQueue || [])
+    ];
+    return priorityBatch.length > 0 ? prependVersesToSequence(priorityBatch, baseList) : baseList;
   });
 
-  // Sync selected scripture when prop changes (e.g., when moving through due queue or clicking a review item)
+  const [selectedScripture, setSelectedScripture] = useState<Scripture>(() => {
+    return incomingScripture || incomingQueue?.[0] || verseSequence[0] || PRESET_SCRIPTURES[0];
+  });
+
+  const sequenceScrollRef = React.useRef<HTMLDivElement | null>(null);
+
+  const activateAndFrontVerse = (verse: Scripture, resetStep = false, batchQueue?: Scripture[]) => {
+    setSelectedScripture(verse);
+    setTypedText("");
+    setBlankAnswers({});
+    if (resetStep) setTrainerStep(1);
+    setVerseSequence((prev) => {
+      const priorityBatch = batchQueue && batchQueue.length > 0 ? [verse, ...batchQueue] : [verse];
+      const next = prependVersesToSequence(priorityBatch, prev);
+      try {
+        localStorage.setItem(GYM_SEQUENCE_STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(ACTIVE_VERSE_REF_KEY, verse.reference);
+      } catch {}
+      return next;
+    });
+    // Smoothly scroll strip back to the front so the highlighted active verse is always in view
+    requestAnimationFrame(() => {
+      sequenceScrollRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+    });
+  };
+
+  // Sync selected scripture & optional study-track queue whenever props or route state change
+  const incomingQueueKey = incomingQueue ? incomingQueue.map((q) => q.reference).join("|") : "";
   useEffect(() => {
-    if (propScripture) {
-      setSelectedScripture(propScripture);
-      setTypedText("");
-      setBlankAnswers({});
-      setTrainerStep(1);
+    if (incomingScripture) {
+      activateAndFrontVerse(incomingScripture, true, incomingQueue);
+    } else if (incomingQueue && incomingQueue.length > 0) {
+      activateAndFrontVerse(incomingQueue[0], true, incomingQueue);
     }
-  }, [propScripture]);
+  }, [incomingScripture?.id, incomingScripture?.reference, incomingScripture?.text, incomingQueueKey]);
+
+  const scrollVerseStrip = (direction: "left" | "right") => {
+    const el = sequenceScrollRef.current;
+    if (!el) return;
+    const offset = direction === "left" ? -380 : 380;
+    el.scrollBy({ left: offset, behavior: "smooth" });
+  };
 
   // Current step in the 4-step Recall Trainer flow
   // 1 = Select & Study, 2 = Verify (Type/Fill), 3 = Evaluate, 4 = Reflect & Finish
   const [trainerStep, setTrainerStep] = useState<1 | 2 | 3 | 4>(1);
 
-  // Custom reference input text state for Quick Lookup
+  // Custom reference input text state for Quick Lookup + strict validation & suggestive autocomplete
   const [customRefQuery, setCustomRefQuery] = useState<string>("");
+  const [isLoadingRef, setIsLoadingRef] = useState<boolean>(false);
+  const [refLookupError, setRefLookupError] = useState<string | null>(null);
+  const [refErrorSuggestions, setRefErrorSuggestions] = useState<string[]>([]);
+  const [showRefSuggestions, setShowRefSuggestions] = useState<boolean>(false);
 
   // Floating notifications popup state
   const [localPopup, setLocalPopup] = useState<{ title: string; message: string; type: string } | null>(null);
@@ -194,8 +375,47 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
     }
   }, [localPopup]);
 
-  // Input modes: "memory" (Type from memory) or "fill" (Fill in the blanks)
-  const [inputMode, setInputMode] = useState<"memory" | "fill">("memory");
+  // Input modes: "fill" (Fill in the blanks - default 1st) or "memory" (Type from memory - 2nd)
+  const [inputMode, setInputMode] = useState<"memory" | "fill">("fill");
+  const [transitionNotice, setTransitionNotice] = useState<string | null>(null);
+
+  // Trigger pleasant sound effects, celebratory confetti, and transition notification on step changes
+  useEffect(() => {
+    if (trainerStep === 2) {
+      playTransitionChime();
+      setTransitionNotice("Step 2: Active Recall Drill Engaged — Complete all blanks before revealing!");
+    } else if (trainerStep === 3) {
+      playCelebrationChime();
+      try {
+        confetti({ particleCount: 55, spread: 65, origin: { y: 0.65 }, colors: ["#DFC57B", "#F3CF65", "#2A9D8F", "#ffffff"] });
+      } catch {}
+      setTransitionNotice("Drill Completed! Reviewing your recall precision.");
+      // If practicing a Belief from Visual Memory Grid, unlock it in localStorage
+      if (selectedScripture?.id?.startsWith("belief-")) {
+        const beliefNum = parseInt(selectedScripture.id.replace("belief-", ""), 10);
+        if (!isNaN(beliefNum)) {
+          try {
+            const raw = localStorage.getItem("stba_vmg_mastered_beliefs");
+            const arr: number[] = raw ? JSON.parse(raw) : [];
+            if (!arr.includes(beliefNum)) {
+              localStorage.setItem("stba_vmg_mastered_beliefs", JSON.stringify([...arr, beliefNum]));
+            }
+          } catch {}
+        }
+      }
+    } else if (trainerStep === 4) {
+      playCelebrationChime();
+      try {
+        confetti({ particleCount: 80, spread: 75, origin: { y: 0.6 }, colors: ["#DFC57B", "#F3CF65", "#2A9D8F", "#ffffff"] });
+      } catch {}
+      setTransitionNotice("Mastery Milestone Reached! Well done, faithful scholar.");
+    } else {
+      return;
+    }
+
+    const t = setTimeout(() => setTransitionNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [trainerStep]);
 
   // User input states
   const [typedText, setTypedText] = useState<string>("");
@@ -383,6 +603,8 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
       console.error('Elder Stephen recall registration failed:', e);
     }
 
+    autoCompleteThirtyDayByScripture(selectedScripture.id, selectedScripture.reference);
+
     if (onComplete) {
       onComplete(performance.score, selectedScripture.id);
     } else {
@@ -390,40 +612,124 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
     }
   };
 
-  const handleReferenceSelectOrSearch = (refQuery: string) => {
-    if (!refQuery.trim()) return;
-    const cleanQuery = refQuery.toLowerCase().replace(/\s+/g, "");
-    
-    // Search in all curated scriptures
-    const matched = ALL_LIBRARY_SCRIPTURES.find(s => 
-      s.reference.toLowerCase().replace(/\s+/g, "") === cleanQuery ||
-      s.reference.toLowerCase().includes(refQuery.toLowerCase().trim())
-    ) || PRESET_SCRIPTURES.find(s =>
-      s.reference.toLowerCase().replace(/\s+/g, "") === cleanQuery ||
-      s.reference.toLowerCase().includes(refQuery.toLowerCase().trim())
-    );
+  const liveAutocompleteSuggestions = React.useMemo(() => {
+    const q = customRefQuery.trim().toLowerCase();
+    if (!q) return [];
+    const libraryMatches = [...ALL_LIBRARY_SCRIPTURES, ...PRESET_SCRIPTURES]
+      .filter((s) => s.reference.toLowerCase().includes(q))
+      .map((s) => ({ reference: s.reference, preview: s.text.slice(0, 62) }));
+    const suggestedRefs = suggestMatchingReferences(customRefQuery)
+      .map((r) => ({ reference: r, preview: "Fetch exact KJV passage" }));
+    const seen = new Set<string>();
+    const combined: { reference: string; preview: string }[] = [];
+    for (const item of [...libraryMatches, ...suggestedRefs]) {
+      const key = normalizeRefKey(item.reference);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      combined.push(item);
+    }
+    return combined.slice(0, 6);
+  }, [customRefQuery]);
 
-    if (matched) {
-      setSelectedScripture(matched);
-      setTypedText("");
-      setBlankAnswers({});
+  const handleReferenceSelectOrSearch = async (rawQuery: string) => {
+    const normalizedInput = normalizeTypedBibleRef(rawQuery);
+    if (!normalizedInput) return;
+
+    setRefLookupError(null);
+    setRefErrorSuggestions([]);
+    setShowRefSuggestions(false);
+
+    // Strict format check: must have book name + chapter:verse (e.g. "Jeremiah 33:3", "2 Timothy 3:16")
+    const hasChapterAndVerse = /^[1-3]?\s*[a-zA-Z]+(?:\s+[a-zA-Z]+)*\s+\d+:\d+(?:-\d+)?$/.test(normalizedInput);
+    const cleanKey = normalizeRefKey(normalizedInput);
+
+    // 1. Check EXACT normalized match in local curated catalog first
+    const exactLocalMatch =
+      ALL_LIBRARY_SCRIPTURES.find((s) => normalizeRefKey(s.reference) === cleanKey) ||
+      PRESET_SCRIPTURES.find((s) => normalizeRefKey(s.reference) === cleanKey);
+
+    if (exactLocalMatch) {
+      playTransitionChime();
+      activateAndFrontVerse(exactLocalMatch);
       setCustomRefQuery("");
-    } else {
-      // Fallback: If reference not in standard DB, create entry
-      setSelectedScripture({
-        id: `custom-${Date.now()}`,
-        reference: refQuery.trim(),
-        text: selectedScripture.text,
-        keywords: selectedScripture.keywords
-      });
+      return;
+    }
+
+    if (!hasChapterAndVerse) {
+      const suggestions = suggestMatchingReferences(normalizedInput);
+      setRefLookupError(
+        `Please include a valid book, chapter, and verse (for example: "Jeremiah 33:3" or "John 3:16").`
+      );
+      setRefErrorSuggestions(suggestions);
+      return;
+    }
+
+    // 2. Fetch the exact scripture text from Bible Service (KJV) — NEVER reuse previous verse text!
+    setIsLoadingRef(true);
+    try {
+      const passage = await bibleService.getPassage(normalizedInput, "KJV");
+      const rawText = (passage?.text || "").replace(/\s+/g, " ").trim();
+      const lowerText = rawText.toLowerCase();
+      const isInvalidText =
+        !rawText ||
+        rawText.length < 10 ||
+        lowerText.includes("invalid scripture") ||
+        lowerText.includes("unavailable") ||
+        lowerText.includes("unable to load") ||
+        lowerText.includes("could not be loaded") ||
+        lowerText.includes("not found");
+
+      if (isInvalidText) {
+        const suggestions = suggestMatchingReferences(normalizedInput);
+        setRefLookupError(
+          `Could not find "${normalizedInput}". Double-check the book name, chapter, and verse number—or pick a suggestion below.`
+        );
+        setRefErrorSuggestions(suggestions);
+        return;
+      }
+
+      const stopWords = new Set(["about", "above", "after", "again", "their", "there", "these", "those", "which", "shall", "would", "could", "should", "where", "untill"]);
+      const extractedKeywords = Array.from(
+        new Set(
+          rawText
+            .replace(/[^a-zA-Z\s]/g, "")
+            .split(/\s+/)
+            .filter((w) => w.length >= 5 && !stopWords.has(w.toLowerCase()))
+        )
+      ).slice(0, 5);
+
+      const loadedScripture: Scripture = {
+        id: `bible-${normalizeRefKey(passage.reference || normalizedInput)}`,
+        reference: passage.reference || normalizedInput,
+        text: rawText,
+        keywords: extractedKeywords.length > 0 ? extractedKeywords : ["Lord", "word", "truth"]
+      };
+
+      playTransitionChime();
+      activateAndFrontVerse(loadedScripture);
       setCustomRefQuery("");
+    } catch {
+      const suggestions = suggestMatchingReferences(normalizedInput);
+      setRefLookupError(
+        `Unable to verify "${normalizedInput}" right now. Check the reference format or try one of the suggestions below.`
+      );
+      setRefErrorSuggestions(suggestions);
+    } finally {
+      setIsLoadingRef(false);
     }
   };
 
-  // Check character thresholds for buttons
-  const isSubmissionDisabled = inputMode === "memory"
-    ? typedText.trim().length < 8
-    : Object.keys(blankAnswers).length === 0;
+  // Force full drill completion before allowing reveal & evaluation
+  const requiredBlankItems = getFillInTheBlankLayout().filter((item) => item.isPickWord);
+  const completedBlanksCount = requiredBlankItems.filter(
+    (item) => (blankAnswers[item.index] || "").trim().length > 0
+  ).length;
+  const isSubmissionDisabled =
+    inputMode === "memory"
+      ? typedText.trim().length < 15
+      : requiredBlankItems.length === 0
+        ? true
+        : completedBlanksCount < requiredBlankItems.length;
 
   const isQueuedSession = queue && queue.length > 0;
 
@@ -434,16 +740,20 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
     >
       {/* PERSISTENT HEADER BLOCK */}
       <header className="px-4 sm:px-6 py-4 border-b border-stone-800 bg-[#161D2B] flex flex-wrap items-center justify-between gap-3">
-        <button
-          onClick={onBack}
-          className="flex items-center space-x-2 text-stone-400 hover:text-white transition-colors text-xs uppercase tracking-wider font-bold cursor-pointer"
-          id="btn-close-trainer"
-        >
-          <ArrowLeft className="w-4 h-4 text-[#C9973A]" />
-          <span>Exit Gym</span>
-        </button>
+        {!isEmbedded ? (
+          <button
+            onClick={onBack}
+            className="flex items-center space-x-2 text-stone-400 hover:text-white transition-colors text-xs uppercase tracking-wider font-bold cursor-pointer"
+            id="btn-close-trainer"
+          >
+            <ArrowLeft className="w-4 h-4 text-[#C9973A]" />
+            <span>Exit Gym</span>
+          </button>
+        ) : (
+          <div className="w-20 hidden sm:block" aria-hidden="true" />
+        )}
 
-        <div className="text-center font-sans">
+        <div className="text-center font-sans flex-1">
           <span className="text-[10px] uppercase font-mono tracking-widest text-[#C9973A] font-extrabold flex items-center justify-center gap-1.5">
             <Brain className="w-3.5 h-3.5 shrink-0" />
             {isQueuedSession ? `DUE QUEUE: VERSE ${currentQueueIndex + 1} OF ${queue.length}` : "STBA RECALL TRAINER"}
@@ -453,10 +763,26 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
           </h2>
         </div>
 
-        <div className="bg-stone-900 border border-stone-800 text-[#C9973A] text-xs font-mono px-3 py-1 rounded-full uppercase font-bold">
+        <div className="bg-stone-900 border border-stone-800 text-[#C9973A] text-xs font-mono px-3 py-1 rounded-full uppercase font-bold shrink-0">
           Step {trainerStep} of 4
         </div>
       </header>
+
+      {/* CELEBRATORY TRANSITION NOTIFICATION BANNER */}
+      <AnimatePresence>
+        {transitionNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mx-4 sm:mx-6 mt-3 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#06162c] via-[#0d3060] to-[#06162c] border border-[#DFC57B]/70 text-[#F3CF65] text-xs font-mono font-bold flex items-center justify-center gap-2 shadow-lg"
+            id="recall-transition-toast"
+          >
+            <Sparkles className="w-4 h-4 text-[#F3CF65] shrink-0 animate-pulse" />
+            <span>{transitionNotice}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* RENDER DYNAMIC ACTIVE TRAINER STEP SHEETS */}
       <div className="flex-1 p-4 sm:p-6 md:p-8 flex flex-col justify-between" id="trainer-step-wrapper">
@@ -471,9 +797,9 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
-              className="space-y-6 text-left"
+              className="space-y-6 text-center"
             >
-              <div>
+              <div className="text-center max-w-2xl mx-auto">
                 <span className="text-[10px] uppercase font-mono tracking-widest text-[#C9973A] font-extrabold block">
                   Step 1: Scripture Selection & Preanalysis
                 </span>
@@ -485,80 +811,8 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
                 </p>
               </div>
 
-              {/* CARD PRESETS BOARD */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                {PRESET_SCRIPTURES.map((scrip) => {
-                  const isSelected = selectedScripture.id === scrip.id;
-                  return (
-                    <button
-                      key={scrip.id}
-                      onClick={() => {
-                        setSelectedScripture(scrip);
-                        setTypedText("");
-                        setBlankAnswers({});
-                      }}
-                      className={`p-3.5 rounded-xl border transition-all text-left flex flex-col justify-between h-28 cursor-pointer ${
-                        isSelected
-                          ? "bg-[#C9973A]/10 border-[#C9973A] shadow-md shadow-[#C9973A]/5"
-                          : "bg-stone-900/45 border-stone-800 hover:border-stone-700"
-                      }`}
-                    >
-                      <span className={`text-[11px] font-sans font-bold ${isSelected ? "text-[#C9973A]" : "text-stone-400"}`}>
-                        {scrip.reference}
-                      </span>
-                      <p className="text-[10.5px] text-stone-300 leading-snug line-clamp-3 font-bible font-normal">
-                        "{scrip.text}"
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* SELECT OR SEARCH BIBLE REFERENCE FROM SCRIPTURE LIBRARY */}
-              <div className="p-4 bg-stone-900/60 border border-stone-800 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-mono tracking-widest text-[#2A9D8F] font-extrabold block">
-                    Select or Search Bible Reference:
-                  </span>
-                  <span className="text-[10px] font-mono text-stone-400">
-                    Curated SDA Memory Scriptures
-                  </span>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      list="sda-scriptures-datalist"
-                      value={customRefQuery}
-                      onChange={(e) => setCustomRefQuery(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && customRefQuery.trim()) {
-                          handleReferenceSelectOrSearch(customRefQuery);
-                        }
-                      }}
-                      placeholder="Type or select reference (e.g. Revelation 14:6, Daniel 8:14, Romans 1:16...)"
-                      className="w-full bg-[#161D2B] border border-stone-800 rounded-lg p-2.5 text-xs text-stone-200 tracking-wider font-sans focus:outline-none focus:border-[#C9973A]"
-                    />
-                    <datalist id="sda-scriptures-datalist">
-                      {ALL_LIBRARY_SCRIPTURES.map((s, idx) => (
-                        <option key={`${s.id}-${idx}`} value={s.reference}>
-                          {s.reference} - {s.text.slice(0, 50)}...
-                        </option>
-                      ))}
-                    </datalist>
-                  </div>
-                  <button
-                    onClick={() => handleReferenceSelectOrSearch(customRefQuery)}
-                    disabled={!customRefQuery.trim()}
-                    className="px-5 py-2.5 bg-[#2A9D8F] hover:bg-[#20796E] disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs uppercase tracking-wider font-black rounded-lg transition-colors cursor-pointer shrink-0"
-                  >
-                    Load Reference
-                  </button>
-                </div>
-              </div>
-
-              {/* ACTIVE MEMORIZER SCREEN CANVAS */}
-              <div className="p-6 sm:p-7 bg-stone-900 border border-stone-800 rounded-xl shadow-2xl relative text-center">
+              {/* ACTIVE MEMORIZER SCREEN CANVAS (Main Passage at Top) */}
+              <div className="p-6 sm:p-7 bg-[#0B1324] border-2 border-[#DFC57B]/85 ring-1 ring-[#F3CF65]/30 rounded-xl shadow-[0_0_24px_rgba(223,197,123,0.18)] relative text-center" id="recall-main-passage-card">
                 <span className="text-[9px] uppercase font-mono tracking-widest text-stone-500 font-bold block mb-1">
                   Passage For Verbal Recollection Check:
                 </span>
@@ -572,6 +826,174 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
                   <span className="text-[9.5px] uppercase font-mono text-stone-500 tracking-widest">
                     · HOLY WRIT
                   </span>
+                </div>
+              </div>
+
+              {/* SELECT OR SEARCH BIBLE REFERENCE FROM SCRIPTURE LIBRARY */}
+              <div className="p-4 bg-stone-900/60 border border-stone-800 rounded-xl space-y-3 text-left" id="recall-search-reference-box">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-mono tracking-widest text-[#2A9D8F] font-extrabold block">
+                    Select or Search Bible Reference:
+                  </span>
+                  <span className="text-[10px] font-mono text-stone-400">
+                    Curated SDA Memory Scriptures
+                  </span>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={customRefQuery}
+                      onFocus={() => setShowRefSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowRefSuggestions(false), 180)}
+                      onChange={(e) => {
+                        setCustomRefQuery(e.target.value);
+                        setRefLookupError(null);
+                        setShowRefSuggestions(true);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && customRefQuery.trim() && !isLoadingRef) {
+                          e.preventDefault();
+                          handleReferenceSelectOrSearch(customRefQuery);
+                        }
+                      }}
+                      placeholder="Type any Bible reference (e.g. Jeremiah 33:3, John 3:16, Daniel 8:14...)"
+                      className="w-full bg-[#161D2B] border border-stone-700 rounded-lg p-2.5 text-xs text-stone-100 tracking-wider font-sans focus:outline-none focus:border-[#DFC57B]"
+                      id="recall-reference-search-input"
+                    />
+                    {/* Live Suggestive Autocomplete Dropdown */}
+                    {showRefSuggestions && liveAutocompleteSuggestions.length > 0 && (
+                      <div
+                        className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-[#0B1324] border border-[#DFC57B]/70 rounded-xl shadow-2xl overflow-hidden"
+                        id="recall-ref-suggestions"
+                      >
+                        {liveAutocompleteSuggestions.map((item) => (
+                          <button
+                            key={item.reference}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setCustomRefQuery(item.reference);
+                              handleReferenceSelectOrSearch(item.reference);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#0d3060] transition-colors flex items-center justify-between gap-3 border-b border-stone-800/70 last:border-b-0 cursor-pointer"
+                          >
+                            <span className="text-xs font-bold text-[#F3CF65] shrink-0">
+                              {item.reference}
+                            </span>
+                            <span className="text-[11px] text-stone-400 truncate">
+                              {item.preview}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    id="btn-load-reference"
+                    type="button"
+                    onClick={() => handleReferenceSelectOrSearch(customRefQuery)}
+                    disabled={!customRefQuery.trim() || isLoadingRef}
+                    className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-700/50 disabled:text-emerald-200/60 disabled:cursor-not-allowed text-[#041410] text-xs uppercase tracking-wider font-black rounded-lg transition-all cursor-pointer shrink-0 shadow-[0_0_16px_rgba(16,185,129,0.4)] hover:shadow-[0_0_22px_rgba(52,211,153,0.55)]"
+                  >
+                    {isLoadingRef ? "Loading..." : "Load Reference"}
+                  </button>
+                </div>
+
+                {/* Strict Validation Error & "Did You Mean?" Suggestions */}
+                {refLookupError && (
+                  <div
+                    className="p-3 rounded-xl bg-amber-950/50 border border-amber-500/60 text-xs text-amber-200 space-y-2"
+                    id="recall-ref-error-banner"
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <span>{refLookupError}</span>
+                    </div>
+                    {refErrorSuggestions.length > 0 && (
+                      <div className="flex items-center gap-2 flex-wrap pl-6">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300/90 font-bold">
+                          Did you mean:
+                        </span>
+                        {refErrorSuggestions.map((sug) => (
+                          <button
+                            key={sug}
+                            type="button"
+                            onClick={() => handleReferenceSelectOrSearch(sug)}
+                            className="px-2.5 py-1 rounded-lg bg-[#06162c] hover:bg-[#0d3060] border border-[#DFC57B]/70 text-[11px] font-bold text-[#F3CF65] transition-colors cursor-pointer"
+                          >
+                            {sug}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* DYNAMIC SCROLLABLE VERSE SEQUENCE (Active Verse Highlighted at Front; Prior Verses Step Back) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-stone-400">
+                    Active Verse Sequence · {verseSequence.length} Available (Scroll to Browse)
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => scrollVerseStrip("left")}
+                      aria-label="Scroll verses left"
+                      className="w-7 h-7 rounded-lg bg-[#06162c] border border-[#DFC57B]/50 hover:border-[#F3CF65] text-[#DFC57B] flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollVerseStrip("right")}
+                      aria-label="Scroll verses right"
+                      className="w-7 h-7 rounded-lg bg-[#06162c] border border-[#DFC57B]/50 hover:border-[#F3CF65] text-[#DFC57B] flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  ref={sequenceScrollRef}
+                  className="flex items-stretch gap-3 overflow-x-auto px-1 py-1.5 snap-x snap-mandatory scroll-smooth"
+                  id="recall-preset-cards-grid"
+                >
+                  {verseSequence.map((scrip, idx) => {
+                    const isSelected =
+                      selectedScripture.id === scrip.id ||
+                      normalizeRefKey(selectedScripture.reference) === normalizeRefKey(scrip.reference);
+                    return (
+                      <button
+                        key={`${scrip.id}-${idx}`}
+                        type="button"
+                        data-active-verse={isSelected ? "true" : "false"}
+                        onClick={() => activateAndFrontVerse(scrip)}
+                        className={`w-[172px] sm:w-[192px] shrink-0 snap-start p-3.5 rounded-xl transition-all text-left flex flex-col justify-between h-28 cursor-pointer ${
+                          isSelected
+                            ? "bg-[#0d3060]/85 border-2 border-[#F3CF65] ring-2 ring-[#DFC57B]/50 shadow-[0_0_18px_rgba(243,207,101,0.32)]"
+                            : "bg-[#06162c]/90 border-2 border-[#DFC57B]/55 hover:border-[#F3CF65] hover:bg-[#0d3060]/65 shadow-[0_2px_10px_rgba(0,0,0,0.35)]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 w-full">
+                          <span className={`text-[11px] font-sans font-bold truncate ${isSelected ? "text-[#F3CF65]" : "text-[#DFC57B]"}`}>
+                            {scrip.reference}
+                          </span>
+                          {isSelected && (
+                            <span className="text-[8px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#F3CF65]/20 border border-[#F3CF65]/50 text-[#F3CF65] font-bold shrink-0">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10.5px] text-stone-200 leading-snug line-clamp-3 font-bible font-normal">
+                          "{scrip.text}"
+                        </p>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -676,10 +1098,26 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
                   </p>
                 </div>
 
-                {/* DOUBLE MODE TABS (MEMORY VS FILL IN BLANKS) */}
+                {/* DOUBLE MODE TABS (FILL IN BLANKS FIRST, THEN TYPE FROM MEMORY) */}
                 <div className="flex bg-[#161D2B] p-1 rounded-lg border border-stone-800">
                   <button
-                    onClick={() => setInputMode("memory")}
+                    onClick={() => {
+                      playTransitionChime();
+                      setInputMode("fill");
+                    }}
+                    className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      inputMode === "fill"
+                        ? "bg-[#C9973A] text-[#1C2333]"
+                        : "text-stone-400 hover:text-stone-200"
+                    }`}
+                  >
+                    Fill in the Blanks
+                  </button>
+                  <button
+                    onClick={() => {
+                      playTransitionChime();
+                      setInputMode("memory");
+                    }}
                     className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                       inputMode === "memory"
                         ? "bg-[#C9973A] text-[#1C2333]"
@@ -687,16 +1125,6 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
                     }`}
                   >
                     Type From Memory
-                  </button>
-                  <button
-                    onClick={() => setInputMode("fill")}
-                    className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                      inputMode === "fill"
-                        ? "bg-[#s] bg-[#C9973A] text-[#1C2333]"
-                        : "text-stone-400 hover:text-stone-200"
-                    }`}
-                  >
-                    Fill in the Blanks
                   </button>
                 </div>
               </div>
@@ -766,18 +1194,28 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
               )}
 
               {/* ACTION BUTTON EVALUATE */}
-              <div className="pt-4 border-t border-stone-800 flex justify-between items-center bg-stone-900/0">
-                <span className="text-[10.5px] text-stone-450">
-                  {isSubmissionDisabled ? "Submit requires standard input parameters." : "Semantic checks ready!"}
+              <div className="pt-4 border-t border-stone-800 flex justify-between items-center bg-stone-900/0 gap-3 flex-wrap">
+                <span className="text-[11px] font-mono text-stone-400">
+                  {isSubmissionDisabled
+                    ? inputMode === "fill"
+                      ? `Complete all blanks before reveal (${completedBlanksCount}/${requiredBlankItems.length} filled).`
+                      : "Complete your scripture recall attempt (at least 15 characters) before reveal."
+                    : "Drill complete — ready to reveal & evaluate!"}
                 </span>
 
                 <button
                   disabled={isSubmissionDisabled}
-                  onClick={() => setTrainerStep(3)}
-                  className={`px-8 py-3.5 text-xs uppercase tracking-widest font-black rounded-xl transition-all shadow-md cursor-pointer flex items-center space-x-1 px-7 ${
+                  onClick={() => {
+                    if (isSubmissionDisabled) {
+                      playGentleNudge();
+                      return;
+                    }
+                    setTrainerStep(3);
+                  }}
+                  className={`px-8 py-3.5 text-xs uppercase tracking-widest font-black rounded-xl transition-all shadow-md flex items-center space-x-1.5 ${
                     isSubmissionDisabled
-                      ? "bg-stone-800 text-stone-600 cursor-not-allowed shadow-none"
-                      : "bg-[#2A9D8F] hover:bg-[#20796E] text-white"
+                      ? "bg-stone-800 text-stone-500 cursor-not-allowed shadow-none"
+                      : "bg-[#2A9D8F] hover:bg-[#20796E] text-white cursor-pointer"
                   }`}
                 >
                   <CheckCircle2 className="w-4 h-4" />

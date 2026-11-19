@@ -20,7 +20,7 @@ export function scheduleAutoSeedCoreLibrary(): void {
   const runSeed = async () => {
     try {
       const [{ PRESET_BIBLES, BIBLE_PRESETS }, { PRELOADED_SDABC_DATA }] = await Promise.all([
-        import("../../components/STBA/bibleData"),
+        import("../../components/stba/bibleData"),
         import("../../data/sdabcPreloadedData"),
       ]);
 

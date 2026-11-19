@@ -346,6 +346,39 @@ const THIRTY_DAY_CURRICULUM: PlanDay[] = [
   }
 ];
 
+export const THIRTY_DAY_PROGRESS_KEY = "stba_30day_progress";
+export const ACTIVE_VERSE_REF_KEY = "stba_active_verse_ref";
+export const THIRTY_DAY_ACTIVE_DAY_KEY = "stba_30day_active_day";
+
+export function autoCompleteThirtyDayByScripture(scriptureId?: string, reference?: string): number | null {
+  try {
+    const norm = (r: string) => r.toLowerCase().replace(/\s+/g, "").trim();
+    const matchedDay = THIRTY_DAY_CURRICULUM.find(
+      (d) =>
+        (scriptureId && scriptureId === `day-${d.day}`) ||
+        (reference && norm(d.reference) === norm(reference))
+    );
+    if (!matchedDay) return null;
+
+    const raw = localStorage.getItem(THIRTY_DAY_PROGRESS_KEY);
+    const current: number[] = raw ? JSON.parse(raw) : [];
+    if (!current.includes(matchedDay.day)) {
+      const updated = [...current, matchedDay.day].sort((a, b) => a - b);
+      localStorage.setItem(THIRTY_DAY_PROGRESS_KEY, JSON.stringify(updated));
+      const nextDay = Math.min(30, matchedDay.day + 1);
+      localStorage.setItem(THIRTY_DAY_ACTIVE_DAY_KEY, String(nextDay));
+      window.dispatchEvent(
+        new CustomEvent("stba-30day-progress-updated", {
+          detail: { completedDay: matchedDay.day, completedDays: updated, nextDay }
+        })
+      );
+    }
+    return matchedDay.day;
+  } catch {
+    return null;
+  }
+}
+
 export const ThirtyDayRecallPlan: React.FC<ThirtyDayRecallPlanProps> = ({
   onSelectVerseForPractice,
   onPlayInGamePack
@@ -354,28 +387,65 @@ export const ThirtyDayRecallPlan: React.FC<ThirtyDayRecallPlanProps> = ({
 
   const [completedDays, setCompletedDays] = useState<number[]>(() => {
     try {
-      const saved = localStorage.getItem("stba_30day_progress");
-      return saved ? JSON.parse(saved) : [1, 2];
-    } catch (e) {
-      return [1, 2];
+      const saved = localStorage.getItem(THIRTY_DAY_PROGRESS_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
   });
 
-  const [activePhase, setActivePhase] = useState<number>(0); // 0 = all, 1, 2, 3, 4
-  const [selectedDayNum, setSelectedDayNum] = useState<number>(1);
+  const [activePhase, setActivePhase] = useState<number>(1); // Maintain Phase 1 (Days 1–7) progression upfront
+  const [selectedDayNum, setSelectedDayNum] = useState<number>(() => {
+    try {
+      const savedRef = localStorage.getItem(ACTIVE_VERSE_REF_KEY);
+      if (savedRef) {
+        const norm = (r: string) => r.toLowerCase().replace(/\s+/g, "").trim();
+        const matchByRef = THIRTY_DAY_CURRICULUM.find((d) => norm(d.reference) === norm(savedRef));
+        if (matchByRef) return matchByRef.day;
+      }
+      const savedDay = Number(localStorage.getItem(THIRTY_DAY_ACTIVE_DAY_KEY));
+      if (savedDay >= 1 && savedDay <= 30) return savedDay;
+    } catch {}
+    return 1;
+  });
 
-  const selectedDay = THIRTY_DAY_CURRICULUM.find(d => d.day === selectedDayNum) || THIRTY_DAY_CURRICULUM[0];
-
-  const toggleDayCompletion = (dayNum: number) => {
-    let next: number[];
-    if (completedDays.includes(dayNum)) {
-      next = completedDays.filter(d => d !== dayNum);
-    } else {
-      next = [...completedDays, dayNum];
-      showConfetti("recall");
+  // Keep activePhase synced if persisted active verse belongs to another phase
+  useEffect(() => {
+    const dayObj = THIRTY_DAY_CURRICULUM.find((d) => d.day === selectedDayNum);
+    if (dayObj && activePhase !== 0 && activePhase !== dayObj.phase) {
+      setActivePhase(dayObj.phase);
     }
-    setCompletedDays(next);
-    localStorage.setItem("stba_30day_progress", JSON.stringify(next));
+  }, [selectedDayNum]);
+
+  // Listen for automated task-finish completion events from Recall Gym & Scripture Game Pack
+  useEffect(() => {
+    const handleProgressSync = (e: Event) => {
+      const custom = e as CustomEvent<{ completedDay?: number; completedDays?: number[]; nextDay?: number }>;
+      if (Array.isArray(custom.detail?.completedDays)) {
+        setCompletedDays(custom.detail.completedDays);
+        showConfetti("recall");
+      } else {
+        try {
+          const saved = localStorage.getItem(THIRTY_DAY_PROGRESS_KEY);
+          if (saved) setCompletedDays(JSON.parse(saved));
+        } catch {}
+      }
+    };
+    window.addEventListener("stba-30day-progress-updated", handleProgressSync);
+    return () => window.removeEventListener("stba-30day-progress-updated", handleProgressSync);
+  }, [showConfetti]);
+
+  const selectedDay = THIRTY_DAY_CURRICULUM.find((d) => d.day === selectedDayNum) || THIRTY_DAY_CURRICULUM[0];
+
+  const handleSelectDay = (dayNum: number) => {
+    setSelectedDayNum(dayNum);
+    const dayObj = THIRTY_DAY_CURRICULUM.find((d) => d.day === dayNum);
+    try {
+      localStorage.setItem(THIRTY_DAY_ACTIVE_DAY_KEY, String(dayNum));
+      if (dayObj) {
+        localStorage.setItem(ACTIVE_VERSE_REF_KEY, dayObj.reference);
+      }
+    } catch {}
   };
 
   const filteredDays = activePhase === 0
@@ -398,8 +468,8 @@ export const ThirtyDayRecallPlan: React.FC<ThirtyDayRecallPlanProps> = ({
           <h2 className="text-xl sm:text-2xl font-serif font-bold text-white mt-1">
             The 30-Day Discipleship Scripture Track
           </h2>
-          <p className="text-xs text-stone-400">
-            A structured day-by-day progression taking you from foundational inspiration to the glorious climax of the Three Angels' Messages.
+          <p className="text-xs sm:text-sm text-stone-300 leading-relaxed mt-1 max-w-3xl" id="thirty-day-description">
+            The 30-Day Discipleship Scripture Track is a structured, progressive Bible memorization module within the StudyToBeApproved platform that guides users through daily foundational scriptures across key theological phases to build lasting scriptural retention and spiritual readiness.
           </p>
         </div>
 
@@ -456,13 +526,15 @@ export const ThirtyDayRecallPlan: React.FC<ThirtyDayRecallPlanProps> = ({
               return (
                 <button
                   key={item.day}
-                  onClick={() => setSelectedDayNum(item.day)}
-                  className={`p-2 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer border text-center ${
+                  type="button"
+                  data-active-day={isCurrent ? "true" : "false"}
+                  onClick={() => handleSelectDay(item.day)}
+                  className={`p-2 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer border-2 text-center ${
                     isCurrent
-                      ? "bg-[#DFC57B] text-[#06162c] font-bold border-[#DFC57B] shadow-md ring-2 ring-[#DFC57B]/50"
+                      ? "bg-[#DFC57B] text-[#06162c] font-bold border-[#F3CF65] shadow-[0_0_14px_rgba(243,207,101,0.4)] ring-2 ring-[#DFC57B]/50"
                       : isDone
-                      ? "bg-[#06162c] border-[#DFC57B]/60 text-[#DFC57B]"
-                      : "bg-stone-900 border-stone-800 text-stone-400 hover:border-stone-700"
+                      ? "bg-[#06162c] border-emerald-400/70 text-emerald-300"
+                      : "bg-[#06162c]/80 border-[#DFC57B]/40 text-stone-300 hover:border-[#F3CF65]"
                   }`}
                 >
                   <span className="text-[9px] font-mono">DAY</span>
@@ -489,25 +561,34 @@ export const ThirtyDayRecallPlan: React.FC<ThirtyDayRecallPlanProps> = ({
                 {selectedDay.topic}
               </h3>
             </div>
-            <button
-              onClick={() => toggleDayCompletion(selectedDay.day)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            <div
+              id="thirty-day-completion-badge"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
                 completedDays.includes(selectedDay.day)
-                  ? "bg-[#DFC57B] text-[#06162c]"
-                  : "bg-stone-800 hover:bg-stone-700 text-stone-300"
+                  ? "bg-emerald-950/70 border-emerald-400/70 text-emerald-300"
+                  : "bg-[#06162c] border-[#DFC57B]/50 text-[#DFC57B]"
               }`}
             >
               <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>{completedDays.includes(selectedDay.day) ? "Completed" : "Mark Complete"}</span>
-            </button>
+              <span>
+                {completedDays.includes(selectedDay.day)
+                  ? "Completed Automatically"
+                  : "Auto-Completes on Finish"}
+              </span>
+            </div>
           </div>
 
           {/* SCRIPTURE DISPLAY */}
-          <div className="p-4 bg-[#161D2B] border border-stone-800 rounded-xl space-y-2">
-            <span className="text-xs font-serif font-bold text-[#DFC57B]">
-              {selectedDay.reference}
-            </span>
-            <p className="text-sm font-sans text-stone-100 font-semibold leading-relaxed">
+          <div className="p-4 bg-[#0B1324] border-2 border-[#DFC57B]/85 ring-1 ring-[#F3CF65]/25 rounded-xl space-y-2 shadow-[0_0_18px_rgba(223,197,123,0.14)]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-serif font-bold text-[#F3CF65]">
+                {selectedDay.reference}
+              </span>
+              <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-[#F3CF65]/20 border border-[#F3CF65]/50 text-[#F3CF65] font-bold">
+                Active Verse
+              </span>
+            </div>
+            <p className="text-sm font-bible text-white font-semibold leading-relaxed">
               "{selectedDay.text}"
             </p>
           </div>
@@ -541,12 +622,18 @@ export const ThirtyDayRecallPlan: React.FC<ThirtyDayRecallPlanProps> = ({
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-800">
             {onSelectVerseForPractice && (
               <button
-                onClick={() => onSelectVerseForPractice({
-                  id: `day-${selectedDay.day}`,
-                  reference: selectedDay.reference,
-                  text: selectedDay.text,
-                  keywords: selectedDay.keywords
-                })}
+                onClick={() => {
+                  try {
+                    localStorage.setItem(THIRTY_DAY_ACTIVE_DAY_KEY, String(selectedDay.day));
+                    localStorage.setItem(ACTIVE_VERSE_REF_KEY, selectedDay.reference);
+                  } catch {}
+                  onSelectVerseForPractice({
+                    id: `day-${selectedDay.day}`,
+                    reference: selectedDay.reference,
+                    text: selectedDay.text,
+                    keywords: selectedDay.keywords
+                  });
+                }}
                 className="px-4 py-2 bg-[#DFC57B] hover:bg-[#F3CF65] text-[#06162c] text-xs font-black rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <Brain className="w-3.5 h-3.5" />
@@ -557,12 +644,18 @@ export const ThirtyDayRecallPlan: React.FC<ThirtyDayRecallPlanProps> = ({
             {onPlayInGamePack && (
               <button
                 type="button"
-                onClick={() => onPlayInGamePack({
-                  id: `day-${selectedDay.day}`,
-                  reference: selectedDay.reference,
-                  text: selectedDay.text,
-                  keywords: selectedDay.keywords
-                })}
+                onClick={() => {
+                  try {
+                    localStorage.setItem(THIRTY_DAY_ACTIVE_DAY_KEY, String(selectedDay.day));
+                    localStorage.setItem(ACTIVE_VERSE_REF_KEY, selectedDay.reference);
+                  } catch {}
+                  onPlayInGamePack({
+                    id: `day-${selectedDay.day}`,
+                    reference: selectedDay.reference,
+                    text: selectedDay.text,
+                    keywords: selectedDay.keywords
+                  });
+                }}
                 className="workspace-tool-btn px-4 py-2.5 bg-[#06162c] hover:bg-[#0d3060] text-stone-200 hover:text-white border border-[#DFC57B]/70 hover:border-[#F3CF65] text-xs font-sans font-semibold rounded-xl sm:rounded-2xl transition-all duration-200 cursor-pointer inline-flex items-center gap-2 hover:shadow-[0_4px_16px_rgba(223,197,123,0.3)]"
               >
                 <Gamepad2 className="w-4 h-4 text-[#DFC57B] shrink-0" />

@@ -2662,6 +2662,46 @@ Return strictly JSON matching this structure:
   }
 });
 
+// Gemini-Powered Recall Audio Transcription (reliable cross-browser fallback when Web SpeechRecognition is blocked/offline)
+app.post("/api/recall/transcribe", async (req, res) => {
+  const { audioBase64, mimeType = "audio/webm" } = req.body || {};
+  if (!audioBase64 || typeof audioBase64 !== "string") {
+    return res.status(400).json({ error: "audioBase64 is required." });
+  }
+
+  const aiClient = getGeminiClient();
+  if (!aiClient) {
+    return res.status(503).json({ error: "Gemini transcription unavailable.", transcript: "" });
+  }
+
+  try {
+    const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, "").trim();
+    const response = await generateContentWithFallback(aiClient, {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                mimeType: typeof mimeType === "string" && mimeType ? mimeType : "audio/webm",
+                data: cleanBase64
+              }
+            },
+            {
+              text: "Transcribe the user's spoken words accurately as plain text only (no quotes, no labels, no timestamps, no commentary). If only silence or background noise is heard, return an empty string."
+            }
+          ]
+        }
+      ]
+    });
+    const transcript = (response.text || "").replace(/^["'\s]+|["'\s]+$/g, "").trim();
+    return res.json({ transcript });
+  } catch (err) {
+    console.warn("[Recall AI Transcribe Error]:", err);
+    return res.status(500).json({ error: "Transcription failed.", transcript: "" });
+  }
+});
+
 // Server-side cache to remember if Gemini TTS quota was exceeded or service is temporarily unavailable
 let ttsQuotaExceededUntil = 0;
 let ttsUnavailableUntil = 0;
@@ -9397,7 +9437,8 @@ wss.on("connection", async (clientWs: WebSocket, request: any) => {
     }
   }
 
-  const isTeachMode = mode === "teach" || rawReqUrl.includes("/api/teach/live");
+  const isRecallMode = mode === "recall";
+  const isTeachMode = !isRecallMode && (mode === "teach" || rawReqUrl.includes("/api/teach/live"));
 
   const aiClient = getGeminiClient();
   if (!aiClient) {
@@ -9549,7 +9590,26 @@ wss.on("connection", async (clientWs: WebSocket, request: any) => {
   }
 
   let liveSystemInstruction = "";
-  if (isTeachMode) {
+  if (isRecallMode) {
+    liveSystemInstruction = `You are Elder Stephen, a dedicated, warm, lively Seventh-day Adventist Scripture Memorization Coach inside the "Study To Be Approved" (STBA) ecosystem.
+
+ABSOLUTE RULE — PURE SCRIPTURE MEMORIZATION COACH ONLY:
+- Your ONLY role in this session is helping ${userName} memorize Bible verses word-for-word.
+- NEVER mention exegesis, Matthew 1:22-23, Noble Berean study steps, word studies, or doctrinal lectures.
+- Keep every response warm, lively, concise, and 100% focused on Scripture memorization.
+
+MANDATORY 4-STEP MEMORIZATION FLOW:
+1. WELCOME & ASK: Your very first words must be: "Welcome, ${userName}! Time for us to memorize the Word of God. What scripture would you like us to memorize today?" Then stop and wait for ${userName} to answer.
+2. READ ALOUD & REPEAT TOGETHER: Once ${userName} names a scripture (e.g., 2 Timothy 3:16, Revelation 14:12, John 3:16, Jeremiah 33:3):
+   - Enthusiastically confirm their choice.
+   - Read the ENTIRE exact verse aloud slowly and clearly.
+   - Invite ${userName} to listen carefully and repeat the scripture aloud WITH you right now.
+3. HIDE & SOLO VERBATIM RECALL: Once ${userName} repeats it with you (or says they're ready):
+   - Ask ${userName} if they are ready for you to hide the scripture on screen so they can try reciting it solo without you.
+   - Listen closely while they recite. If they pause for more than 3 seconds on a word, gently chime in with a super brief nudge like "Think carefully... remember it's '[next word]'" and immediately stop so ${userName} can finish the rest of the verse on their own—NEVER take over or recite the rest for them!
+4. CELEBRATE & PROGRESS (UP TO 3 SCRIPTURES PER SESSION):
+   - Praise what they got right, gently note any missed word, and ask if they'd like to try it once more or move to the next scripture (up to 3 scriptures total in one session).`;
+  } else if (isTeachMode) {
     const priorStudiedTopic = (isContinuing || hasPriorSession) ? (contextTopic || lastPassage || "").trim() : "";
     const missionPassageLine = priorStudiedTopic
       ? `on "${priorStudiedTopic}"`
@@ -9888,8 +9948,20 @@ UNIFIED BRAIN & DYNAMIC TOOL ADAPTATION:
       clientWs.send(JSON.stringify({ ready: true, model: "gemini-3.8-live" }));
     }
 
-    // Proactively initiate vocal greeting or session continuation in Teach mode without waiting for user input
-    if (isTeachMode) {
+    // Proactively initiate vocal greeting or session continuation in Recall or Teach mode without waiting for user input
+    if (isRecallMode) {
+      setTimeout(() => {
+        try {
+          if (session && !clientClosed && clientWs.readyState === WebSocket.OPEN) {
+            console.log(`[STBA Live DEV] Proactively triggering Recall Memorization Coach intro for ${userName}...`);
+            const recallKickoff = `[SYSTEM INSTRUCTION: Speak out loud now. Say warmly and clearly: "Welcome, ${userName}! Time for us to memorize the Word of God. What scripture would you like us to memorize today?" Then stop and wait silently for ${userName} to answer. Do not mention exegesis or any scripture passage yet.]`;
+            session.sendRealtimeInput({ text: recallKickoff });
+          }
+        } catch (kickoffErr) {
+          console.warn("[STBA DEV LOG] Proactive recall kickoff error:", kickoffErr);
+        }
+      }, 350);
+    } else if (isTeachMode) {
       setTimeout(() => {
         try {
           if (session && !clientClosed && clientWs.readyState === WebSocket.OPEN) {

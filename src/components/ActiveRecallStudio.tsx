@@ -37,7 +37,7 @@ import { AskTheScholar } from "./AskTheScholar";
 // Import new memory enhancement modules
 import { ScriptureGamePack } from "./recall/ScriptureGamePack";
 import { MemorizationBlueprint } from "./recall/MemorizationBlueprint";
-import { ThirtyDayRecallPlan } from "./recall/ThirtyDayRecallPlan";
+import { ThirtyDayRecallPlan, autoCompleteThirtyDayByScripture, ACTIVE_VERSE_REF_KEY } from "./recall/ThirtyDayRecallPlan";
 import { VisualMemoryGrid } from "./recall/VisualMemoryGrid";
 import { GeminiRecallModule } from "./recall/GeminiRecallModule";
 
@@ -89,13 +89,21 @@ export const ActiveRecallStudio: React.FC = () => {
     keywords: ["inspiration", "profitable", "doctrine", "righteousness"]
   } : undefined;
 
-  // Handler to activate Verbatim Recall tab with selected verse or queue
+  // Handler to activate Verbatim Recall tab with selected verse positioned at the front of any sequence
   const handleNavigateToRecall = (scripture: Scripture, queue?: Scripture[]) => {
     setActiveScripture(scripture);
+    try {
+      localStorage.setItem(ACTIVE_VERSE_REF_KEY, scripture.reference);
+    } catch {}
     if (queue && queue.length > 0) {
-      setActiveQueue(queue);
-      const idx = queue.findIndex(q => q.id === scripture.id);
-      setActiveQueueIndex(idx >= 0 ? idx : 0);
+      const normRef = (r: string) => r.toLowerCase().replace(/\s+/g, "").trim();
+      const targetKey = normRef(scripture.reference);
+      const reorderedQueue = [
+        scripture,
+        ...queue.filter((q) => q.id !== scripture.id && normRef(q.reference) !== targetKey)
+      ];
+      setActiveQueue(reorderedQueue);
+      setActiveQueueIndex(0);
     } else {
       setActiveQueue(undefined);
       setActiveQueueIndex(0);
@@ -103,8 +111,19 @@ export const ActiveRecallStudio: React.FC = () => {
     setActiveTab("recall");
   };
 
+  // Sync incoming navigation state from any app/section (Vault, Recall Popup, Belief 1, etc.)
+  useEffect(() => {
+    const incomingFromState = location.state?.scripture as Scripture | undefined;
+    if (incomingFromState) {
+      handleNavigateToRecall(incomingFromState);
+    } else if (isFromBelief1 && belief1Scripture) {
+      handleNavigateToRecall(belief1Scripture);
+    }
+  }, [location.state?.scripture?.id, location.state?.scripture?.reference, isFromBelief1]);
+
   // Handler when a queued review finishes in RecallSession
   const handleRecallComplete = (score: number, scriptureId: string) => {
+    autoCompleteThirtyDayByScripture(scriptureId, activeScripture?.reference);
     if (activeQueue && activeQueueIndex < activeQueue.length - 1) {
       const nextIdx = activeQueueIndex + 1;
       setActiveQueueIndex(nextIdx);
@@ -247,6 +266,28 @@ export const ActiveRecallStudio: React.FC = () => {
     setTimeout(checkScroll, 350);
   };
 
+  const isSubpage = activeTab !== "spaced";
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll main content area to top whenever switching into a subpage or returning to the hub
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    }
+    if (!isSubpage) {
+      setTimeout(checkScroll, 50);
+    }
+  }, [activeTab, isSubpage]);
+
+  const handleReturnToHub = () => {
+    setActiveQueue(undefined);
+    setActiveQueueIndex(0);
+    setActiveTab("spaced");
+    if (location.state?.scripture) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  };
+
   return (
     <div
       className="w-full h-full flex flex-col min-h-0 text-[#1A1A1A]"
@@ -254,7 +295,8 @@ export const ActiveRecallStudio: React.FC = () => {
       style={{ flex: "1 1 0%", overscrollBehaviorX: "none" }}
     >
       <div
-        className="w-full overflow-y-auto scroll-smooth pt-4 pb-32 sm:pb-8 px-4 md:px-8 space-y-6"
+        ref={scrollContainerRef}
+        className="w-full overflow-y-auto scroll-smooth pt-4 pb-32 sm:pb-8 px-4 md:px-8 space-y-5"
         id="recall-studio-scroll-container"
         style={{
           overflowY: "auto",
@@ -264,6 +306,9 @@ export const ActiveRecallStudio: React.FC = () => {
           flex: "1 1 auto"
         }}
       >
+        {/* MAIN HUB HEADER & SCROLLABLE WORKSPACE TOOLS BAR (hidden on all subpages) */}
+        {!isSubpage && (
+          <>
         {/* HEADER SECTION PANEL */}
         <header className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 border border-[#E8E4DA] rounded-2xl shadow-xs" id="recall-studio-header">
           <div className="space-y-1 text-left">
@@ -383,18 +428,37 @@ export const ActiveRecallStudio: React.FC = () => {
             )}
           </div>
         </div>
+          </>
+        )}
 
         {/* WORKSPACE AREA VIEWS */}
-        <div className="max-w-5xl mx-auto" id="recall-tab-display">
+        <div className="max-w-5xl mx-auto space-y-4" id="recall-tab-display">
+          {/* Subpage Top-Left Back Button (matches existing gold-trimmed workspace button style) */}
+          {isSubpage && (
+            <div className="flex items-center justify-start" id="subpage-back-bar">
+              <button
+                type="button"
+                id="btn-subpage-back-to-studio"
+                onClick={handleReturnToHub}
+                className="workspace-tool-btn inline-flex items-center justify-center gap-2 min-h-[40px] px-4 py-2 rounded-xl sm:rounded-2xl text-xs font-sans font-semibold transition-all duration-200 ease-out cursor-pointer border select-none bg-[#06162c] text-stone-200 border-[#DFC57B]/70 hover:border-[#F3CF65] hover:bg-[#0d3060]/70 hover:text-white hover:-translate-y-[1px] hover:shadow-[0_4px_16px_rgba(223,197,123,0.3)] active:translate-y-0 active:scale-[0.98]"
+                title="Back to Active Learning Studio"
+                aria-label="Back to Active Learning Studio"
+              >
+                <ChevronLeft className="w-4 h-4 text-[#DFC57B] shrink-0" />
+                <span className="whitespace-nowrap tracking-wide leading-none">Back</span>
+              </button>
+            </div>
+          )}
+
           {activeTab === "recall" && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full mx-auto">
               <RecallSession
                 scripture={activeScripture || belief1Scripture || location.state?.scripture} // Feed passed scripture directly
                 queue={activeQueue}
                 currentQueueIndex={activeQueueIndex}
                 sabbathMode={sabbathMode}
                 isEmbedded={true}
-                onBack={() => setActiveTab("spaced")}
+                onBack={handleReturnToHub}
                 onComplete={handleRecallComplete}
                 onInspectGrid={() => setActiveTab("grid")}
               />
@@ -405,10 +469,7 @@ export const ActiveRecallStudio: React.FC = () => {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <ScriptureGamePack
                 initialScripture={activeScripture || belief1Scripture}
-                onLaunchRecallPractice={(s) => {
-                  setActiveScripture(s);
-                  setActiveTab("recall");
-                }}
+                onLaunchRecallPractice={(s) => handleNavigateToRecall(s)}
               />
             </motion.div>
           )}
@@ -416,10 +477,7 @@ export const ActiveRecallStudio: React.FC = () => {
           {activeTab === "plan30" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <ThirtyDayRecallPlan
-                onSelectVerseForPractice={(s) => {
-                  setActiveScripture(s);
-                  setActiveTab("recall");
-                }}
+                onSelectVerseForPractice={(s) => handleNavigateToRecall(s)}
                 onPlayInGamePack={(s) => {
                   setActiveScripture(s);
                   setActiveTab("gamepack");
@@ -431,9 +489,13 @@ export const ActiveRecallStudio: React.FC = () => {
           {activeTab === "grid" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <VisualMemoryGrid
-                onSelectScripture={(s) => {
+                onSelectScripture={(s) => handleNavigateToRecall(s)}
+                onPlayInGamePack={(s) => {
                   setActiveScripture(s);
-                  setActiveTab("recall");
+                  try {
+                    localStorage.setItem(ACTIVE_VERSE_REF_KEY, s.reference);
+                  } catch {}
+                  setActiveTab("gamepack");
                 }}
               />
             </motion.div>
@@ -443,7 +505,13 @@ export const ActiveRecallStudio: React.FC = () => {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <MemorizationBlueprint
                 initialScripture={activeScripture || belief1Scripture}
-                onLaunchRecall={() => setActiveTab("recall")}
+                onLaunchRecall={(s) => {
+                  if (s) {
+                    handleNavigateToRecall(s);
+                  } else {
+                    setActiveTab("recall");
+                  }
+                }}
               />
             </motion.div>
           )}
@@ -452,10 +520,7 @@ export const ActiveRecallStudio: React.FC = () => {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <GeminiRecallModule
                 initialScripture={activeScripture || belief1Scripture}
-                onPracticeInGym={(s) => {
-                  setActiveScripture(s);
-                  setActiveTab("recall");
-                }}
+                onPracticeInGym={(s) => handleNavigateToRecall(s)}
               />
             </motion.div>
           )}

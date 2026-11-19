@@ -45,7 +45,7 @@ import { Scripture } from "../../types";
 import { getParallelVerses } from "../stba/bibleData";
 
 interface MemorizationBlueprintProps {
-  onLaunchRecall?: () => void;
+  onLaunchRecall?: (scripture?: Scripture) => void;
   initialScripture?: Scripture;
 }
 
@@ -2679,7 +2679,18 @@ export const MemorizationBlueprint: React.FC<MemorizationBlueprintProps> = ({
             {onLaunchRecall && (
               <button
                 type="button"
-                onClick={onLaunchRecall}
+                onClick={() =>
+                  onLaunchRecall(
+                    activeVerse
+                      ? {
+                          id: activeVerse.id,
+                          reference: activeVerse.reference,
+                          text: activeVerse.text,
+                          keywords: activeVerse.keywords
+                        }
+                      : undefined
+                  )
+                }
                 className="min-h-[44px] py-2.5 px-5 rounded-2xl bg-gradient-to-r from-[#F3CF65] to-[#D4AF37] text-slate-950 text-xs font-bold flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer shrink-0"
               >
                 <span>Recall Gym</span>
