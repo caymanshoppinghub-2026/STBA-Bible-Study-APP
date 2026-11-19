@@ -2791,7 +2791,9 @@ function cleanServerGeminiPcmBase64(base64Audio: string, _sampleRate = 24000): s
 }
 
 // Persistent Server-Side Audio Cache for Instant 0ms Narration
-const TOUR_TTS_CACHE_FILE = path.join(process.cwd(), "data", "tour_audio_cache.json");
+const TOUR_TTS_CACHE_FILE = process.env.VERCEL
+  ? "/tmp/tour_audio_cache.json"
+  : path.join(process.cwd(), "data", "tour_audio_cache.json");
 const serverTtsCache = new Map<string, string>();
 
 function loadServerTtsCache() {
@@ -2837,6 +2839,7 @@ async function synthesizeMicrosoftNeuralAudio(text: string, voiceKey: string): P
     Jenny: "en-US-JennyNeural",
     Aoede: "en-US-AriaNeural",
     Aria: "en-US-AriaNeural",
+    Ava: "en-US-AriaNeural",
   };
   const edgeVoice = neuralVoiceMap[voiceKey] || "en-US-AndrewMultilingualNeural";
 
@@ -2846,9 +2849,19 @@ async function synthesizeMicrosoftNeuralAudio(text: string, voiceKey: string): P
     const { audioStream } = tts.toStream(text);
     const chunks: Buffer[] = [];
     await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        try { (audioStream as any).destroy?.(); } catch {}
+        reject(new Error("Edge Neural TTS timed out after 12s"));
+      }, 12000);
       audioStream.on("data", (chunk: Buffer) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-      audioStream.on("end", () => resolve());
-      audioStream.on("error", (err: any) => reject(err));
+      audioStream.on("end", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      audioStream.on("error", (err: any) => {
+        clearTimeout(timer);
+        reject(err);
+      });
     });
     const fullBuf = Buffer.concat(chunks);
     if (fullBuf.length > 0) {
@@ -2935,7 +2948,7 @@ app.post("/api/study/narrate", async (req, res) => {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const ttsModel = attempt === 1 ? "gemini-3.8-flash-tts" : "gemini-2.5-flash-preview-tts";
+      const ttsModel = "gemini-2.5-flash-preview-tts";
       // Pass ONLY the exact intended verbatimText in parts[0].text without any preliminary instructions
       const response = await aiClient.models.generateContent({
         model: ttsModel,
@@ -6674,7 +6687,8 @@ No special emphasis needed unless the text calls for it.
 
 Output format:
 
-A single, continuous spoken narration with no breaks.
+A single, continuous plain-text spoken narration with no breaks.
+CRITICAL: Return plain spoken prose ONLY. NEVER output SSML, XML, <speak>, <prosody>, <voice>, or attribute markup of any kind.
 
 BEGIN READING:  
 ${rawText}`;
@@ -6684,10 +6698,14 @@ ${rawText}`;
     });
 
     let narrationText = geminiResponse.text?.trim() || "";
-    // Clean out any BEGIN READING header if model echoed it
+    // Clean out any BEGIN READING header, speaker labels, or accidentally generated SSML/XML tags
     narrationText = narrationText
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\b(?:speak|prosody)\b[^.\n]*?(?:voice|rate)\s*=\s*["']?[^"'\s]+["']?/gi, " ")
+      .replace(/\b(?:voice\s*name|voice|rate)\s*=\s*["']?[^"'\s,]+["']?/gi, " ")
       .replace(/^BEGIN READING:\s*/i, "")
-      .replace(/^Ava:\s*/i, "")
+      .replace(/^(?:Ava|Aria):\s*/i, "")
+      .replace(/\s+/g, " ")
       .trim();
 
     if (!narrationText) {
@@ -6700,13 +6718,13 @@ ${rawText}`;
       try {
         const cleanAvaText = sanitizeServerVerbatimSpeechText(narrationText.slice(0, 800));
         const audioResponse = await aiClient.models.generateContent({
-          model: "gemini-3.8-flash-lite-tts",
+          model: "gemini-2.5-flash-preview-tts",
           contents: [{ role: "user", parts: [{ text: cleanAvaText }] }],
           config: {
             responseModalities: [Modality.AUDIO],
             speechConfig: {
               voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: "Kore" } // Warm, clear tone for Ava
+                prebuiltVoiceConfig: { voiceName: "Aoede" } // Warm, clear Aria-aligned tone
               }
             }
           }

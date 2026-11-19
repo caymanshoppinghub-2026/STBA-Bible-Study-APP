@@ -28,7 +28,7 @@ const initialNarratorState: NarratorState = {
   isPaused: false,
   isLoading: false,
   speed: 1.0,
-  narratorVoiceName: "Microsoft Emma (Natural)"
+  narratorVoiceName: "Microsoft Aria (US Neural)"
 };
 
 let globalState: NarratorState = { ...initialNarratorState };
@@ -39,18 +39,29 @@ function updateGlobalState(patch: Partial<NarratorState>) {
   listeners.forEach((fn) => fn(globalState));
 }
 
-// Automatic voice preloading for immediate playback
-if (typeof window !== "undefined" && "speechSynthesis" in window) {
-  window.speechSynthesis.getVoices();
-  const preloadEmmaVoices = () => {
-    const voices = window.speechSynthesis.getVoices();
-    const detected = getMicrosoftEmmaVoice(voices);
-    updateGlobalState({
-      narratorVoiceName: detected.isEmma ? "Microsoft Emma (Natural)" : detected.voiceName
-    });
-  };
-  window.speechSynthesis.addEventListener("voiceschanged", preloadEmmaVoices);
-  preloadEmmaVoices();
+/**
+ * Strips SSML/XML artifacts and overlooks standalone/parenthetical scripture reference citations
+ * so Aria US reads Sabbath School lesson body text smoothly without awkward pauses.
+ */
+function cleanSabbathBodyForAria(rawText: string): string {
+  if (!rawText) return "";
+  return rawText
+    // Remove any SSML/XML tags or leaked voice/prosody attributes
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\b(?:speak|prosody)\b[^.\n]*?(?:voice|rate)\s*=\s*["']?[^"'\s]+["']?/gi, " ")
+    .replace(/\b(?:voice\s*name|voice|rate)\s*=\s*["']?[^"'\s,]+["']?/gi, " ")
+    // Remove "Read for This Week's Study: ..." reference header lines
+    .replace(/Read for This Week['’]s Study\s*:[^\n]*/gi, " ")
+    // Remove parenthetical scripture citations like (Matt. 5:17-48; 1 Cor. 16:20) or (Genesis 1:1)
+    .replace(/\(\s*(?:(?:see|cf\.|compare|read|also)\s+)?(?:[1-3]\s*)?[A-Z][a-zA-Z.]{1,14}\s+\d{1,3}\s*:\s*\d{1,3}[^)]*\)/g, " ")
+    // Remove standalone reference-only lines like "Matt. 5:17-48, 1 Cor. 16:20, Matt. 4:1-11"
+    .replace(/^\s*(?:(?:[1-3]\s*)?[A-Z][a-zA-Z.]{1,14}\s+\d{1,3}\s*:\s*\d{1,3}(?:\s*[-–,]\s*\d{1,3})*(?:\s*[;,]\s*)?)+\s*$/gm, " ")
+    // Clean up any leftover empty parentheses or double punctuation
+    .replace(/\(\s*[;,.]*\s*\)/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([,.;:])\1+/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // Global audio engine references
@@ -102,25 +113,12 @@ export function prepareNarrationInBackground(dayIndex: number, title: string, co
     return;
   }
 
-  // Pre-generate dynamically formatted spoken narration script immediately (instant client-side)
-  const clientSmoothed = cleanLessonTextForSpokenNarration(rawText);
+  // Pre-generate clean body text immediately (skipping scripture reference clutter & SSML)
+  const clientSmoothed = cleanSabbathBodyForAria(cleanLessonTextForSpokenNarration(rawText));
   narrationBackgroundCache.set(cacheKey, {
     narrationScript: clientSmoothed,
     timestamp: Date.now()
   });
-
-  // Asynchronously request AI-formatted narration if available to enrich cache
-  requestAvaLessonNarration(title, rawText)
-    .then((res) => {
-      if (res && res.success && res.narrationText) {
-        narrationBackgroundCache.set(cacheKey, {
-          narrationScript: res.narrationText,
-          audioBase64: res.audioBase64,
-          timestamp: Date.now()
-        });
-      }
-    })
-    .catch(() => {});
 }
 
 function splitIntoFlowingClauses(text: string): string[] {
@@ -186,7 +184,13 @@ function playNextSpeechClause() {
     return;
   }
 
-  const clauseText = globalClauses[globalClauseIndex];
+  const rawClause = globalClauses[globalClauseIndex];
+  const clauseText = (rawClause || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\b(?:speak|prosody)\b[^.\n]*?(?:voice|rate)\s*=\s*["']?[^"'\s]+["']?/gi, " ")
+    .replace(/\b(?:voice\s*name|voice|rate)\s*=\s*["']?[^"'\s,]+["']?/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!clauseText) {
     globalClauseIndex += 1;
     playNextSpeechClause();
@@ -195,10 +199,8 @@ function playNextSpeechClause() {
 
   stopActiveGeminiSpeech();
 
-  // Warm female neural voice (Jenny) for Sabbath School lesson narration — 100% verbatim
-  const savedReadAloud =
-    typeof window !== "undefined" ? localStorage.getItem("stba_read_aloud_voice") : null;
-  const lessonVoice = savedReadAloud === "Fenrir" ? "Fenrir" : "Kore";
+  // Permanently lock Read Lesson narration to Microsoft Aria US (en-US-AriaNeural) — consistent voice across all chunks
+  const lessonVoice = "Aria";
 
   playGeminiSpeech(clauseText, {
     voice: lessonVoice,
@@ -237,18 +239,25 @@ function resumeGlobalNarration() {
 }
 
 function startSpeechSynthesis(narrationScript: string) {
-  const clauses = splitIntoFlowingClauses(narrationScript);
-  if (clauses.length === 0) {
+  const cleanedBody = cleanSabbathBodyForAria(narrationScript);
+  if (!cleanedBody) {
     stopGlobalNarration();
     return;
   }
 
-  globalClauses = clauses;
+  // Keep a single full-body script so playGeminiSpeech streams smooth ~650-char chunks with parallel prefetching
+  // and ZERO awkward pauses at commas or periods
+  globalClauses = [cleanedBody];
   globalClauseIndex = 0;
   globalIsPaused = false;
   globalIsSpeaking = true;
 
-  updateGlobalState({ isSpeaking: true, isPaused: false, isLoading: false });
+  updateGlobalState({
+    isSpeaking: true,
+    isPaused: false,
+    isLoading: false,
+    narratorVoiceName: "Microsoft Aria (US Neural)"
+  });
   playNextSpeechClause();
 }
 
@@ -303,19 +312,13 @@ export function useLessonNarrator() {
       // Stop any current playback
       stopGlobalNarration();
 
-      const voices =
-        typeof window !== "undefined" && "speechSynthesis" in window
-          ? window.speechSynthesis.getVoices()
-          : [];
-      const detected = getMicrosoftEmmaVoice(voices);
-
       updateGlobalState({
         activeDayIndex: dayIndex,
         activeLessonTitle: title,
         isLoading: false,
         isSpeaking: true,
         isPaused: false,
-        narratorVoiceName: detected.isEmma ? "Microsoft Emma (Natural)" : detected.voiceName
+        narratorVoiceName: "Microsoft Aria (US Neural)"
       });
       globalIsSpeaking = true;
       globalIsPaused = false;

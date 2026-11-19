@@ -139,7 +139,9 @@ export interface SabbathSchoolSyncPayload {
   };
 }
 
-const STORAGE_DIR = path.join(process.cwd(), "data", "sabbath-school-sync");
+const STORAGE_DIR = process.env.VERCEL
+  ? "/tmp/sabbath-school-sync"
+  : path.join(process.cwd(), "data", "sabbath-school-sync");
 const CACHE_FILE = path.join(STORAGE_DIR, "current_week.json");
 export const TAKEAWAYS_CACHE_FILE = path.join(STORAGE_DIR, "theological_takeaways.json");
 

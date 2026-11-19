@@ -475,12 +475,13 @@ export const TourOverlay: React.FC = () => {
           const data = await safeParseResponseJson<{
             success?: boolean;
             audio?: string;
+            format?: string;
           }>(response);
 
           if (reqId !== geminiSpeechReqIdRef.current) return;
 
           if (data?.success && data?.audio) {
-            base64Audio = data.audio;
+            base64Audio = data.format === "mp3" ? `mp3:${data.audio}` : data.audio;
             if ((window as any).__STBA_TTS_CACHE__) {
               (window as any).__STBA_TTS_CACHE__[cacheKey] = base64Audio;
             }
@@ -496,17 +497,15 @@ export const TourOverlay: React.FC = () => {
 
         if (!base64Audio || reqId !== geminiSpeechReqIdRef.current) return;
 
-        // Decode 24kHz 16-bit PCM, strip WAV headers, and remove trailing sound effects / 'shh' noises
+        const isMp3 = typeof base64Audio === "string" && base64Audio.startsWith("mp3:");
+        const rawB64 = isMp3 ? base64Audio.slice(4) : base64Audio;
         const sampleRate = 24000;
-        const float32Array = decodeAndCleanGeminiPcm(base64Audio, { sampleRate });
-        if (float32Array.length === 0) {
-          setIsSpeakingGreeting(false);
-          return;
-        }
 
         const ctx =
           geminiAudioCtxRef.current ||
-          new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate });
+          new (window.AudioContext || (window as any).webkitAudioContext)(
+            isMp3 ? undefined : { sampleRate }
+          );
         geminiAudioCtxRef.current = ctx;
 
         if (ctx.state === "suspended") {
@@ -515,8 +514,25 @@ export const TourOverlay: React.FC = () => {
 
         if (reqId !== geminiSpeechReqIdRef.current) return;
 
-        const pcmBuffer = ctx.createBuffer(1, float32Array.length, sampleRate);
-        pcmBuffer.getChannelData(0).set(float32Array);
+        let pcmBuffer: AudioBuffer;
+        if (isMp3) {
+          const binary = atob(rawB64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          pcmBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
+          if (reqId !== geminiSpeechReqIdRef.current) return;
+        } else {
+          // Decode 24kHz 16-bit PCM, strip WAV headers, and remove trailing sound effects / 'shh' noises
+          const float32Array = decodeAndCleanGeminiPcm(rawB64, { sampleRate });
+          if (float32Array.length === 0) {
+            setIsSpeakingGreeting(false);
+            return;
+          }
+          pcmBuffer = ctx.createBuffer(1, float32Array.length, sampleRate);
+          pcmBuffer.getChannelData(0).set(float32Array);
+        }
 
         const source = ctx.createBufferSource();
         source.buffer = pcmBuffer;
