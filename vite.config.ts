@@ -6,6 +6,10 @@ import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const publishableKey =
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
     env.SUPABASE_PUBLISHABLE_KEY ||
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
@@ -14,6 +18,8 @@ export default defineConfig(({ mode }) => {
     process.env.VITE_SUPABASE_ANON_KEY ||
     '';
   const supabaseUrl = (
+    env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
     env.VITE_SUPABASE_URL ||
     env.SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL ||
@@ -110,6 +116,8 @@ export default defineConfig(({ mode }) => {
   return {
     base: '/',
     define: {
+      'process.env.NEXT_PUBLIC_SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY': JSON.stringify(publishableKey),
       'process.env.SUPABASE_PUBLISHABLE_KEY': JSON.stringify(publishableKey),
       'process.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(publishableKey),
       'process.env.SUPABASE_URL': JSON.stringify(supabaseUrl),

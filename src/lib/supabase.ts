@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 const rawUrl =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
   (typeof process !== 'undefined' && (process.env?.VITE_SUPABASE_URL || process.env?.SUPABASE_URL)) ||
   "https://ygsatsfcvodstgjhmths.supabase.co"
 
@@ -9,12 +9,9 @@ const rawUrl =
 export const SUPABASE_URL = String(rawUrl).replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '').trim()
 
 export const SUPABASE_PUBLISHABLE_KEY = String(
-  (typeof import.meta !== 'undefined' && (
-    import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    import.meta.env?.SUPABASE_PUBLISHABLE_KEY ||
-    import.meta.env?.VITE_SUPABASE_ANON_KEY
-  )) ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   (typeof process !== 'undefined' && (
+    process.env?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
     process.env?.SUPABASE_PUBLISHABLE_KEY ||
     process.env?.VITE_SUPABASE_PUBLISHABLE_KEY ||
     process.env?.VITE_SUPABASE_ANON_KEY ||
@@ -69,16 +66,9 @@ export function resolveSupabaseEdgeFunctionUrl(
 }
 
 const rawEdgeFunctionUrl =
-  (typeof import.meta !== 'undefined' && (
-    import.meta.env?.VITE_SUPABASE_LIVE_EDGE_FUNCTION_URL ||
-    import.meta.env?.VITE_SUPABASE_EDGE_FUNCTION_URL ||
-    import.meta.env?.SUPABASE_EDGE_FUNCTION_URL
-  )) ||
-  (typeof process !== 'undefined' && (
-    process.env?.VITE_SUPABASE_LIVE_EDGE_FUNCTION_URL ||
-    process.env?.VITE_SUPABASE_EDGE_FUNCTION_URL ||
-    process.env?.SUPABASE_EDGE_FUNCTION_URL
-  )) ||
+  process.env.VITE_SUPABASE_LIVE_EDGE_FUNCTION_URL ||
+  process.env.VITE_SUPABASE_EDGE_FUNCTION_URL ||
+  process.env.SUPABASE_EDGE_FUNCTION_URL ||
   `${SUPABASE_URL}/functions/v1/gemini-live-relay`
 
 export const SUPABASE_EDGE_FUNCTION_URL = resolveSupabaseEdgeFunctionUrl(String(rawEdgeFunctionUrl), 'gemini-live-relay')
@@ -189,10 +179,8 @@ export function getSupabaseEdgeFunctionWsUrl(
   functionName: string = 'gemini-live-relay'
 ): string {
   const customUrl =
-    (typeof import.meta !== 'undefined' && (
-      import.meta.env?.VITE_SUPABASE_LIVE_EDGE_FUNCTION_URL ||
-      import.meta.env?.VITE_SUPABASE_EDGE_FUNCTION_URL
-    )) ||
+    process.env.VITE_SUPABASE_LIVE_EDGE_FUNCTION_URL ||
+    process.env.VITE_SUPABASE_EDGE_FUNCTION_URL ||
     `${SUPABASE_URL}/functions/v1/${functionName}`
 
   return buildSupabaseLiveWebSocketUrl(queryParams, String(customUrl))
