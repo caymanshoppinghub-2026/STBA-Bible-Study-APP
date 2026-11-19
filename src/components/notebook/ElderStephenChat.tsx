@@ -11,6 +11,10 @@ export function ensureProperWordSpacing(text: string): string {
   return formatProperElderSpacing(text)
 }
 
+// Module-level deduplication guard so desktop + mobile mounted drawers never fire duplicate verse sends
+let lastDispatchedScripture = ''
+let lastDispatchedAt = 0
+
 interface ElderStephenChatProps {
   note: StudyNote | null
   triggerScripture?: string
@@ -76,6 +80,14 @@ export const ElderStephenChat: React.FC<ElderStephenChatProps> = ({ note, trigge
   useEffect(() => {
     if (triggerScripture) {
       const targetScrip = triggerScripture.trim()
+      const now = Date.now()
+      if (targetScrip === lastDispatchedScripture && now - lastDispatchedAt < 1500) {
+        if (onClearTriggerScripture) onClearTriggerScripture()
+        return
+      }
+      lastDispatchedScripture = targetScrip
+      lastDispatchedAt = now
+
       setSelectedMode('velocity')
       const docTitle = note?.title ? `"${note.title}"` : (currentTopic ? `"${currentTopic}"` : 'this study document')
       const promptQuery = `Can you explain the context of ${targetScrip} in relation to our study on ${docTitle} and why it is emphasized at this point in the document?`

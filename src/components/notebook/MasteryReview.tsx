@@ -570,35 +570,10 @@ export const MasteryReview: React.FC<MasteryReviewProps> = ({ note, onClose }) =
         {/* Parent Container (Study Settings + Action Buttons) */}
         {settingsExpanded && (
           <div className="pt-3 space-y-4 animate-fade-in" id="collapsible-settings-panel">
-            {/* Study Mode Selector */}
-            <div className="space-y-1.5">
-              <span className="text-[10.5px] font-mono font-bold tracking-wider text-gray-400 uppercase block">
-                1. Select Study Mode
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {(['Explain Mode', 'Teach It Mode', 'STBA Mode', 'Syllabus Mode', 'Application Mode'] as StudyMode[]).map((mode) => {
-                  const active = selectedMode === mode
-                  return (
-                    <button
-                      key={mode}
-                      onClick={() => setSelectedMode(mode)}
-                      className={`min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-full text-xs font-sans font-medium border transition-all cursor-pointer select-none ${
-                        active
-                          ? 'bg-teal-500/20 text-teal-300 border-teal-500/40 shadow-sm shadow-teal-500/5 font-semibold'
-                          : 'bg-[#1e2020] text-gray-400 hover:text-white border-white/5'
-                      }`}
-                    >
-                      {mode}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
             {/* Mastery Tier Selector */}
             <div className="space-y-1.5">
               <span className="text-[10.5px] font-mono font-bold tracking-wider text-gray-400 uppercase block">
-                2. Choose Discipleship Level
+                Choose Discipleship Level
               </span>
               <div className="flex gap-2">
                 {(['Beginner Tier', 'Scholar Tier', 'Leader Tier'] as MasteryTier[]).map((tier) => {

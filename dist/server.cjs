@@ -48,6 +48,7 @@ var import_dotenv = __toESM(require("dotenv"), 1);
 var import_http = __toESM(require("http"), 1);
 var import_ws = require("ws");
 var import_nodemailer = __toESM(require("nodemailer"), 1);
+var import_msedge_tts = require("msedge-tts");
 
 // src/data/doctrineTracksDb.ts
 var DEFAULT_DOCTRINE_TRACKS = {
@@ -7697,7 +7698,7 @@ function sanitizeServerVerbatimSpeechText(rawText) {
   }
   return cleaned;
 }
-function cleanServerGeminiPcmBase64(base64Audio, sampleRate = 24e3) {
+function cleanServerGeminiPcmBase64(base64Audio, _sampleRate = 24e3) {
   try {
     const rawBuf = Buffer.from(base64Audio, "base64");
     if (rawBuf.length < 100) return base64Audio;
@@ -7726,140 +7727,7 @@ function cleanServerGeminiPcmBase64(base64Audio, sampleRate = 24e3) {
     } else {
       pcmBuf = rawBuf.subarray(0, rawBuf.length & ~1);
     }
-    const sampleCount = pcmBuf.length >> 1;
-    const frameSize = Math.floor(sampleRate * 0.01);
-    const numFrames = Math.floor(sampleCount / frameSize);
-    if (numFrames < 8) {
-      return pcmBuf.toString("base64");
-    }
-    const samples = new Float32Array(sampleCount);
-    let mean = 0;
-    for (let i = 0; i < sampleCount; i++) {
-      const v = pcmBuf.readInt16LE(i * 2) / 32768;
-      samples[i] = v;
-      mean += v;
-    }
-    mean /= sampleCount;
-    if (Math.abs(mean) > 1e-4) {
-      for (let i = 0; i < sampleCount; i++) {
-        samples[i] -= mean;
-      }
-    }
-    const rms = new Float32Array(numFrames);
-    const zcr = new Float32Array(numFrames);
-    const hfRatio = new Float32Array(numFrames);
-    for (let f = 0; f < numFrames; f++) {
-      const base = f * frameSize;
-      let sumSq = 0;
-      let diffSq = 0;
-      let crossings = 0;
-      let prev = samples[base];
-      for (let i = 0; i < frameSize; i++) {
-        const cur = samples[base + i];
-        sumSq += cur * cur;
-        const diff = cur - prev;
-        diffSq += diff * diff;
-        if (cur >= 0 && prev < 0 || cur < 0 && prev >= 0) crossings++;
-        prev = cur;
-      }
-      rms[f] = Math.sqrt(sumSq / frameSize);
-      zcr[f] = crossings / frameSize;
-      hfRatio[f] = sumSq > 1e-9 ? diffSq / sumSq : 0;
-    }
-    const activeRms = [];
-    for (let f = 0; f < numFrames; f++) {
-      if (rms[f] > 4e-3) activeRms.push(rms[f]);
-    }
-    activeRms.sort((a, b) => a - b);
-    const voicedRefRms = activeRms.length > 0 ? activeRms[Math.min(activeRms.length - 1, Math.floor(activeRms.length * 0.85))] : 0.05;
-    const silenceThreshold = Math.max(35e-4, voicedRefRms * 0.04);
-    const voicedThreshold = Math.max(0.011, voicedRefRms * 0.14);
-    let startFrame = 0;
-    while (startFrame < numFrames - 4 && rms[startFrame] < silenceThreshold) {
-      startFrame++;
-    }
-    startFrame = Math.max(0, startFrame - 1);
-    let endFrame = numFrames - 1;
-    while (endFrame > startFrame + 4 && rms[endFrame] < silenceThreshold) {
-      endFrame--;
-    }
-    const searchWindowFrames = Math.min(90, endFrame - startFrame - 10);
-    if (searchWindowFrames > 12) {
-      const windowStart = endFrame - searchWindowFrames;
-      let gapEnd = -1;
-      let gapStart = -1;
-      for (let f = endFrame - 2; f >= windowStart; f--) {
-        if (rms[f] < silenceThreshold * 1.75) {
-          if (gapEnd === -1) gapEnd = f;
-          gapStart = f;
-        } else if (gapEnd !== -1) {
-          if (gapEnd - gapStart + 1 >= 4) break;
-          gapEnd = -1;
-          gapStart = -1;
-        }
-      }
-      if (gapEnd !== -1 && gapStart !== -1 && gapEnd - gapStart + 1 >= 4) {
-        const burstFrames = endFrame - gapEnd;
-        if (burstFrames > 0 && burstFrames <= 55) {
-          let burstSumRms = 0;
-          let burstMaxRms = 0;
-          let burstSumZcr = 0;
-          let burstSumHf = 0;
-          for (let f = gapEnd + 1; f <= endFrame; f++) {
-            burstSumRms += rms[f];
-            if (rms[f] > burstMaxRms) burstMaxRms = rms[f];
-            burstSumZcr += zcr[f];
-            burstSumHf += hfRatio[f];
-          }
-          const avgZcr = burstSumZcr / burstFrames;
-          const avgHf = burstSumHf / burstFrames;
-          const avgRms = burstSumRms / burstFrames;
-          if (avgZcr > 0.16 || avgHf > 0.42 || burstMaxRms < voicedRefRms * 0.55 || avgRms < voicedRefRms * 0.3) {
-            endFrame = gapStart;
-            while (endFrame > startFrame + 4 && rms[endFrame] < silenceThreshold * 1.5) {
-              endFrame--;
-            }
-          }
-        }
-      }
-    }
-    const maxAttachedTailFrames = Math.min(60, endFrame - startFrame - 6);
-    let strippedAttached = 0;
-    while (endFrame > startFrame + 6 && strippedAttached < maxAttachedTailFrames) {
-      const isHighFreqSibilantOrShh = (zcr[endFrame] > 0.18 || hfRatio[endFrame] > 0.45) && rms[endFrame] < voicedRefRms * 0.48;
-      const isLowEnergyBreathTail = rms[endFrame] < voicedThreshold * 0.72;
-      if (isHighFreqSibilantOrShh || isLowEnergyBreathTail) {
-        endFrame--;
-        strippedAttached++;
-      } else {
-        break;
-      }
-    }
-    if (endFrame + 1 < numFrames && zcr[endFrame + 1] < 0.17 && hfRatio[endFrame + 1] < 0.42 && rms[endFrame + 1] < voicedRefRms * 0.35) {
-      endFrame = Math.min(numFrames - 1, endFrame + 1);
-    }
-    const startSample = startFrame * frameSize;
-    const endSample = Math.min(sampleCount, (endFrame + 1) * frameSize);
-    if (endSample <= startSample) {
-      return pcmBuf.toString("base64");
-    }
-    const outSampleCount = endSample - startSample;
-    const fadeInSamples = Math.min(Math.floor(sampleRate * 8e-3), Math.floor(outSampleCount / 4));
-    const fadeOutSamples = Math.min(Math.floor(sampleRate * 0.03), Math.floor(outSampleCount / 3));
-    const fadeOutStart = outSampleCount - fadeOutSamples;
-    const outBuf = Buffer.allocUnsafe(outSampleCount * 2);
-    for (let i = 0; i < outSampleCount; i++) {
-      let s = samples[startSample + i];
-      if (i < fadeInSamples) {
-        s *= 0.5 * (1 - Math.cos(Math.PI * i / fadeInSamples));
-      } else if (i >= fadeOutStart) {
-        const k = i - fadeOutStart;
-        s *= 0.5 * (1 + Math.cos(Math.PI * k / fadeOutSamples));
-      }
-      const clamped = Math.max(-1, Math.min(1, s));
-      outBuf.writeInt16LE(Math.round(clamped * 32767), i * 2);
-    }
-    return outBuf.toString("base64");
+    return pcmBuf.toString("base64");
   } catch {
     return base64Audio;
   }
@@ -7895,35 +7763,84 @@ function saveServerTtsCache(key, base64Audio) {
     console.warn("[TTS Cache] Could not persist audio cache to disk:", err);
   }
 }
+async function synthesizeMicrosoftNeuralAudio(text, voiceKey) {
+  const neuralVoiceMap = {
+    Charon: "en-US-AndrewMultilingualNeural",
+    Andrew: "en-US-AndrewMultilingualNeural",
+    Fenrir: "en-US-ChristopherNeural",
+    Christopher: "en-US-ChristopherNeural",
+    Kore: "en-US-JennyNeural",
+    Jenny: "en-US-JennyNeural",
+    Aoede: "en-US-AriaNeural",
+    Aria: "en-US-AriaNeural"
+  };
+  const edgeVoice = neuralVoiceMap[voiceKey] || "en-US-AndrewMultilingualNeural";
+  try {
+    const tts = new import_msedge_tts.MsEdgeTTS();
+    await tts.setMetadata(edgeVoice, import_msedge_tts.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+    const { audioStream } = tts.toStream(text);
+    const chunks = [];
+    await new Promise((resolve, reject) => {
+      audioStream.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      audioStream.on("end", () => resolve());
+      audioStream.on("error", (err) => reject(err));
+    });
+    const fullBuf = Buffer.concat(chunks);
+    if (fullBuf.length > 0) {
+      return fullBuf.toString("base64");
+    }
+    return null;
+  } catch (err) {
+    console.warn("[STBA Edge Neural TTS] Synthesis notice:", err);
+    return null;
+  }
+}
 app.post("/api/study/narrate", async (req, res) => {
-  const { text, voice } = req.body;
+  const { text, voice, verbatimReadAloud } = req.body;
   const verbatimText = sanitizeServerVerbatimSpeechText(text);
   if (!verbatimText) {
     return res.status(400).json({ error: "Text is required for narration." });
   }
   const selectedVoice = voice || "Charon";
-  const cacheKey = `${verbatimText.toLowerCase()}_${selectedVoice}`;
+  const cacheKey = `${verbatimReadAloud ? "edge_" : ""}${verbatimText.toLowerCase()}_${selectedVoice}`;
   if (serverTtsCache.has(cacheKey)) {
+    const cachedVal = serverTtsCache.get(cacheKey);
+    const isMp3 = cachedVal.startsWith("mp3:");
     return res.json({
       success: true,
-      audio: serverTtsCache.get(cacheKey),
+      audio: isMp3 ? cachedVal.slice(4) : cachedVal,
+      format: isMp3 ? "mp3" : "pcm",
       cached: true
     });
   }
-  if (Date.now() < ttsQuotaExceededUntil) {
-    return res.json({
-      success: false,
-      fallback: true,
-      quotaExceeded: true,
-      error: "Gemini TTS quota exceeded. Routing gracefully to browser SpeechSynthesis."
-    });
+  if (verbatimReadAloud) {
+    const mp3Base64 = await synthesizeMicrosoftNeuralAudio(verbatimText, selectedVoice);
+    if (mp3Base64) {
+      saveServerTtsCache(cacheKey, `mp3:${mp3Base64}`);
+      return res.json({
+        success: true,
+        audio: mp3Base64,
+        format: "mp3"
+      });
+    }
   }
-  if (Date.now() < ttsUnavailableUntil) {
+  if (Date.now() < ttsQuotaExceededUntil || Date.now() < ttsUnavailableUntil) {
+    const mp3Base64 = await synthesizeMicrosoftNeuralAudio(verbatimText, selectedVoice);
+    if (mp3Base64) {
+      saveServerTtsCache(cacheKey, `mp3:${mp3Base64}`);
+      return res.json({
+        success: true,
+        audio: mp3Base64,
+        format: "mp3",
+        engine: "edge-neural"
+      });
+    }
     return res.json({
       success: false,
       fallback: true,
-      unavailable: true,
-      error: "Gemini TTS model is temporarily at peak capacity. Routing gracefully to browser SpeechSynthesis."
+      quotaExceeded: Date.now() < ttsQuotaExceededUntil,
+      unavailable: Date.now() < ttsUnavailableUntil,
+      error: "TTS temporarily unavailable. Routing gracefully to browser SpeechSynthesis."
     });
   }
   const aiClient = getGeminiClient();
@@ -7938,8 +7855,9 @@ app.post("/api/study/narrate", async (req, res) => {
   let lastErr = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
+      const ttsModel = attempt === 1 ? "gemini-3.8-flash-tts" : "gemini-2.5-flash-preview-tts";
       const response = await aiClient.models.generateContent({
-        model: "gemini-3.8-flash-lite-tts",
+        model: ttsModel,
         contents: [
           {
             role: "user",
@@ -7999,6 +7917,16 @@ app.post("/api/study/narrate", async (req, res) => {
   const finalErrText = (lastErr?.message || "").toLowerCase();
   const isQuota = finalErrText.includes("quota") || finalErrText.includes("exceeded") || finalErrText.includes("exhausted") || lastErr?.status === 429 || lastErr?.statusCode === 429;
   const is503 = finalErrText.includes("503") || finalErrText.includes("high demand") || finalErrText.includes("unavailable") || lastErr?.status === 503 || lastErr?.statusCode === 503;
+  const mp3Fallback = await synthesizeMicrosoftNeuralAudio(verbatimText, selectedVoice);
+  if (mp3Fallback) {
+    saveServerTtsCache(cacheKey, `mp3:${mp3Fallback}`);
+    return res.json({
+      success: true,
+      audio: mp3Fallback,
+      format: "mp3",
+      engine: "edge-neural"
+    });
+  }
   if (!isQuota && !is503 && lastErr) {
     console.warn("[STBA SPEECH SYNTH INFO]: Voice synthesis fallback active, routing to local speech synthesis.");
   }
@@ -13282,6 +13210,39 @@ app.post("/api/study/sdabc-commentary", async (req, res) => {
       }
     }
   }
+  const cleanDocxLineWraps = (text) => {
+    if (!text) return "";
+    const normalized = text.replace(/\r\n/g, "\n");
+    const paragraphs = normalized.split(/\n{2,}/);
+    const cleanedParagraphs = paragraphs.map((p) => {
+      const lines = p.split("\n");
+      if (lines.length <= 1) return p.trim();
+      let result = "";
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        if (!result) {
+          result = line;
+          continue;
+        }
+        const prevLine = lines[i - 1].trim();
+        const endsWithSentencePunct = /[.!?]["”)]?$/.test(prevLine);
+        const isShortLine = prevLine.length < 75;
+        const startsWithHeadword = /^[A-Z][a-z]+(\s+[a-z]+)?\.\s+[A-Z]/.test(line) || /^\d+\.\s+/.test(line);
+        if (endsWithSentencePunct && isShortLine || startsWithHeadword) {
+          result += "\n\n" + line;
+        } else {
+          if (result.endsWith("\u2013") || result.endsWith("-")) {
+            result += line;
+          } else {
+            result += " " + line;
+          }
+        }
+      }
+      return result;
+    });
+    return cleanedParagraphs.join("\n\n").trim();
+  };
   const bLower = (book || "").toLowerCase().trim();
   const refLower = refString.toLowerCase().trim();
   if (bLower === "genesis" || refLower.startsWith("genesis")) {
@@ -13360,7 +13321,7 @@ app.post("/api/study/sdabc-commentary", async (req, res) => {
               verseNumber: v.verseNumber,
               text: `Genesis ${reqChap}:${v.verseNumber}`,
               headwords: v.headwords,
-              commentaryText: v.commentaryText,
+              commentaryText: cleanDocxLineWraps(v.commentaryText),
               theologicalConnection: `Genesis ${reqChap} theological foundation in Sola Scriptura and the Great Controversy.`
             })),
             egwComments,
@@ -13528,7 +13489,7 @@ app.post("/api/study/sdabc-commentary", async (req, res) => {
               verseNumber: v.verseNumber,
               text: `Exodus ${reqChap}:${v.verseNumber}`,
               headwords: v.headwords,
-              commentaryText: v.commentaryText,
+              commentaryText: cleanDocxLineWraps(v.commentaryText),
               theologicalConnection: `Exodus ${reqChap} theological foundation in the Decalogue, the Sanctuary, and the Great Controversy.`
             })),
             egwComments,
@@ -14723,6 +14684,10 @@ self.addEventListener('activate', function(event) {
         res.setHeader("Content-Type", "application/json; charset=utf-8");
       } else if (/\.html?$/i.test(filePath)) {
         res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        return;
+      }
+      if (/audio\/tour/i.test(filePath)) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         return;
       }
       if (/-[A-Za-z0-9_-]{6,}\.(js|css)$/i.test(filePath)) {

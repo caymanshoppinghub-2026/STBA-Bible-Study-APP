@@ -321,6 +321,34 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
     };
   }, [setActiveVerseIndex]);
 
+  // Clear floating selection tooltip when clicking away or when selection is cleared
+  useEffect(() => {
+    const handleDocumentMouseDown = (e: MouseEvent) => {
+      const toolbarEl = document.getElementById("bible-floating-selection-toolbar");
+      if (toolbarEl && toolbarEl.contains(e.target as Node)) {
+        return;
+      }
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.toString().trim().length === 0) {
+        setSelectedTextData(null);
+      }
+    };
+
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.toString().trim().length === 0) {
+        setSelectedTextData(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleDocumentMouseDown);
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentMouseDown);
+      document.removeEventListener("selectionchange", handleSelectionChange);
+    };
+  }, []);
+
   // Helper to build a clean display reference for a single verse, e.g. "Revelation 14:6"
   const getSpecificVerseRef = (fullRef: string, verseNum: string | number): string => {
     const parts = fullRef.split(':');
@@ -335,6 +363,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
   const handleMouseUp = (e: React.MouseEvent) => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
+      setSelectedTextData(null);
       return;
     }
 
@@ -1240,6 +1269,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
       {/* Floating Interactive Context Tooltip Panel (Exclusively for Biblical Text) */}
       {selectedTextData && (
         <div 
+          id="bible-floating-selection-toolbar"
           className="absolute z-50 flex items-center gap-1 p-1.5 shadow-2xl rounded-xl border text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
           style={{
             left: `${Math.min((containerRef.current?.clientWidth || window.innerWidth) - 290, Math.max(12, selectedTextData.x - 130))}px`,

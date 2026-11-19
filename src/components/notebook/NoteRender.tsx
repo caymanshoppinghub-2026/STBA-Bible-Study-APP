@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { TieredHighlightDropdown, ToolHighlightableWrapper } from '../stba/HighlightDropdownMenu'
 import { stitchDictatedFragments, recombineFragmentedTranscript } from '../../utils/dictationBuffer'
+import { playGeminiSpeech, stopActiveGeminiSpeech } from '../../utils/geminiSpeechPlayer'
 
 // Custom Indent and Outdent icons
 const IndentIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -78,6 +79,13 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
   // Speech Recognition & Narration states
   const [isDictating, setIsDictating] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [notebookVoice, setNotebookVoice] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('stba_read_aloud_voice');
+      if (saved === 'Kore' || saved === 'Fenrir') return saved;
+    }
+    return 'Kore';
+  })
   const recognitionRef = useRef<any>(null)
 
   // Selection & Range Capturing Ref for continuous editing stability
@@ -92,8 +100,10 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
     focusOffset: number;
   } | null>(null)
 
-  // Sync contentRef when note changes
+  // Sync contentRef and stop active audio cleanly when switching notes
   useEffect(() => {
+    stopActiveGeminiSpeech();
+    setIsSpeaking(false);
     contentRef.current = note?.content || '';
     setUndoStack([]);
     setRedoStack([]);
@@ -149,10 +159,8 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
       }
     } else {
       // Stop speech audio playback if switching back to draft
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-      }
+      stopActiveGeminiSpeech();
+      setIsSpeaking(false);
     }
   }, [mode]);
 
@@ -160,9 +168,7 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       if (onUpdateDebouncedRef.current) clearTimeout(onUpdateDebouncedRef.current);
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
+      stopActiveGeminiSpeech();
     };
   }, []);
 
@@ -476,42 +482,34 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
     return englishFallback || voices[0] || null;
   };
 
-  // Speech Synthesis for Read Mode (Audio Read Aloud with Microsoft Emma multilingual natural voice)
+  // Audio Read Aloud — reads the exact active note text on screen 100% verbatim
   const toggleSpeakNote = () => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      alert('Speech synthesis is not supported in this browser.');
-      return;
-    }
-
     if (isSpeaking) {
-      window.speechSynthesis.cancel();
+      stopActiveGeminiSpeech();
       setIsSpeaking(false);
       return;
     }
 
-    const textToSpeak = (contentRef.current || note?.content || '')
+    const rawActiveContent =
+      mode === 'read'
+        ? (note?.content || contentRef.current || '')
+        : (contentRef.current || note?.content || '');
+
+    const textToSpeak = rawActiveContent
       .replace(/[#*`>_~]/g, '')
       .replace(/<[^>]*>/g, '')
       .trim();
 
     if (!textToSpeak) return;
 
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    
-    // Assign Microsoft Emma multilingual (natural) voice
-    const voice = getMicrosoftEmmaVoice();
-    if (voice) {
-      utterance.voice = voice;
-      utterance.lang = voice.lang || 'en-US';
-    }
-
-    utterance.rate = 0.95;
-    utterance.pitch = 1.0;
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
     setIsSpeaking(true);
-    window.speechSynthesis.speak(utterance);
+    playGeminiSpeech(textToSpeak, {
+      voice: notebookVoice,
+      verbatimReadAloud: true,
+      onStart: () => setIsSpeaking(true),
+      onEnd: () => setIsSpeaking(false),
+      onError: () => setIsSpeaking(false),
+    });
   };
 
   // Bulletpoints list toggle
@@ -1264,7 +1262,26 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Listen Aloud Button (Speech Synthesis with Microsoft Emma Multilingual Natural Voice) */}
+              {/* Notebook Read-Aloud Voice Chooser (Jenny or Christopher) */}
+              <select
+                value={notebookVoice}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setNotebookVoice(v);
+                  localStorage.setItem('stba_read_aloud_voice', v);
+                  if (isSpeaking) {
+                    stopActiveGeminiSpeech();
+                    setIsSpeaking(false);
+                  }
+                }}
+                aria-label="Select Notebook read-aloud voice"
+                className="px-2 py-1 rounded-md text-[11px] font-semibold bg-white/5 border border-[var(--nb-border)] text-[var(--nb-text-muted)] hover:border-[var(--nb-border-gold)] outline-none cursor-pointer"
+              >
+                <option value="Kore" className="bg-[#141923] text-white">Jenny (Female, US)</option>
+                <option value="Fenrir" className="bg-[#141923] text-white">Christopher (Male, US)</option>
+              </select>
+
+              {/* Listen Aloud Button (Unified Gemini 3.8 Natural Voice) */}
               <button
                 type="button"
                 onClick={toggleSpeakNote}
@@ -1273,7 +1290,7 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
                     ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 hover:bg-rose-500/25'
                     : 'bg-white/5 border-[var(--nb-border)] text-[var(--nb-text-muted)] hover:text-[var(--nb-gold)] hover:border-[var(--nb-border-gold)]'
                 }`}
-                title={isSpeaking ? "Stop Voice Narration" : "Listen Aloud (Microsoft Emma Multilingual Natural Voice)"}
+                title={isSpeaking ? "Stop Voice Narration" : "Listen Aloud"}
               >
                 {isSpeaking ? (
                   <>

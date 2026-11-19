@@ -272,15 +272,16 @@ export const STORAGE_KEY_PRELOADED = "stba_preloaded_answers";
 export function getStoredPreloadedAnswers(): PreloadedAnswer[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PRELOADED);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.slice(0, 8);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.slice(0, 8);
+      }
     }
   } catch (e) {
     console.warn("Failed to parse preloaded answers from storage:", e);
   }
-  return [];
+  return DEFAULT_PRELOADED_ANSWERS;
 }
 
 export function savePreloadedAnswer(

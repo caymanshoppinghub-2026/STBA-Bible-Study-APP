@@ -13,6 +13,7 @@ import { ElderStephenMemoryEngine } from "../lib/elderStephenEngine";
 import { formatProperElderSpacing, extractScriptureReference } from "../utils/elderSpacing";
 import { getElderStephenVoice } from "../components/stba/RightPaneTools";
 import { stitchDictatedFragments, recombineFragmentedTranscript, getAdaptivePauseBufferMs } from "../utils/dictationBuffer";
+import { playGeminiSpeech, stopActiveGeminiSpeech } from "../utils/geminiSpeechPlayer";
 
 export type StudyMode =
   | "Notebook"
@@ -281,30 +282,27 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
     );
   }, [studyFlow.currentPassage, studyFlow.activeStepIndex, studyFlow.activeTab, studyFlow.currentMode]);
 
-  // Text-To-Speech Clean Handling
+  // Text-To-Speech Clean Handling (Unified Gemini 3.8 Charon Voice)
   const speakMessage = useCallback((msgId: string, text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    if (typeof window === "undefined") {
       return;
     }
 
-    // Disable browser-level TTS narration during the onboarding flow;
-    // ensure it only activates after the tour is completed.
+    // Pause automatic playback only if the guided onboarding tour is actively running
     const activeOnboardingStage = localStorage.getItem("stba_onboarding_stage");
-    const tourCompleted = localStorage.getItem("stba_tour_completed") === "true";
-    const onboardingV3Completed = localStorage.getItem("stba_onboarding_v3_completed") === "true";
-    if (activeOnboardingStage || !tourCompleted || !onboardingV3Completed) {
-      window.speechSynthesis.cancel();
+    if (activeOnboardingStage) {
+      stopActiveGeminiSpeech();
       setSpeakingMsgId(null);
       return;
     }
 
     if (speakingMsgId === msgId) {
-      window.speechSynthesis.cancel();
+      stopActiveGeminiSpeech();
       setSpeakingMsgId(null);
       return;
     }
 
-    window.speechSynthesis.cancel();
+    stopActiveGeminiSpeech();
 
     // Clean markdown and formatting tags for natural speech flow
     const clean = text
@@ -312,26 +310,19 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
       .trim();
 
-    const utter = new SpeechSynthesisUtterance(clean);
-    utter.rate = 0.93;
-    utter.pitch = 0.86;
-
-    const voice = getElderStephenVoice();
-    if (voice) {
-      utter.voice = voice;
-    }
-
-    utter.onend = () => setSpeakingMsgId(null);
-    utter.onerror = () => setSpeakingMsgId(null);
+    if (!clean) return;
 
     setSpeakingMsgId(msgId);
-    window.speechSynthesis.speak(utter);
+    playGeminiSpeech(clean, {
+      voice: "Charon",
+      onStart: () => setSpeakingMsgId(msgId),
+      onEnd: () => setSpeakingMsgId(null),
+      onError: () => setSpeakingMsgId(null),
+    });
   }, [speakingMsgId]);
 
   const stopSpeaking = useCallback(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
+    stopActiveGeminiSpeech();
     setSpeakingMsgId(null);
   }, []);
 

@@ -227,98 +227,20 @@ export function decodeAndCleanGeminiPcm(
   const silenceThreshold = Math.max(0.0035, voicedRefRms * 0.04);
   const voicedThreshold = Math.max(0.011, voicedRefRms * 0.14);
 
-  // 1. Trim leading silence / click
+  // 1. Trim leading pure digital silence
   let startFrame = 0;
-  while (startFrame < numFrames - 4 && rms[startFrame] < silenceThreshold) {
+  while (startFrame < numFrames - 4 && rms[startFrame] < 0.002) {
     startFrame++;
   }
   startFrame = Math.max(0, startFrame - 1);
 
-  // 2. Trim trailing silence
+  // 2. Trim trailing pure digital silence while preserving complete speech and final consonant release
   let endFrame = numFrames - 1;
-  while (endFrame > startFrame + 4 && rms[endFrame] < silenceThreshold) {
+  while (endFrame > startFrame + 4 && rms[endFrame] < 0.002) {
     endFrame--;
   }
-
-  // 3. Detect and strip any detached trailing sound effect / sigh / 'shh' burst in the final 900ms
-  const searchWindowFrames = Math.min(90, endFrame - startFrame - 10);
-  if (searchWindowFrames > 12) {
-    const windowStart = endFrame - searchWindowFrames;
-    // Scan backward from endFrame to see if there is a low-energy gap (>= 40ms = 4 frames)
-    // followed by a trailing noise/breath/shh burst
-    let gapEnd = -1;
-    let gapStart = -1;
-    for (let f = endFrame - 2; f >= windowStart; f--) {
-      if (rms[f] < silenceThreshold * 1.75) {
-        if (gapEnd === -1) gapEnd = f;
-        gapStart = f;
-      } else if (gapEnd !== -1) {
-        if (gapEnd - gapStart + 1 >= 4) {
-          break;
-        }
-        gapEnd = -1;
-        gapStart = -1;
-      }
-    }
-
-    if (gapEnd !== -1 && gapStart !== -1 && gapEnd - gapStart + 1 >= 4) {
-      const burstFrames = endFrame - gapEnd;
-      if (burstFrames > 0 && burstFrames <= 55) {
-        let burstSumRms = 0;
-        let burstMaxRms = 0;
-        let burstSumZcr = 0;
-        let burstSumHf = 0;
-        for (let f = gapEnd + 1; f <= endFrame; f++) {
-          burstSumRms += rms[f];
-          if (rms[f] > burstMaxRms) burstMaxRms = rms[f];
-          burstSumZcr += zcr[f];
-          burstSumHf += hfRatio[f];
-        }
-        const avgZcr = burstSumZcr / burstFrames;
-        const avgHf = burstSumHf / burstFrames;
-        const avgRms = burstSumRms / burstFrames;
-        // If the detached tail is a sibilant 'shh'/hiss or a quieter breath/sound effect, strip it
-        if (
-          avgZcr > 0.16 ||
-          avgHf > 0.42 ||
-          burstMaxRms < voicedRefRms * 0.55 ||
-          avgRms < voicedRefRms * 0.3
-        ) {
-          endFrame = gapStart;
-          while (endFrame > startFrame + 4 && rms[endFrame] < silenceThreshold * 1.5) {
-            endFrame--;
-          }
-        }
-      }
-    }
-  }
-
-  // 4. Strip attached trailing 'shh' / sibilant hiss / breath decay at the end of the final word
-  const maxAttachedTailFrames = Math.min(60, endFrame - startFrame - 6); // up to 600ms
-  let strippedAttached = 0;
-  while (endFrame > startFrame + 6 && strippedAttached < maxAttachedTailFrames) {
-    const isHighFreqSibilantOrShh =
-      (zcr[endFrame] > 0.18 || hfRatio[endFrame] > 0.45) &&
-      rms[endFrame] < voicedRefRms * 0.48;
-    const isLowEnergyBreathTail = rms[endFrame] < voicedThreshold * 0.72;
-
-    if (isHighFreqSibilantOrShh || isLowEnergyBreathTail) {
-      endFrame--;
-      strippedAttached++;
-    } else {
-      break;
-    }
-  }
-
-  // Allow a tiny 15ms natural release only if the next frame is NOT high-frequency 'shh' noise
-  if (
-    endFrame + 1 < numFrames &&
-    zcr[endFrame + 1] < 0.17 &&
-    hfRatio[endFrame + 1] < 0.42 &&
-    rms[endFrame + 1] < voicedRefRms * 0.35
-  ) {
-    endFrame = Math.min(numFrames - 1, endFrame + 1);
-  }
+  // Add a safety pad of 3 frames (30ms) to ensure decaying consonants are never clipped
+  endFrame = Math.min(numFrames - 1, endFrame + 3);
 
   const startSample = startFrame * frameSize;
   const endSample = Math.min(sampleCount, (endFrame + 1) * frameSize);

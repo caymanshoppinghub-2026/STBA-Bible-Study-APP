@@ -1,10 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { playGeminiSpeech, stopActiveGeminiSpeech } from "../utils/geminiSpeechPlayer";
 
 export type CuratedVoiceId =
   | "male-stevens"
   | "male-christopher"
   | "female-jenny"
   | "female-aria";
+
+export const CURATED_VOICE_GEMINI_MAP: Record<CuratedVoiceId, string> = {
+  "male-stevens": "Charon",
+  "male-christopher": "Fenrir",
+  "female-jenny": "Kore",
+  "female-aria": "Aoede",
+};
 
 export interface SpeechVoiceOption {
   id: CuratedVoiceId;
@@ -337,7 +345,7 @@ export function useSpeechReader() {
     }
 
     currentChunkIndexRef.current = index;
-    window.speechSynthesis.cancel();
+    stopActiveGeminiSpeech();
 
     const chunkText = chunksRef.current[index];
     if (!chunkText) {
@@ -345,56 +353,47 @@ export function useSpeechReader() {
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(chunkText);
-    utteranceRef.current = utterance;
+    const activeVoiceId = selectedVoiceIdRef.current;
+    const geminiVoice = CURATED_VOICE_GEMINI_MAP[activeVoiceId] || "Charon";
+    const voiceCfg = CURATED_VOICES_CONFIG.find((c) => c.id === activeVoiceId);
+    const playbackRate = voiceCfg ? Math.max(0.95, voiceCfg.defaultRate) : 1.0;
 
-    // Resolve system voice and acoustic parameters for currently selected curated voice
-    const sysVoices = window.speechSynthesis.getVoices();
-    const { voice, pitch, rate } = resolveVoiceAndParams(selectedVoiceIdRef.current, sysVoices);
-
-    if (voice) {
-      utterance.voice = voice;
-    }
-    utterance.pitch = pitch;
-    utterance.rate = rate;
-
-    utterance.onstart = () => {
-      if (!isPausedRef.current) {
-        setIsSpeaking(true);
-        setIsPaused(false);
-      }
-    };
-
-    utterance.onend = () => {
-      if (isPausedRef.current || !isSpeakingRef.current) {
-        return;
-      }
-      const nextIndex = index + 1;
-      currentChunkIndexRef.current = nextIndex;
-      playChunk(nextIndex);
-    };
-
-    utterance.onerror = (e) => {
-      if (isPausedRef.current || !isSpeakingRef.current) {
-        return;
-      }
-      console.warn("Speech chunk playback notice:", e);
-      const nextIndex = index + 1;
-      currentChunkIndexRef.current = nextIndex;
-      playChunk(nextIndex);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    playGeminiSpeech(chunkText, {
+      voice: geminiVoice,
+      verbatimReadAloud: true,
+      rate: playbackRate,
+      onStart: () => {
+        if (!isPausedRef.current) {
+          setIsSpeaking(true);
+          setIsPaused(false);
+        }
+      },
+      onEnd: () => {
+        if (isPausedRef.current || !isSpeakingRef.current) {
+          return;
+        }
+        const nextIndex = index + 1;
+        currentChunkIndexRef.current = nextIndex;
+        playChunk(nextIndex);
+      },
+      onError: (e) => {
+        if (isPausedRef.current || !isSpeakingRef.current) {
+          return;
+        }
+        console.warn("Speech chunk playback notice:", e);
+        const nextIndex = index + 1;
+        currentChunkIndexRef.current = nextIndex;
+        playChunk(nextIndex);
+      },
+    });
   }, []);
 
-  // Update curated voices when system voices populate
+  // Update curated voices (always available immediately, enhanced with browser voices if loaded)
   const populateVoices = useCallback(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      return;
-    }
-
-    const sysVoices = window.speechSynthesis.getVoices();
-    if (!sysVoices || sysVoices.length === 0) return;
+    const sysVoices =
+      typeof window !== "undefined" && "speechSynthesis" in window
+        ? window.speechSynthesis.getVoices()
+        : [];
 
     const curatedList: SpeechVoiceOption[] = CURATED_VOICES_CONFIG.map((cfg) => {
       const { voice } = resolveVoiceAndParams(cfg.id, sysVoices);
@@ -468,9 +467,7 @@ export function useSpeechReader() {
   );
 
   const stop = useCallback(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
+    stopActiveGeminiSpeech();
     isSpeakingRef.current = false;
     isPausedRef.current = false;
     currentChunkIndexRef.current = 0;
@@ -481,10 +478,6 @@ export function useSpeechReader() {
   }, []);
 
   const pause = useCallback(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      return;
-    }
-
     if (!isSpeakingRef.current || isPausedRef.current) {
       return;
     }
@@ -492,7 +485,7 @@ export function useSpeechReader() {
     isPausedRef.current = true;
     setIsPaused(true);
     setIsSpeaking(true);
-    window.speechSynthesis.cancel();
+    stopActiveGeminiSpeech();
   }, []);
 
   const resume = useCallback(() => {

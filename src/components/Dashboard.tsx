@@ -2236,7 +2236,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                               <>
                                 <Volume2 className="w-3.5 h-3.5" />
                                 <span>
-                                  {speechReader.isPaused ? "Resume Audio" : "Listen Read Aloud"}
+                                  {speechReader.isPaused ? "Resume" : "Listen"}
                                 </span>
                               </>
                             )}
@@ -2368,7 +2368,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                 <div className="space-y-4">
                   {/* Visually Neat & Scrollable Exegesis with Clickable Verse Buttons */}
                   <div
-                    className={`bg-[#06162c]/90 p-4 sm:p-5 rounded-2xl border border-[#0d3060] ${
+                    className={`bg-[#06162c]/90 p-4 sm:p-5 pb-12 sm:pb-14 rounded-2xl border border-[#0d3060] ${
                       isExegesisControlsCollapsed
                         ? "max-h-[64vh] sm:max-h-[68vh]"
                         : "max-h-[50vh] sm:max-h-[54vh]"

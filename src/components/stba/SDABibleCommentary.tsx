@@ -14,6 +14,7 @@ import { ScriptureLinkedText } from "./ScriptureLinkedText";
 import { bibleService } from "../../services/bibleService";
 import { ToolHighlightableWrapper } from "./HighlightDropdownMenu";
 import { apiFetch, safeParseResponseJson } from "../../lib/apiFetch";
+import { playGeminiSpeech, stopActiveGeminiSpeech } from "../../utils/geminiSpeechPlayer";
 
 // ==========================================
 // 7-VOLUME CANONICAL SDABC METADATA
@@ -27,6 +28,51 @@ import {
   SDABCVolume, SDABC_VOLUMES, SDABCVerseNote, SDABCEntry,
   getVolumeForBook, VOLUME_DEFAULT_REFS, PRELOADED_SDABC_DATA
 } from "../../data/sdabcPreloadedData";
+
+/**
+ * Normalizes commentary text imported from docx or columnar sources,
+ * converting hard intra-paragraph line breaks into fluid spaces while
+ * preserving true paragraph transitions (\n\n).
+ */
+export function cleanDocxLineWraps(text: string): string {
+  if (!text) return "";
+  const normalized = text.replace(/\r\n/g, "\n");
+  const paragraphs = normalized.split(/\n{2,}/);
+  
+  const cleanedParagraphs = paragraphs.map(p => {
+    const lines = p.split("\n");
+    if (lines.length <= 1) return p.trim();
+    
+    let result = "";
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      if (!result) {
+        result = line;
+        continue;
+      }
+      
+      const prevLine = lines[i - 1].trim();
+      const endsWithSentencePunct = /[.!?]["”)]?$/.test(prevLine);
+      const isShortLine = prevLine.length < 75;
+      const startsWithHeadword = /^[A-Z][a-z]+(\s+[a-z]+)?\.\s+[A-Z]/.test(line) || /^\d+\.\s+/.test(line);
+      
+      if ((endsWithSentencePunct && isShortLine) || startsWithHeadword) {
+        result += "\n\n" + line;
+      } else {
+        if (result.endsWith("–") || result.endsWith("-")) {
+          result += line;
+        } else {
+          result += " " + line;
+        }
+      }
+    }
+    return result;
+  });
+  
+  return cleanedParagraphs.join("\n\n").trim();
+}
 
 
 // ==========================================
@@ -678,12 +724,10 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
     }
   };
 
-  // Audio Playback / Narration of Commentary linked to User Profile Voice
+  // Audio Playback / Narration of Commentary using unified Elder Stephen (Gemini 3.8 Charon) engine
   const handleToggleAudio = () => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-
     if (isPlayingAudio) {
-      window.speechSynthesis.cancel();
+      stopActiveGeminiSpeech();
       setIsPlayingAudio(false);
       return;
     }
@@ -694,22 +738,18 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
       commentaryData.verses.map(v => `Verse ${v.verseNumber}. ${v.commentaryText}`).join(" ") +
       (commentaryData.egwComments?.[0] ? ` Ellen G. White comments: ${commentaryData.egwComments[0].quote}` : "");
 
-    const utterance = new SpeechSynthesisUtterance(textToRead);
-    utterance.rate = 0.95; // Gentle dignified pacing
-    utterance.pitch = 1.0;
-    
-    // Link voice selected in user profile specifically to commentary audio reading
-    const profileVoice = getSelectedProfileVoice();
-    if (profileVoice) {
-      utterance.voice = profileVoice;
-    }
+    const savedReadAloud =
+      typeof window !== "undefined" ? localStorage.getItem("stba_read_aloud_voice") : null;
+    const commentaryVoice = savedReadAloud === "Fenrir" ? "Fenrir" : "Kore";
 
-    utterance.onend = () => setIsPlayingAudio(false);
-    utterance.onerror = () => setIsPlayingAudio(false);
-
-    speechUtteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
     setIsPlayingAudio(true);
+    playGeminiSpeech(textToRead, {
+      voice: commentaryVoice,
+      verbatimReadAloud: true,
+      onStart: () => setIsPlayingAudio(true),
+      onEnd: () => setIsPlayingAudio(false),
+      onError: () => setIsPlayingAudio(false),
+    });
   };
 
   // Filtered verses based on search filter
@@ -1142,10 +1182,10 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
 
                 {/* Authentic Commentary Body */}
                 <div 
-                  className="font-serif font-bible font-commentary-body sdabc-commentary-paragraph not-italic leading-relaxed opacity-90 whitespace-pre-line" 
+                  className="font-serif font-bible font-commentary-body sdabc-commentary-paragraph not-italic leading-relaxed opacity-90 whitespace-pre-line text-left" 
                   style={{ fontSize: `${fontSize}px`, lineHeight: 1.7 }}
                 >
-                  <ScriptureLinkedText text={v.commentaryText} onNavigateRef={handleScriptureLinkClick} />
+                  <ScriptureLinkedText text={cleanDocxLineWraps(v.commentaryText)} onNavigateRef={handleScriptureLinkClick} />
                 </div>
 
                 {/* Doctrinal Connection Badge */}
@@ -1179,10 +1219,10 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
               <Sparkles className="w-4 h-4" /> Historical & Context (SDABC Authorship & Setting)
             </h3>
             <div 
-              className="leading-relaxed opacity-90 whitespace-pre-line font-serif font-bible font-commentary-body sdabc-commentary-paragraph not-italic" 
+              className="leading-relaxed opacity-90 whitespace-pre-line font-serif font-bible font-commentary-body sdabc-commentary-paragraph not-italic text-left" 
               style={{ fontSize: `${fontSize}px`, lineHeight: 1.7 }}
             >
-              <ScriptureLinkedText text={commentaryData.historicalContext} onNavigateRef={handleScriptureLinkClick} />
+              <ScriptureLinkedText text={cleanDocxLineWraps(commentaryData.historicalContext)} onNavigateRef={handleScriptureLinkClick} />
             </div>
 
             <div className="pt-3 border-t border-stone-500/15 space-y-2">

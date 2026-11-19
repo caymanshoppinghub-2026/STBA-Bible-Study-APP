@@ -1438,7 +1438,15 @@ export const TracksPageRedesigned: React.FC = () => {
     }
   ];
 
+  const [highlightFundamentalTrack, setHighlightFundamentalTrack] = useState(() => {
+    return localStorage.getItem("stba_highlight_fundamental_track") === "true";
+  });
+
   const handleCardClick = (trackId: string) => {
+    if (highlightFundamentalTrack) {
+      localStorage.removeItem("stba_highlight_fundamental_track");
+      setHighlightFundamentalTrack(false);
+    }
     setSelectedTrackId(trackId);
     navigate(`/tracks/${trackId}/intro`);
   };
@@ -1463,25 +1471,42 @@ export const TracksPageRedesigned: React.FC = () => {
         {TRACKS_LIST.map((track) => {
           const completed = trackProgress[track.id] || 0;
           const percent = Math.round((completed / track.count) * 100);
+          const isTargetHighlight = highlightFundamentalTrack && track.id === "fundamental-beliefs";
 
           return (
             <div
               key={track.id}
               onClick={() => handleCardClick(track.id)}
-              className="bg-white border border-[#E8DDC6]/80 hover:border-[#C9973A] rounded-2xl p-6 hover:shadow-md transition-all duration-300 flex flex-col justify-between h-[280px] shadow-3xs cursor-pointer group relative overflow-hidden"
+              className={`rounded-2xl p-6 transition-all duration-300 flex flex-col justify-between h-[280px] cursor-pointer group relative overflow-hidden ${
+                isTargetHighlight
+                  ? "bg-white border-2 border-emerald-500 shadow-[0_0_24px_rgba(16,185,129,0.38)] ring-2 ring-emerald-400/40"
+                  : "bg-white border border-[#E8DDC6]/80 hover:border-[#C9973A] hover:shadow-md shadow-3xs"
+              }`}
               id={`track-card-${track.id}`}
             >
               {/* Highlight ribbon */}
-              <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#1C2333]/10 group-hover:bg-[#C9973A] transition-colors" />
+              <div className={`absolute top-0 left-0 right-0 h-[3px] transition-colors ${
+                isTargetHighlight
+                  ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500"
+                  : "bg-[#1C2333]/10 group-hover:bg-[#C9973A]"
+              }`} />
 
               <div className="space-y-4">
                 {/* Category & Icon row */}
                 <div className="flex items-center justify-between">
-                  <div className="text-2xl p-2 bg-[#FDFAF5] rounded-xl border border-[#E8DDC6]/60 group-hover:scale-105 transition-transform">
+                  <div className={`text-2xl p-2 rounded-xl border transition-all ${
+                    isTargetHighlight
+                      ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-xs scale-105"
+                      : "bg-[#FDFAF5] border-[#E8DDC6]/60 group-hover:scale-105"
+                  }`}>
                     {track.emoji}
                   </div>
-                  <span className="text-[10px] font-mono uppercase font-bold tracking-wide px-2.5 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200/50">
-                    {track.category}
+                  <span className={`text-[10px] font-mono uppercase font-bold tracking-wide px-2.5 py-0.5 rounded-full border transition-all ${
+                    isTargetHighlight
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-300 animate-pulse font-extrabold"
+                      : "bg-stone-100 text-stone-600 border-stone-200/50"
+                  }`}>
+                    {isTargetHighlight ? "✦ Start Here" : track.category}
                   </span>
                 </div>
 

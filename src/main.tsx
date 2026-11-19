@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { scheduleAutoSeedCoreLibrary } from './lib/storage/autoSeedLibrary';
 
 // Clean up any stale service workers and precaches that could serve outdated HTML/chunk hashes
 if (typeof window !== 'undefined') {
@@ -59,6 +60,16 @@ if (typeof window !== 'undefined') {
     }).catch(() => {});
   }
 
+  // Ensure initial out-of-the-box default voice is Elder Stephen (Gemini 3.8 Charon) across the entire app
+  try {
+    if (!localStorage.getItem('stba_ai_voice') || localStorage.getItem('stba_ai_voice') === 'Puck') {
+      localStorage.setItem('stba_ai_voice', 'Charon');
+    }
+    if (!localStorage.getItem('stba_tts_engine')) {
+      localStorage.setItem('stba_tts_engine', 'original');
+    }
+  } catch {}
+
   if ('caches' in window) {
     caches.keys().then((keys) => {
       for (const key of keys) {
@@ -66,6 +77,9 @@ if (typeof window !== 'undefined') {
       }
     }).catch(() => {});
   }
+
+  // Zero-click background caching of Core Adventist Library into IndexedDB
+  scheduleAutoSeedCoreLibrary();
 }
 
 createRoot(document.getElementById('root')!).render(

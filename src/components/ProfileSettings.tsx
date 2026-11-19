@@ -43,6 +43,7 @@ import {
 import { useSabbathMode } from "../context/SabbathMode";
 import { TeacherRoleGuideModal } from "./sabbathSchool/TeacherRoleGuideModal";
 import { getElderStephenVoice, filterEdgeNaturalVoices } from "./stba/RightPaneTools";
+import { playGeminiSpeech, getMicrosoftAndrewUSVoice } from "../utils/geminiSpeechPlayer";
 import { MasteryPath } from "./MasteryPath";
 import { addNotification } from "../utils/notificationsManager";
 import { simulateLiveSectionUpdate, checkForLiveContentUpdates } from "../utils/contentUpdatesWatcher";
@@ -1743,69 +1744,59 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                 {/* 2. Dynamic Settings Based on Selected Engine */}
                 {ttsEngine === "browser" ? (
                   <div className="p-3 bg-teal-50/50 rounded-xl border border-teal-200/60 space-y-2">
-                    <label className="text-xs font-bold text-teal-900 block">Select Premium Edge Natural Voice (Web Speech API):</label>
+                    <label className="text-xs font-bold text-teal-900 block">Edge Speech API — Secondary AI Voice:</label>
                     {(() => {
-                      const filteredEdgeVoices = filterEdgeNaturalVoices(browserVoices);
-                      const defaultAndrew = filteredEdgeVoices.find(v => v.name.toLowerCase().includes("andrew")) || filteredEdgeVoices[0];
-                      const activeVoiceValue = browserVoiceUri || (defaultAndrew ? defaultAndrew.voiceURI : "");
+                      const andrewVoice = getMicrosoftAndrewUSVoice();
+                      const andrewLabel = andrewVoice
+                        ? `⭐ ${andrewVoice.name} (${andrewVoice.lang})`
+                        : "⭐ Microsoft Andrew Online (Natural) - English (United States)";
+                      const andrewValue = andrewVoice ? andrewVoice.voiceURI : "Microsoft Andrew Online (Natural) - English (United States)";
 
                       return (
                         <select
-                          value={activeVoiceValue}
+                          value={andrewValue}
                           onChange={(e) => {
                             const val = e.target.value;
                             setBrowserVoiceUri(val);
                             localStorage.setItem("stba_browser_voice_uri", val);
                             window.dispatchEvent(new Event("stba_voice_changed"));
-                            const voiceObj = browserVoices.find(v => v.voiceURI === val || v.name === val);
-                            displayMessage(`Browser voice updated to ${voiceObj?.name || val}`);
+                            displayMessage("Secondary AI voice locked to Microsoft Andrew Natural (US)");
                           }}
                           className="w-full px-3 py-2 text-xs font-bold font-sans rounded-xl border border-teal-200 outline-none bg-white text-stone-800 focus:ring-2 focus:ring-teal-500/30"
-                          aria-label="Select preferred browser speech synthesis voice"
+                          aria-label="Microsoft Andrew Natural US voice"
                           id="select-browser-voice"
                         >
-                          {filteredEdgeVoices.length === 0 ? (
-                            <option value="">⭐ Microsoft Andrew Online Natural (Default)</option>
-                          ) : (
-                            filteredEdgeVoices.map((v, idx) => (
-                              <option key={v.voiceURI || idx} value={v.voiceURI}>
-                                ⭐ {v.name} ({v.lang})
-                              </option>
-                            ))
-                          )}
+                          <option value={andrewValue}>{andrewLabel}</option>
                         </select>
                       );
                     })()}
                     <p className="text-[10.5px] text-teal-800 font-medium">
-                      Note: Default Web Speech API voice set to <strong>Microsoft Andrew Online Natural</strong>. Only high-fidelity Edge Natural voices are listed.
+                      Locked exclusively to <strong>Microsoft Natural Voice — Andrew (US)</strong> for consistent, natural Edge Speech playback with no robotic system voices.
                     </p>
                   </div>
                 ) : (
                   <div className="p-3 bg-amber-50/40 rounded-xl border border-amber-200/60 space-y-2">
-                    <label className="text-xs font-bold text-amber-950 block">AI Voice Character Model:</label>
+                    <label className="text-xs font-bold text-amber-950 block">Primary AI Voice (Default for All New Accounts):</label>
                     <select
-                      value={aiVoice}
-                      onChange={(e) => {
-                        const val = e.target.value as any;
-                        setAiVoice(val);
-                        localStorage.setItem("stba_ai_voice", val);
+                      value="Charon"
+                      onChange={() => {
+                        setAiVoice("Charon");
+                        localStorage.setItem("stba_ai_voice", "Charon");
                         window.dispatchEvent(new Event("stba_voice_changed"));
                         if (user && !user.isGuest) {
                           saveProfileToSupabase(user);
                         }
-                        displayMessage(`AI Narration Voice updated to ${val}`);
+                        displayMessage("AI Narration Voice locked to Elder Stephen (Gemini 3.8 Charon)");
                       }}
                       className="w-full px-3 py-2 text-xs font-bold font-sans rounded-xl border border-amber-200 outline-none bg-white text-stone-800 focus:ring-2 focus:ring-amber-500/30"
-                      aria-label="Select preferred Gemini AI voice character"
+                      aria-label="Elder Stephen Gemini 3.8 Natural Voice"
                       id="select-ai-voice"
                     >
-                      <option value="Charon">Elder Stephen's Natural Voice (Default - Charon)</option>
-                      <option value="Puck">Youth Bible Scholar (Puck)</option>
-                      <option value="Kore">Theological Scholar (Kore)</option>
-                      <option value="Aoede">Creative Lyricist (Aoede)</option>
-                      <option value="Zephyr">Meditative Devotional (Zephyr)</option>
-                      <option value="Fenrir">Pulpit Preacher (Fenrir)</option>
+                      <option value="Charon">⭐ Elder Stephen — Original Gemini 3.8 Natural Voice (Charon)</option>
                     </select>
+                    <p className="text-[10.5px] text-amber-900/80 font-medium">
+                      Original Elder Stephen voice powered by Gemini 3.8 Charon. Automatically selected as the default across the app.
+                    </p>
                   </div>
                 )}
 
@@ -1815,18 +1806,15 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if ("speechSynthesis" in window) {
-                        window.speechSynthesis.cancel();
-                        const sampleText = "Greetings. I am Elder Stephen. Welcome to your Scripture study session.";
-                        const utt = new SpeechSynthesisUtterance(sampleText);
-                        utt.rate = 1.0;
-                        const v = getElderStephenVoice();
-                        if (v) utt.voice = v;
-                        window.speechSynthesis.speak(utt);
-                        displayMessage(`Playing voice sample using ${v ? v.name : "default voice"}`);
-                      } else {
-                        displayMessage("Speech synthesis is not supported in this browser.");
-                      }
+                      const sampleText = "Greetings. I am Elder Stephen. Welcome to your Scripture study session.";
+                      playGeminiSpeech(sampleText, {
+                        onStart: () => {
+                          const engineLabel = ttsEngine === "browser"
+                            ? "Microsoft Natural Voice — Andrew (US)"
+                            : "Elder Stephen (Gemini 3.8 Charon)";
+                          displayMessage(`Playing voice sample using ${engineLabel}`);
+                        },
+                      });
                     }}
                     className="px-3 py-1.5 text-xs font-bold font-sans bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl border border-stone-250 cursor-pointer transition flex items-center gap-1.5"
                   >

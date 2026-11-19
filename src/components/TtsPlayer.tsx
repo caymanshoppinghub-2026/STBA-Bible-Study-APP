@@ -969,11 +969,17 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({
             {/* Browser Voice Selector Dropdown (When Browser engine active) */}
             {ttsEngine === "browser" && (
               <div className="space-y-1 pt-1">
-                <label className="text-[9.5px] font-bold text-stone-600 block">Browser Synthesized Voice (Edge Natural):</label>
+                <label className="text-[9.5px] font-bold text-stone-600 block">Edge Speech API — Secondary AI Voice:</label>
                 {(() => {
                   const filteredEdgeVoices = filterEdgeNaturalVoices(availableVoices);
-                  const defaultAndrew = filteredEdgeVoices.find(v => v.name.toLowerCase().includes("andrew")) || filteredEdgeVoices[0];
-                  const activeVoiceValue = browserVoiceUri || (defaultAndrew ? defaultAndrew.voiceURI : "");
+                  const andrewVoice =
+                    filteredEdgeVoices.find(v => v.name.toLowerCase().includes("andrew") && v.lang.toLowerCase().startsWith("en-us")) ||
+                    filteredEdgeVoices.find(v => v.name.toLowerCase().includes("andrew")) ||
+                    filteredEdgeVoices[0];
+                  const activeVoiceValue = andrewVoice ? andrewVoice.voiceURI : "Microsoft Andrew Online (Natural) - English (United States)";
+                  const activeLabel = andrewVoice
+                    ? `⭐ ${andrewVoice.name} (${andrewVoice.lang})`
+                    : "⭐ Microsoft Andrew Online (Natural) - English (United States)";
 
                   return (
                     <select
@@ -986,20 +992,12 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({
                       }}
                       className="w-full p-1.5 text-[10.5px] font-sans rounded border border-stone-300 bg-stone-50 text-stone-800 outline-none focus:ring-1 focus:ring-teal-500"
                     >
-                      {filteredEdgeVoices.length === 0 ? (
-                        <option value="">⭐ Microsoft Andrew Online Natural (Default)</option>
-                      ) : (
-                        filteredEdgeVoices.map((v, idx) => (
-                          <option key={v.voiceURI || idx} value={v.voiceURI}>
-                            ⭐ {v.name} ({v.lang})
-                          </option>
-                        ))
-                      )}
+                      <option value={activeVoiceValue}>{activeLabel}</option>
                     </select>
                   );
                 })()}
                 <p className="text-[8.5px] text-stone-500 italic">
-                  Note: Default voice is Microsoft Andrew Online Natural. Exclusively filtering for premium Edge Natural Microsoft voices.
+                  Locked exclusively to Microsoft Natural Voice — Andrew (US).
                 </p>
               </div>
             )}
@@ -1007,23 +1005,17 @@ export const TtsPlayer: React.FC<TtsPlayerProps> = ({
             {/* Gemini Character Selector Dropdown (When Original engine active) */}
             {ttsEngine === "original" && (
               <div className="space-y-1 pt-1">
-                <label className="text-[9.5px] font-bold text-stone-600 block">AI Character Voice Model:</label>
+                <label className="text-[9.5px] font-bold text-stone-600 block">Primary AI Voice (Default):</label>
                 <select
-                  value={currentVoice}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setCurrentVoice(val);
-                    localStorage.setItem("stba_ai_voice", val);
+                  value="Charon"
+                  onChange={() => {
+                    setCurrentVoice("Charon");
+                    localStorage.setItem("stba_ai_voice", "Charon");
                     window.dispatchEvent(new Event("stba_voice_changed"));
                   }}
                   className="w-full p-1.5 text-[10.5px] font-sans rounded border border-stone-300 bg-stone-50 text-stone-800 outline-none focus:ring-1 focus:ring-teal-500"
                 >
-                  <option value="Charon">Elder Stephen's Natural Voice (Default - Charon)</option>
-                  <option value="Puck">Youth Bible Scholar (Puck)</option>
-                  <option value="Kore">Theological Scholar (Kore)</option>
-                  <option value="Aoede">Creative Lyricist (Aoede)</option>
-                  <option value="Zephyr">Meditative Devotional (Zephyr)</option>
-                  <option value="Fenrir">Pulpit Preacher (Fenrir)</option>
+                  <option value="Charon">⭐ Elder Stephen — Original Gemini 3.8 Natural Voice (Charon)</option>
                 </select>
               </div>
             )}

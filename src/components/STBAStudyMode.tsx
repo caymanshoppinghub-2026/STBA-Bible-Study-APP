@@ -1050,26 +1050,8 @@ export function STBAStudyMode() {
           </h1>
         </div>
 
-        {/* Right workspace accessories toggles (Elder Stephen Interactive, Theme, Storage & Sync, ViewModeToggle, Expand/Collapse Toggle) */}
+        {/* Right workspace accessories toggles (Theme, Storage & Sync, ViewModeToggle, Expand/Collapse Toggle) */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Elder Stephen Interactive Live Session Quick Button */}
-          <button
-            id="btn-workspace-elder-stephen-interactive"
-            onClick={handleLaunchElderStephenInteractive}
-            className={`px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 shrink-0 font-mono text-xs font-bold shadow-2xs ${
-              activeRightTab === "stephen" && viewMode !== "bible"
-                ? "bg-[#C9973A] border-[#C9973A] text-white"
-                : theme === "dark"
-                  ? "bg-[#1E2530] border-[#C9973A]/50 text-[#F3CF65] hover:border-[#C9973A] hover:bg-[#252E3D]"
-                  : "bg-amber-50 border-[#C9973A] text-[#8C6219] hover:bg-amber-100"
-            }`}
-            title="Start Live Interactive Voice & Exegesis Session with Elder Stephen (gemini-3.8-live)"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#C9973A] animate-pulse shrink-0" />
-            <span className="hidden sm:inline">Elder Stephen Interactive</span>
-            <span className="sm:hidden">Interactive</span>
-          </button>
-
           {/* Client Storage & Offline Sync Engine */}
           <button
             onClick={() => setStorageModalOpen(true)}

@@ -9,6 +9,7 @@ import {
   getMicrosoftEmmaVoice,
   requestAvaLessonNarration
 } from "../utils/sabbathAudioNarrator";
+import { playGeminiSpeech, stopActiveGeminiSpeech } from "../utils/geminiSpeechPlayer";
 
 export interface NarratorState {
   activeDayIndex: number | null;
@@ -145,9 +146,7 @@ function splitIntoFlowingClauses(text: string): string[] {
 }
 
 function stopGlobalNarration() {
-  if (typeof window !== "undefined" && "speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
-  }
+  stopActiveGeminiSpeech();
   if (globalAudioElement) {
     globalAudioElement.pause();
     globalAudioElement = null;
@@ -169,15 +168,15 @@ function stopGlobalNarration() {
 function pauseGlobalNarration() {
   if (globalAudioElement) {
     globalAudioElement.pause();
-  } else if (typeof window !== "undefined" && "speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
+  } else {
+    stopActiveGeminiSpeech();
   }
   globalIsPaused = true;
   updateGlobalState({ isPaused: true });
 }
 
 function playNextSpeechClause() {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+  if (typeof window === "undefined") {
     stopGlobalNarration();
     return;
   }
@@ -194,41 +193,34 @@ function playNextSpeechClause() {
     return;
   }
 
-  window.speechSynthesis.cancel();
+  stopActiveGeminiSpeech();
 
-  const utterance = new SpeechSynthesisUtterance(clauseText);
-  const voices = window.speechSynthesis.getVoices();
-  const detected = getMicrosoftEmmaVoice(voices);
+  // Warm female neural voice (Jenny) for Sabbath School lesson narration — 100% verbatim
+  const savedReadAloud =
+    typeof window !== "undefined" ? localStorage.getItem("stba_read_aloud_voice") : null;
+  const lessonVoice = savedReadAloud === "Fenrir" ? "Fenrir" : "Kore";
 
-  if (detected.voice) {
-    utterance.voice = detected.voice;
-    utterance.lang = detected.voice.lang || "en-US";
-  }
-
-  // Natural speech pacing with Microsoft Emma
-  utterance.rate = 0.95 * globalState.speed;
-  utterance.pitch = 1.0;
-
-  utterance.onstart = () => {
-    if (!globalIsPaused) {
-      updateGlobalState({ isSpeaking: true, isPaused: false, isLoading: false });
-    }
-  };
-
-  utterance.onend = () => {
-    if (globalIsPaused || !globalIsSpeaking) return;
-    globalClauseIndex += 1;
-    playNextSpeechClause();
-  };
-
-  utterance.onerror = (e) => {
-    if (globalIsPaused || !globalIsSpeaking) return;
-    console.warn("Speech playback notice:", e);
-    globalClauseIndex += 1;
-    playNextSpeechClause();
-  };
-
-  window.speechSynthesis.speak(utterance);
+  playGeminiSpeech(clauseText, {
+    voice: lessonVoice,
+    verbatimReadAloud: true,
+    rate: globalState.speed,
+    onStart: () => {
+      if (!globalIsPaused) {
+        updateGlobalState({ isSpeaking: true, isPaused: false, isLoading: false });
+      }
+    },
+    onEnd: () => {
+      if (globalIsPaused || !globalIsSpeaking) return;
+      globalClauseIndex += 1;
+      playNextSpeechClause();
+    },
+    onError: (e) => {
+      if (globalIsPaused || !globalIsSpeaking) return;
+      console.warn("Speech playback notice:", e);
+      globalClauseIndex += 1;
+      playNextSpeechClause();
+    },
+  });
 }
 
 function resumeGlobalNarration() {

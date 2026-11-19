@@ -21,7 +21,7 @@ import {
   X
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { TtsPlayer, preCacheSpeechAudios } from "./TtsPlayer";
+import { TtsPlayer } from "./TtsPlayer";
 import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from "../lib/apiFetch";
 import { decodeAndCleanGeminiPcm, sanitizeVerbatimSpeechText } from "../utils/cleanGeminiAudio";
 import { ELDER_STEVEN_PORTRAIT_URL, STBA_LOGO_URL } from "../assets/branding";
@@ -54,19 +54,23 @@ interface ConfettiParticle {
   rotate: number;
 }
 
-// Master Pre-Recorded Audio Files for Instantaneous 0ms Tour Playback
+// Master Pre-Recorded Audio Files for Instantaneous 0ms Tour Playback (Standardized Gemini Charon Voice)
+const TOUR_AUDIO_VERSION = "charon_perfect_master_v5";
 const TOUR_AUDIO_MAP: Record<string, string> = {
-  welcome_modal: "/audio/tour/welcome.mp3",
-  "cluster-ai-mentor": "/audio/tour/cluster_mentor.mp3",
-  "cluster-study-modes": "/audio/tour/cluster_study_modes.mp3",
-  "cluster-navigation-drawer": "/audio/tour/cluster_navigation.mp3",
-  "cluster-profile-transition": "/audio/tour/cluster_profile_transition.mp3",
-  "profile-avatar-pause": "/audio/tour/profile_avatar.mp3",
-  "profile-scribal-journal": "/audio/tour/profile_journal.mp3",
-  "profile-mastery-analytics": "/audio/tour/profile_analytics.mp3",
-  "profile-exit-to-dashboard": "/audio/tour/profile_exit.mp3",
-  study_tracks_conclusion: "/audio/tour/conclusion.mp3"
+  welcome_modal: `/audio/tour/welcome.wav?v=${TOUR_AUDIO_VERSION}`,
+  "cluster-ai-mentor": `/audio/tour/cluster_mentor.wav?v=${TOUR_AUDIO_VERSION}`,
+  "cluster-study-modes": `/audio/tour/cluster_study_modes.wav?v=${TOUR_AUDIO_VERSION}`,
+  "cluster-navigation-drawer": `/audio/tour/cluster_navigation.wav?v=${TOUR_AUDIO_VERSION}`,
+  "cluster-profile-transition": `/audio/tour/cluster_profile_transition.wav?v=${TOUR_AUDIO_VERSION}`,
+  "profile-avatar-pause": `/audio/tour/profile_avatar.wav?v=${TOUR_AUDIO_VERSION}`,
+  "profile-scribal-journal": `/audio/tour/profile_journal.wav?v=${TOUR_AUDIO_VERSION}`,
+  "profile-mastery-analytics": `/audio/tour/profile_analytics.wav?v=${TOUR_AUDIO_VERSION}`,
+  "profile-exit-to-dashboard": `/audio/tour/profile_exit.wav?v=${TOUR_AUDIO_VERSION}`,
+  study_tracks_conclusion: `/audio/tour/conclusion.wav?v=${TOUR_AUDIO_VERSION}`
 };
+
+// Module-level audio singleton to prevent any concurrent audio playback across component mounts/unmounts
+let globalTourAudioInstance: HTMLAudioElement | null = null;
 
 export const TourOverlay: React.FC = () => {
   const { pathname } = useLocation();
@@ -93,7 +97,7 @@ export const TourOverlay: React.FC = () => {
   // Exact personalized audio greeting requested by user specification
   const welcomeGreetingText = `Grace and peace to you, ${userName}. I am Elder Stephen, your AI Bible study mentor. Many people read the Bible again and again without truly retaining or applying what they learn. Using our STBA Study System, we help you understand Scripture deeply, remember it clearly, and use it meaningfully in your daily life. Click the button below to tour your dashboard.`;
 
-  const tracksConclusionSpeech = `Welcome back to your dashboard, ${userName}. Your progress metrics are cleanly initialized at zero so every verse you master reflects your real study activity. I have highlighted Study Tracks for you. Let us initiate your first course on the 28 Fundamental Beliefs and Second Timothy two fifteen to begin transforming reading into lifelong retention.`;
+  const tracksConclusionSpeech = `Welcome back to your dashboard, ${userName}. Your progress metrics are cleanly initialized at zero so every verse you master reflects your real study activity. I have highlighted Study Tracks for you. Let us initiate your first course on the 28 Fundamental Beliefs to begin transforming reading into lifelong retention.`;
 
   const geminiAudioCtxRef = useRef<AudioContext | null>(null);
   const geminiAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -145,7 +149,7 @@ export const TourOverlay: React.FC = () => {
       id: "cluster-ai-mentor",
       clusterBadge: "Cluster 1 • AI Mentor & Exegesis",
       title: "Elder Stephen AI Mentor",
-      body: `Welcome to your study command center, ${userName}! We have grouped your AI mentoring tools so you can study without distraction:`,
+      body: `Welcome to your study command center, ${userName}! We have grouped your AI mentoring tools so you can study without distraction, including Elder Stephen's Corner, the Ask STBA AI Console, and your Weekly Study Recap.`,
       bullets: [
         "Elder Stephen's Corner: Weekly covenant teachings and Sola Scriptura guidance.",
         "Ask STBA AI Console: Instant line-upon-line exegesis and saved doctrinal answers.",
@@ -159,7 +163,7 @@ export const TourOverlay: React.FC = () => {
       id: "cluster-study-modes",
       clusterBadge: "Cluster 2 • Core Study Modes",
       title: "Seven Study Modes for Mastery",
-      body: "All seven STBA study modes are unified into a single launchpad right above your Spiritual Learning Journey gauges:",
+      body: "All seven STBA study modes are unified into a single launchpad right above your Spiritual Learning Journey gauges, including Bible Study Mode, Study Tracks, Doctrine Navigator, Active Recall, Teach It Studio, Notebook, and Sabbath School.",
       bullets: [
         "Exegesis & Doctrine: Bible Study Mode, Study Tracks, and Doctrine Navigator.",
         "Retention & Discipleship: Active Recall, Teach It Studio, Notebook, & Sabbath School.",
@@ -173,7 +177,7 @@ export const TourOverlay: React.FC = () => {
       id: "cluster-navigation-drawer",
       clusterBadge: "Cluster 3 • Navigation & HUD",
       title: "Navigation Drawer & Command Bar",
-      body: "Your top workspace bar keeps navigation and real-time study alerts within one click:",
+      body: "Your top workspace bar keeps navigation and real-time study alerts within one click, featuring the Slide-Out Navigation Drawer, Live Notifications Bell, and Help Center Quick Access.",
       bullets: [
         "Slide-Out Navigation Drawer: Top-left menu button to switch modes from anywhere.",
         "Live Notifications Bell: Alerts for 28 Fundamental Beliefs & Sabbath School updates.",
@@ -288,17 +292,6 @@ export const TourOverlay: React.FC = () => {
 
   const activeSteps = stage === "profile_tour" ? profileTourSteps : dashboardClusterSteps;
 
-  // Pre-cache all tour audio clips (Welcome, Dashboard clusters, Profile steps, and Conclusion) in the background with Charon
-  useEffect(() => {
-    const allTourTexts = [
-      welcomeGreetingText,
-      ...dashboardClusterSteps.map((s) => `${s.title}. ${s.body}`),
-      ...profileTourSteps.map((s) => `${s.title}. ${s.body}`),
-      tracksConclusionSpeech
-    ];
-    preCacheSpeechAudios(allTourTexts, "Charon").catch(() => {});
-  }, [welcomeGreetingText, tracksConclusionSpeech]);
-
   // ===========================================================================
   // CONFETTI & AUDIO HELPERS
   // ===========================================================================
@@ -339,6 +332,13 @@ export const TourOverlay: React.FC = () => {
 
   const stopSpeech = useCallback(() => {
     geminiSpeechReqIdRef.current += 1;
+    if (globalTourAudioInstance) {
+      try {
+        globalTourAudioInstance.pause();
+        globalTourAudioInstance.currentTime = 0;
+      } catch {}
+      globalTourAudioInstance = null;
+    }
     if (tourAudioElRef.current) {
       try {
         tourAudioElRef.current.pause();
@@ -361,37 +361,9 @@ export const TourOverlay: React.FC = () => {
     setIsSpeakingGreeting(false);
   }, []);
 
-  const fallbackToAndrewSpeech = useCallback((textToSpeak: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utt = new SpeechSynthesisUtterance(textToSpeak);
-      utt.rate = 0.95;
-      utt.pitch = 0.95;
-      const voices = window.speechSynthesis.getVoices();
-      const andrewVoice =
-        voices.find(
-          (v) =>
-            v.name.toLowerCase().includes("andrew") &&
-            v.name.toLowerCase().includes("natural")
-        ) ||
-        voices.find((v) => v.name.toLowerCase().includes("andrew")) ||
-        voices.find(
-          (v) =>
-            v.lang.startsWith("en") &&
-            v.name.toLowerCase().includes("natural") &&
-            !v.name.toLowerCase().includes("female") &&
-            !v.name.toLowerCase().includes("zira")
-        ) ||
-        voices[0];
-      if (andrewVoice) {
-        utt.voice = andrewVoice;
-      }
-      utt.onend = () => setIsSpeakingGreeting(false);
-      utt.onerror = () => setIsSpeakingGreeting(false);
-      setIsSpeakingGreeting(true);
-      window.speechSynthesis.speak(utt);
-    } catch {}
+  const fallbackToAndrewSpeech = useCallback((_textToSpeak: string) => {
+    // Strictly disabled during tour to ensure only Elder Stephen Gemini Charon narration is heard
+    return;
   }, []);
 
   /**
@@ -419,21 +391,43 @@ export const TourOverlay: React.FC = () => {
       // 1. Instantaneous 0ms Master Pre-Recorded Audio File Playback
       if (audioFileUrl) {
         try {
+          if (globalTourAudioInstance) {
+            try {
+              globalTourAudioInstance.pause();
+              globalTourAudioInstance.currentTime = 0;
+            } catch {}
+            globalTourAudioInstance = null;
+          }
           const audio = new Audio(audioFileUrl);
           tourAudioElRef.current = audio;
+          globalTourAudioInstance = audio;
           audio.onplay = () => setIsSpeakingGreeting(true);
           audio.onended = () => {
             setIsSpeakingGreeting(false);
+            if (globalTourAudioInstance === audio) {
+              globalTourAudioInstance = null;
+            }
             tourAudioElRef.current = null;
           };
           audio.onerror = () => {
+            if (globalTourAudioInstance === audio) {
+              globalTourAudioInstance = null;
+            }
             tourAudioElRef.current = null;
-            fallbackToAndrewSpeech(cleaned);
+            setIsSpeakingGreeting(false);
           };
           await audio.play();
           return;
         } catch {
-          // If browser policy intercepted autoplay, smoothly fall through
+          // If browser policy intercepted autoplay before user interaction, unlock on first click/tap
+          const unlock = () => {
+            if (tourAudioElRef.current === audio) {
+              audio.play().catch(() => {});
+            }
+          };
+          window.addEventListener("click", unlock, { once: true });
+          window.addEventListener("touchstart", unlock, { once: true });
+          return;
         }
       }
 
@@ -494,8 +488,8 @@ export const TourOverlay: React.FC = () => {
               sessionStorage.setItem(`stba_tts_${cacheKey}`, base64Audio);
             } catch {}
           } else {
-            // Fallback to Microsoft Andrew Natural language speech synthesis
-            fallbackToAndrewSpeech(cleaned);
+            // Strictly avoid falling back to mismatched browser voices
+            setIsSpeakingGreeting(false);
             return;
           }
         }
@@ -544,6 +538,13 @@ export const TourOverlay: React.FC = () => {
     },
     [isMuted, stopSpeech]
   );
+
+  // Guarantee clean audio shutdown if component unmounts during route transition
+  useEffect(() => {
+    return () => {
+      stopSpeech();
+    };
+  }, [stopSpeech]);
 
   // ===========================================================================
   // HIGHLIGHT & POSITIONING ENGINE
@@ -680,12 +681,13 @@ export const TourOverlay: React.FC = () => {
     stopSpeech();
     cleanupHighlight();
     setIsPausedForAvatar(false);
-    setStepIndex(0);
-    setStage("profile_tour");
     localStorage.setItem("stba_onboarding_stage", "profile_tour");
     window.dispatchEvent(new CustomEvent("stba-ensure-settings-tab"));
     if (pathname !== "/profile") {
       navigate("/profile");
+    } else {
+      setStepIndex(0);
+      setStage("profile_tour");
     }
   }, [cleanupHighlight, navigate, pathname, stopSpeech]);
 
@@ -1123,8 +1125,8 @@ export const TourOverlay: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 3-Stage Walkthrough Roadmap Pills */}
-                <div className="grid grid-cols-3 gap-2 text-center">
+                {/* 3-Stage Walkthrough Roadmap Pills (hidden on mobile, visible on desktop) */}
+                <div className="hidden sm:grid grid-cols-3 gap-2 text-center">
                   <div className="p-2.5 rounded-xl bg-[#0A1E3C]/90 border border-[#DFC57B]/50">
                     <span className="text-[10px] font-mono font-bold text-[#F3CF65] block uppercase">
                       Stage 1
@@ -1381,17 +1383,6 @@ export const TourOverlay: React.FC = () => {
                 </button>
               </div>
 
-              {/* Zeroed Metrics Verification Pill */}
-              <div className="px-3.5 py-2.5 rounded-xl bg-emerald-950/50 border border-emerald-500/35 flex items-center justify-between text-xs">
-                <span className="font-mono font-bold text-emerald-300 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>New Profile Baseline Verified:</span>
-                </span>
-                <span className="font-mono text-[11px] text-stone-200">
-                  0% Mastery • 0 Verses • 0 Streak
-                </span>
-              </div>
-
               {/* Elder Stephen Introductory AI Course Prompt Outline */}
               <div className="p-4 rounded-2xl bg-[#040C1A]/90 border border-[#DFC57B]/35 space-y-3">
                 <div className="flex items-center gap-2.5">
@@ -1406,7 +1397,7 @@ export const TourOverlay: React.FC = () => {
                       Elder Stephen • Introductory AI Course Prompt
                     </span>
                     <span className="text-xs font-serif font-bold text-white">
-                      Course 1: Foundational SDA Beliefs & 2 Timothy 2:15
+                      Course 1: Foundational SDA Beliefs
                     </span>
                   </div>
                 </div>
@@ -1419,30 +1410,28 @@ export const TourOverlay: React.FC = () => {
                     <li>
                       <strong>Track:</strong> 28 Fundamental Beliefs & Sola Scriptura Foundations
                     </li>
-                    <li>
-                      <strong>Anchor Verse:</strong> <em>2 Timothy 2:15</em> — “Study to shew thyself approved unto God…”
-                    </li>
-                    <li>
-                      <strong>Method:</strong> Explain Mode (Exegesis) → Active Recall → Teach It
-                    </li>
                   </ul>
                 </div>
 
-                <TtsPlayer
-                  text={tracksConclusionSpeech}
-                  messageId="onboarding-tracks-conclusion"
-                  autoPlay={false}
-                  disableBrowserFallback={true}
-                  label="Hear Course Invitation"
-                />
+                {/* Invisible Audio Player (Retaining Background Functionality) */}
+                <div className="hidden">
+                  <TtsPlayer
+                    text={tracksConclusionSpeech}
+                    messageId="onboarding-tracks-conclusion"
+                    autoPlay={false}
+                    disableBrowserFallback={true}
+                    label="Hear Course Invitation"
+                  />
+                </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-2.5 pt-1">
+              {/* Primary Action Button */}
+              <div className="pt-1">
                 <button
                   id="initiate-study-tracks-btn"
                   type="button"
                   onClick={() => {
+                    localStorage.setItem("stba_highlight_fundamental_track", "true");
                     completeAllOnboarding("✦ Launching Theological Study Tracks!");
                     navigate("/tracks");
                   }}
@@ -1451,38 +1440,6 @@ export const TourOverlay: React.FC = () => {
                   <span>Initiate Study Tracks Course</span>
                   <ArrowRight className="w-4 h-4 stroke-[2.5]" />
                 </button>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <button
-                    id="trigger-intro-ai-prompt-btn"
-                    type="button"
-                    onClick={() => {
-                      completeAllOnboarding("✦ Opening Elder Stephen Introductory Course Prompt!");
-                      window.dispatchEvent(
-                        new CustomEvent("stba-trigger-intro-course-prompt", {
-                          detail: {
-                            prompt:
-                              "Guide me through my first Study Track lesson on 2 Timothy 2:15 and how Scripture interprets Scripture."
-                          }
-                        })
-                      );
-                    }}
-                    className="py-2.5 px-3.5 rounded-xl bg-[#0d3060] hover:bg-[#14407c] border border-[#DFC57B]/50 text-[#F3CF65] font-sans font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Ask Elder Stephen First</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      completeAllOnboarding("✦ Onboarding complete! Explore your dashboard freely.")
-                    }
-                    className="py-2.5 px-3.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 font-sans font-semibold text-xs cursor-pointer transition-colors"
-                  >
-                    Explore Dashboard First
-                  </button>
-                </div>
               </div>
             </motion.div>
           </motion.div>

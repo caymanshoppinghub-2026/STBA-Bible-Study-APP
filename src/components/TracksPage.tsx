@@ -237,7 +237,15 @@ export const TracksPage: React.FC = () => {
     { id: "evangelism", label: "Evangelism" }
   ];
 
+  const [highlightFundamentalTrack, setHighlightFundamentalTrack] = useState(() => {
+    return localStorage.getItem("stba_highlight_fundamental_track") === "true";
+  });
+
   const handleCardClick = (trackId: string) => {
+    if (highlightFundamentalTrack) {
+      localStorage.removeItem("stba_highlight_fundamental_track");
+      setHighlightFundamentalTrack(false);
+    }
     setSelectedTrackId(trackId);
     navigate(`/tracks/${trackId}/preview`);
   };
@@ -367,22 +375,35 @@ export const TracksPage: React.FC = () => {
             const isStarted = completed > 0;
             const isComplete = completed >= track.count;
             const percent = Math.round((completed / track.count) * 100);
+            const isTargetHighlight = highlightFundamentalTrack && track.id === "fundamental-beliefs";
 
             return (
               <div
                 key={track.id}
                 onClick={() => handleCardClick(track.id)}
-                className="bg-white border border-[#E8E4DA] rounded-[12px] p-5 hover:shadow-md hover:border-[#C9973A] active:scale-[0.99] transition-all flex flex-col justify-between h-[230px] shadow-2xs relative group cursor-pointer text-left"
+                className={`rounded-[12px] p-5 active:scale-[0.99] transition-all flex flex-col justify-between h-[230px] relative group cursor-pointer text-left ${
+                  isTargetHighlight
+                    ? "bg-white border-2 border-emerald-500 shadow-[0_0_24px_rgba(16,185,129,0.38)] ring-2 ring-emerald-400/40"
+                    : "bg-white border border-[#E8E4DA] hover:shadow-md hover:border-[#C9973A] shadow-2xs"
+                }`}
                 id={`track-card-${track.id}`}
               >
                 <div className="space-y-3">
                   {/* Category badging & colored icon row */}
                   <div className="flex items-center justify-between">
-                    <div className="p-2.5 rounded-[8px] bg-[#FDFAF5] border border-[#E8E4DA] group-hover:bg-[#C9973A]/10 group-hover:border-[#C9973A]/20 transition-all">
+                    <div className={`p-2.5 rounded-[8px] border transition-all ${
+                      isTargetHighlight
+                        ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-xs"
+                        : "bg-[#FDFAF5] border-[#E8E4DA] group-hover:bg-[#C9973A]/10 group-hover:border-[#C9973A]/20"
+                    }`}>
                       {renderTrackIcon(track.iconName, track.color, "w-5 h-5")}
                     </div>
-                    <span className="text-[10px] font-sans font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#FAF7F0] border border-[#E8E4DA] text-[#6B6B6B]">
-                      {track.category}
+                    <span className={`text-[10px] font-sans font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border transition-all ${
+                      isTargetHighlight
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 animate-pulse font-extrabold"
+                        : "bg-[#FAF7F0] border-[#E8E4DA] text-[#6B6B6B]"
+                    }`}>
+                      {isTargetHighlight ? "✦ Start Here" : track.category}
                     </span>
                   </div>
 

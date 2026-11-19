@@ -215,12 +215,22 @@ export const ExegesisRenderer: React.FC<ExegesisRendererProps> = ({
       let quoteSource = pendingCitation || "";
       let author = "Ellen White";
 
-      // Check if quote line has an inline citation e.g. "— Ellen White, Steps to Christ, p. 62"
-      const dashCitationMatch = cleanQuoteLine.match(/—\s*(?:Ellen White,?\s*)?([^—\n]+)$/i);
+      // Check if quote line has a true trailing attribution e.g. "— Ellen White, Steps to Christ, p. 62"
+      // Do NOT split mid-sentence em-dashes (e.g. "'better promises'—the promise of forgiveness...")!
       let quoteBody = cleanQuoteLine;
-      if (dashCitationMatch) {
-        quoteSource = dashCitationMatch[1].trim();
-        quoteBody = cleanQuoteLine.replace(/—\s*(?:Ellen White,?\s*)?([^—\n]+)$/i, "").trim();
+      if (!quoteSource) {
+        const dashCitationMatch = cleanQuoteLine.match(/\s+—\s*(?:Ellen White,?\s*)?([^—\n]{3,65})$/i);
+        if (dashCitationMatch) {
+          const candidate = dashCitationMatch[1].trim();
+          const looksLikeCitation =
+            /\bp\.\s*\d+/i.test(candidate) ||
+            /ellen\s*white/i.test(cleanQuoteLine.slice(cleanQuoteLine.lastIndexOf("—"))) ||
+            /^[A-Z][A-Za-z\s,.'’]+(?:\d+)?$/.test(candidate);
+          if (looksLikeCitation) {
+            quoteSource = candidate;
+            quoteBody = cleanQuoteLine.slice(0, cleanQuoteLine.lastIndexOf("—")).trim();
+          }
+        }
       }
 
       // If we are in the Spirit of Prophecy / Ellen White section, or citation / quote references Ellen White:
@@ -475,19 +485,19 @@ export const ExegesisRenderer: React.FC<ExegesisRendererProps> = ({
               </div>
 
               {/* Quote Body */}
-              <div className="relative z-10 pl-3 border-l-2 border-[#E5B842]/70 py-0.5">
-                <p className="font-['SF_Pro_Text',_-apple-system,_BlinkMacSystemFont,_'San_Francisco',_'Helvetica_Neue',_Helvetica,_sans-serif] tracking-[0.65px] italic text-xs sm:text-sm text-stone-100 leading-relaxed">
+              <div className="relative z-10 pl-3 border-l-2 border-[#E5B842]/70 py-0.5 min-w-0">
+                <p className="font-['SF_Pro_Text',_-apple-system,_BlinkMacSystemFont,_'San_Francisco',_'Helvetica_Neue',_Helvetica,_sans-serif] tracking-[0.65px] italic text-xs sm:text-sm text-stone-100 leading-relaxed break-words whitespace-normal">
                   “{renderTextWithVerseButtons(block.text, onVerseClick)}”
                 </p>
               </div>
 
               {/* Footer Citation & Details */}
-              <div className="flex items-center justify-between pt-2 border-t border-[#0d3060] text-xs font-mono text-stone-400 relative z-10">
-                <div className="flex items-center gap-1.5 text-[#F3CF65] font-semibold text-[11px]">
+              <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-[#0d3060] text-xs font-mono text-stone-400 relative z-10">
+                <div className="flex items-center gap-1.5 text-[#F3CF65] font-semibold text-[11px] min-w-0">
                   <BookOpen className="w-3 h-3 shrink-0" />
-                  <span className="truncate">{citation}</span>
+                  <span className="break-words whitespace-normal">{citation}</span>
                 </div>
-                <span className="text-[10px] text-stone-400 font-mono">
+                <span className="text-[10px] text-stone-400 font-mono shrink-0">
                   Ellen White Writings
                 </span>
               </div>

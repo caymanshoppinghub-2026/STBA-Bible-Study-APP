@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   Compass, Book, Feather, MessageSquare, BookOpen, 
   Settings, HelpCircle, Archive, Plus, Trash2, 
-  CheckCircle2, Download, Play, Pause, RotateCcw, 
+  CheckCircle2, Download, Play, Pause, Square, RotateCcw, 
   Send, Mic, MicOff, Volume2, VolumeX, Award, Lock, BookMarked, BookmarkPlus, Layers,
   Search, Loader2, History, Sparkles, FolderOpen, FileText, ChevronDown,
   Calendar, Check, Database, AlertCircle, X, Sliders, Radio, Headphones, Zap, Activity, Copy, BookmarkCheck,
@@ -1710,52 +1710,32 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       return;
     }
 
-    clickCountRef.current += 1;
-    if (clickTimerRef.current) {
-      clearTimeout(clickTimerRef.current);
-    }
-
-    if (clickCountRef.current >= 3) {
-      clickCountRef.current = 0;
-      cleanupLiveSession(true);
-      return;
-    }
-
-    clickTimerRef.current = setTimeout(() => {
-      const clicks = clickCountRef.current;
-      clickCountRef.current = 0;
-
-      if (clicks >= 3) {
-        cleanupLiveSession(true);
-      } else {
-        // Single-click: Pause / Resume audio from exact interrupted point
-        if (outputAudioCtxRef.current) {
-          if (outputAudioCtxRef.current.state === "running") {
-            outputAudioCtxRef.current.suspend().then(() => {
-              setIsAudioPaused(true);
-              if (window.speechSynthesis && window.speechSynthesis.speaking) {
-                window.speechSynthesis.pause();
-              }
-            }).catch(() => {});
-          } else if (outputAudioCtxRef.current.state === "suspended") {
-            outputAudioCtxRef.current.resume().then(() => {
-              setIsAudioPaused(false);
-              if (window.speechSynthesis && window.speechSynthesis.paused) {
-                window.speechSynthesis.resume();
-              }
-            }).catch(() => {});
-          }
-        } else if (window.speechSynthesis) {
-          if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+    // Single-click toggle: Pause / Resume audio immediately (Stop is handled by the dedicated Stop button)
+    if (outputAudioCtxRef.current) {
+      if (outputAudioCtxRef.current.state === "running") {
+        outputAudioCtxRef.current.suspend().then(() => {
+          setIsAudioPaused(true);
+          if (window.speechSynthesis && window.speechSynthesis.speaking) {
             window.speechSynthesis.pause();
-            setIsAudioPaused(true);
-          } else if (window.speechSynthesis.paused) {
-            window.speechSynthesis.resume();
-            setIsAudioPaused(false);
           }
-        }
+        }).catch(() => {});
+      } else if (outputAudioCtxRef.current.state === "suspended") {
+        outputAudioCtxRef.current.resume().then(() => {
+          setIsAudioPaused(false);
+          if (window.speechSynthesis && window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+        }).catch(() => {});
       }
-    }, 320);
+    } else if (window.speechSynthesis) {
+      if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+        window.speechSynthesis.pause();
+        setIsAudioPaused(true);
+      } else if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+        setIsAudioPaused(false);
+      }
+    }
   };
 
   // Auto-start Live Interactive session when triggered from Bible Study Workspace header button
@@ -2436,37 +2416,14 @@ ${formattedNotes}
         <div className={`px-3 sm:px-4 py-2 border-b flex items-center justify-between gap-2 shrink-0 ${
           theme === "dark" ? "bg-[#161B22] border-[#2C3545]" : "bg-[#F9F7F3] border-[#E8E2D8]"
         }`}>
-          <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
-            <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
-            <div className="flex flex-col truncate">
-              <span className="text-[10px] font-mono uppercase font-bold text-amber-500 truncate tracking-wider">
-                Elder Stephen Continuous Session
-              </span>
-              <div className="flex items-center gap-1.5 truncate">
-                <span className={`text-[11px] font-serif truncate font-semibold ${
-                  theme === "dark" ? "text-gray-300" : "text-stone-800"
-                }`}>
-                  {activeRef}
-                </span>
-
-                {/* Touch-friendly passage switcher trigger for mobile & desktop */}
-                {onReferenceChange && (
-                  <button
-                    onClick={() => setShowPassageSwitcher(!showPassageSwitcher)}
-                    className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 active:bg-amber-500/30 transition-colors cursor-pointer inline-flex items-center gap-0.5 touch-manipulation"
-                    title="Switch Bible passage"
-                    aria-label="Switch Bible passage"
-                  >
-                    <span>Switch</span>
-                    <ChevronDown className={`w-2.5 h-2.5 transition-transform duration-150 ${showPassageSwitcher ? "rotate-180" : ""}`} />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+          <span className={`text-[12px] font-serif truncate font-semibold min-w-0 ${
+            theme === "dark" ? "text-gray-200" : "text-stone-800"
+          }`}>
+            {activeRef}
+          </span>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Interactive Mode Toggle Button */}
+            {/* Interactive Mode Play / Pause Toggle Button */}
             <button
               id="btn-elder-stephen-interactive-header"
               onClick={handleToggleDynamicInteractiveMode}
@@ -2482,21 +2439,21 @@ ${formattedNotes}
               title={
                 isDynamicLiveActive
                   ? isAudioPaused
-                    ? "Paused. Click to resume audio; triple-click to stop session"
-                    : "Live Audio Active. Click to pause audio; triple-click to stop session"
-                  : "Start Live Interactive Session with Elder Stephen (gemini-3.8-live)"
+                    ? "Paused — Click to resume"
+                    : "Live Session Active — Click to pause"
+                  : "Start Live Interactive Session with Elder Stephen"
               }
             >
               {isDynamicLiveActive ? (
                 isAudioPaused ? (
                   <>
-                    <Pause className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="font-bold">Paused</span>
+                    <Play className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="font-bold">Resume</span>
                   </>
                 ) : (
                   <>
-                    <Radio className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-                    <span className="font-bold">Live Session</span>
+                    <Pause className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="font-bold">Pause</span>
                   </>
                 )
               ) : (
@@ -2506,6 +2463,20 @@ ${formattedNotes}
                 </>
               )}
             </button>
+
+            {/* Dedicated Stop Button (visible whenever Interactive Session is active) */}
+            {isDynamicLiveActive && (
+              <button
+                id="btn-elder-stephen-interactive-stop"
+                onClick={() => cleanupLiveSession(true)}
+                className="min-h-[40px] px-2.5 py-1.5 text-[11px] font-mono rounded-lg border bg-rose-500/15 border-rose-500/50 text-rose-400 hover:bg-rose-500/25 font-bold transition-all cursor-pointer flex items-center gap-1.5 touch-manipulation active:scale-95 shadow-xs"
+                title="Stop Live Interactive Session"
+                aria-label="Stop Live Interactive Session"
+              >
+                <Square className="w-3 h-3 fill-current" />
+                <span>Stop</span>
+              </button>
+            )}
 
             {/* Save Interactive Session as Notebook Study File */}
             <button
@@ -2559,86 +2530,6 @@ ${formattedNotes}
             </button>
           </div>
         </div>
-
-        {/* Mobile & Desktop Quick Passage Switcher Dropdown */}
-        {showPassageSwitcher && onReferenceChange && (
-          <div className={`px-4 py-3 border-b text-xs space-y-2 animate-in fade-in slide-in-from-top-1 ${
-            theme === "dark" ? "bg-[#1E2530] border-[#2C3545]" : "bg-[#FAF7F2] border-[#E8E2D8]"
-          }`}>
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider font-bold text-amber-500">
-                Switch Scripture Passage
-              </span>
-              <button
-                onClick={() => setShowPassageSwitcher(false)}
-                className="p-1 rounded text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 cursor-pointer"
-                title="Close"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Quick Passage Preset Chips */}
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {[
-                "Revelation 14:6-12",
-                "Exodus 20:8-11",
-                "2 Timothy 2:15",
-                "Daniel 8:14",
-                "John 14:1-3",
-                "Romans 6:23"
-              ].map(preset => (
-                <button
-                  key={preset}
-                  onClick={() => {
-                    onReferenceChange(preset);
-                    setShowPassageSwitcher(false);
-                  }}
-                  className={`px-2.5 py-1.5 rounded-md text-[11px] font-serif border transition-all cursor-pointer touch-manipulation active:scale-95 ${
-                    activeRef.toLowerCase() === preset.toLowerCase()
-                      ? "bg-[#C9973A] text-white border-[#C9973A] font-bold"
-                      : theme === "dark"
-                        ? "bg-[#161B22] border-[#30363D] text-gray-300 hover:border-amber-500/50"
-                        : "bg-white border-stone-300 text-stone-700 hover:border-amber-500/50"
-                  }`}
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-
-            {/* Custom Passage Search Input */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (switcherInput.trim()) {
-                  onReferenceChange(switcherInput.trim());
-                  setSwitcherInput("");
-                  setShowPassageSwitcher(false);
-                }
-              }}
-              className="flex items-center gap-2 pt-1"
-            >
-              <input
-                type="text"
-                value={switcherInput}
-                onChange={(e) => setSwitcherInput(e.target.value)}
-                placeholder="Or type custom reference (e.g., Hebrews 4:9-11)..."
-                className={`flex-1 px-3 py-1.5 text-xs rounded-lg border outline-none font-serif ${
-                  theme === "dark"
-                    ? "bg-[#161B22] border-[#30363D] text-gray-200 focus:border-amber-500"
-                    : "bg-white border-stone-300 text-stone-800 focus:border-amber-500"
-                }`}
-              />
-              <button
-                type="submit"
-                className="px-3 py-1.5 bg-[#C9973A] hover:bg-[#b58532] text-white text-xs font-mono font-medium rounded-lg transition-colors cursor-pointer touch-manipulation active:scale-95"
-              >
-                Go
-              </button>
-            </form>
-          </div>
-        )}
       </AutoRetractToolbar>
 
       {/* Toast alert with optional navigation to Notebook */}

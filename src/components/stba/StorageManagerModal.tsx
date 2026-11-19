@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { stbaStorage } from "../../lib/storage/indexedDbClient";
 import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
+import { resetAutoSeedFlag } from "../../lib/storage/autoSeedLibrary";
 import { PRESET_BIBLES } from "./bibleData";
 import { BIBLE_PRESETS } from "../../services/bibleService";
 import { PRELOADED_SDABC_DATA } from "./SDABibleCommentary";
@@ -89,6 +90,7 @@ export const StorageManagerModal: React.FC<StorageManagerModalProps> = ({
     setClearing(true);
     try {
       await stbaStorage.clearAllStores();
+      resetAutoSeedFlag();
       await loadStats();
       setSeedResult("All IndexedDB stores cleared successfully.");
       panelSyncBus.notifyStorageChange("StorageManagerModal");

@@ -513,9 +513,38 @@ export const ToolHighlightableWrapper: React.FC<ToolHighlightableWrapperProps> =
     return () => clearTimeout(timer);
   }, [applyDomHighlights, children]);
 
+  // Dismiss toolbar cleanly when clicking away or selection collapses
+  useEffect(() => {
+    const handleDocumentMouseDown = (e: MouseEvent) => {
+      const toolbarEl = containerRef.current?.querySelector('[data-tool-floating-toolbar="true"]');
+      if (toolbarEl && toolbarEl.contains(e.target as Node)) {
+        return;
+      }
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.toString().trim().length < 2) {
+        setSelectionData(null);
+      }
+    };
+
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.toString().trim().length < 2) {
+        setSelectionData(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleDocumentMouseDown);
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentMouseDown);
+      document.removeEventListener("selectionchange", handleSelectionChange);
+    };
+  }, []);
+
   const handleMouseUp = (e: React.MouseEvent) => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
+      setSelectionData(null);
       return;
     }
 
@@ -630,6 +659,7 @@ export const ToolHighlightableWrapper: React.FC<ToolHighlightableWrapperProps> =
       {/* Floating Tiered Highlight & Underline Popup */}
       {selectionData && (
         <div
+          data-tool-floating-toolbar="true"
           data-no-highlight="true"
           className="absolute z-50 flex items-center gap-1 p-1.5 shadow-2xl rounded-xl border text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
           style={{
