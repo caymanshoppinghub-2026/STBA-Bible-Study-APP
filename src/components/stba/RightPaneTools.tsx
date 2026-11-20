@@ -1186,7 +1186,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     isElderSpeakingRef.current = true;
     
     const userName = userProfile?.name || "Berean";
-    const greetingText = `Grace and peace, ${userName}! It is a blessing to study ${activeRef} together. What stands out to you first in this passage?`;
+    const greetingText = `Grace and peace, ${userName}! It is a blessing to open ${activeRef} together. As your exegetical mentor, let us begin by drawing out the author's intended meaning in its original historical and scriptural context—allowing Scripture to interpret Scripture. Follow along with me in the Bible Reader as we examine the setting, original language roots, and SDA commentary insights.`;
 
     recentElderSpeechRef.current = [greetingText, ...recentElderSpeechRef.current.filter(t => t !== greetingText).slice(0, 5)];
     isElderSpeakingRef.current = true;
