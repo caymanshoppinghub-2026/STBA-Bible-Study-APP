@@ -135,7 +135,11 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
         return (
           <mark
             key={`kw-${i}`}
-            className="bg-amber-400/35 text-amber-950 dark:text-amber-100 font-semibold px-0.5 rounded-xs"
+            className="font-semibold px-1 py-0.2 rounded-xs shadow-xs"
+            style={{
+              backgroundColor: "#A6731A",
+              color: "#FFFFFF"
+            }}
           >
             {part}
           </mark>
