@@ -162,6 +162,9 @@ export function STBAStudyMode() {
   const [topicPage, setTopicPage] = useState<number>(1);
   const [hasMoreTopicVerses, setHasMoreTopicVerses] = useState<boolean>(false);
   const [loadingMoreTopicVerses, setLoadingMoreTopicVerses] = useState<boolean>(false);
+  const [topicTotalVerses, setTopicTotalVerses] = useState<number | null>(null);
+  const [topicTotalOccurrences, setTopicTotalOccurrences] = useState<number | null>(null);
+  const [topicHighlightTerms, setTopicHighlightTerms] = useState<string[]>([]);
 
   // Global Header Collapse State
   const [globalHeaderCollapsed, setGlobalHeaderCollapsedState] = useState(false);
@@ -660,6 +663,9 @@ export function STBAStudyMode() {
         }
         setTopicPage(page);
         setHasMoreTopicVerses(Boolean(data.hasMore));
+        setTopicTotalVerses(typeof data.total === "number" ? data.total : data.verses.length);
+        setTopicTotalOccurrences(typeof data.totalOccurrences === "number" ? data.totalOccurrences : null);
+        setTopicHighlightTerms(Array.isArray(data.highlightTerms) ? data.highlightTerms : [cleanTopic]);
         setErrorMsg("");
       } else {
         if (!append) {
@@ -698,39 +704,50 @@ export function STBAStudyMode() {
 
     if (trimmedRef && trimmedTopic) {
       if (lastActiveSearchField === 'ref') {
-        searchMode = lookup ? 'ref' : 'topic';
+        searchMode = 'ref';
       } else {
         searchMode = 'topic';
       }
     } else if (trimmedTopic && !trimmedRef) {
       searchMode = 'topic';
     } else if (trimmedRef && !trimmedTopic) {
-      // Check if trimmedRef is an actual scripture reference (e.g. Genesis, John 1:3, John 3:16-20)
-      searchMode = lookup ? 'ref' : 'topic';
+      searchMode = 'ref';
     } else {
       setErrorMsg("Please provide a scripture reference or search topic.");
       return;
     }
 
     if (searchMode === 'topic') {
-      const topicVal = (lastActiveSearchField === 'ref' && !lookup && trimmedRef) ? trimmedRef : (trimmedTopic || trimmedRef);
-      setQueryTopic(topicVal);
+      const topicVal = trimmedTopic;
+      if (!topicVal) {
+        setErrorMsg("Please enter a keyword or phrase in the Topic field.");
+        return;
+      }
       setTopicPage(1);
       setHasMoreTopicVerses(false);
       triggerFetchTopicTheme(topicVal, 1, false);
       return;
     }
 
+    if (!lookup) {
+      setErrorMsg(`Could not find Bible book or verse for "${trimmedRef}". Try a book name like "James 1" or "John 1:4".`);
+      return;
+    }
+
     // 2. Scripture-Specific Search:
-    // Handle scripture lookups intuitively:
-    // - Vague reference ('Genesis') -> defaults to Genesis 1:1 and loads first 20 verses
-    // - Specific reference ('John 1:3') -> displays that exact verse
-    // - Range ('John 3:16-20') -> displays all verses in the range
-    const targetRef = lookup ? lookup.canonicalRef : trimmedRef;
+    // - Vague reference ('J' / 'Genesis') -> defaults to Chapter 1:1-20
+    // - Specific reference ('John 1:4' / 'James 1 2') -> loads the full chapter in Bible Reader & highlights that exact verse while syncing all tools to the verse
+    // - Range ('James 1:2-27') -> displays all verses in the range
+    const targetRef = lookup.isSingleVerse
+      ? `${lookup.book} ${lookup.chapter}:1-${Math.max(20, lookup.startVerse)}`
+      : lookup.canonicalRef;
 
     setLoading(true);
     setErrorMsg("");
     setActiveTopicSearch(null);
+    setTopicTotalVerses(null);
+    setTopicTotalOccurrences(null);
+    setTopicHighlightTerms([]);
 
     const applyPassageResult = (passageData: { canonicalReference: string; verses: any[] }) => {
       setCustomVerses(passageData.verses);
@@ -747,9 +764,10 @@ export function STBAStudyMode() {
 
       if (targetVerseNum !== null) {
         setActiveVerseIndex(targetVerseNum);
-        if (lookup?.isSingleVerse && passageData.verses.length === 1) {
-          triggerBackgroundTheologicalSynthesis(passageData.canonicalReference, trimmedTopic || "Scripture Study");
-        }
+        const syncRef = lookup?.isSingleVerse
+          ? lookup.canonicalRef
+          : passageData.canonicalReference;
+        triggerBackgroundTheologicalSynthesis(syncRef, trimmedTopic || "Scripture Study");
       } else {
         setActiveVerseIndex(null);
       }
@@ -1199,6 +1217,9 @@ export function STBAStudyMode() {
               hasMoreTopicVerses={hasMoreTopicVerses}
               loadingMoreTopicVerses={loadingMoreTopicVerses}
               isTopicSearchActive={Boolean(activeTopicSearch)}
+              topicTotalVerses={topicTotalVerses}
+              topicTotalOccurrences={topicTotalOccurrences}
+              topicHighlightTerms={topicHighlightTerms}
               handleLoadExegesis={handleLoadExegesis}
               loading={loading}
               errorMsg={errorMsg}

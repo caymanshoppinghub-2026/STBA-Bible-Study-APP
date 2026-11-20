@@ -303,7 +303,7 @@ export const BIBLE_METADATA: BookMetadata[] = [
   },
   {
     name: "James",
-    aliases: ["jas", "james", "jm"],
+    aliases: ["jas", "jam", "jame", "james", "jm"],
     chapters: [27, 26, 18, 17, 20]
   },
   {
@@ -512,11 +512,11 @@ export function parseScriptureLookup(query: string): ScriptureLookupResult | nul
     .replace(/^1st\s+/i, "1 ");
 
   // Regex to match:
-  // Group 1: Book name with optional numeral prefix (e.g. "Genesis", "1 John", "2 Tim", "Song of Solomon")
+  // Group 1: Book name with optional numeral prefix (e.g. "Genesis", "1 John", "2 Tim", "Jam")
   // Group 2: Chapter number (optional)
-  // Group 3: Start verse (optional)
-  // Group 4: End verse (optional)
-  const refRegex = /^([1-3]?\s*[A-Za-z\s.]+?)(?:\s*(\d+)(?:[\s:.]+(\d+)?(?:\s*[-–—]\s*(\d+))?)?)?$/i;
+  // Group 3: Start verse (optional — supports colon OR space shorthand like "James 1 2")
+  // Group 4: End verse (optional — supports "James 1 2-27" or "James 1:2-27")
+  const refRegex = /^([1-3]?\s*[A-Za-z][A-Za-z\s.]*?)(?:\s*(\d+)(?:[\s:.]+(\d+)(?:\s*[-–—]\s*(\d+)?)?)?)?\s*$/i;
   const match = normalizedClean.match(refRegex);
 
   if (!match) return null;
@@ -527,8 +527,8 @@ export function parseScriptureLookup(query: string): ScriptureLookupResult | nul
   const rawStartVerse = match[3];
   const rawEndVerse = match[4];
 
-  // Match against BIBLE_METADATA
-  const bookMeta = BIBLE_METADATA.find(b => {
+  // Match against BIBLE_METADATA (exact name/alias first, then unambiguous prefix match)
+  let bookMeta = BIBLE_METADATA.find(b => {
     const bName = b.name.toLowerCase();
     const bNameCompact = bName.replace(/\s+/g, "");
     if (bName === rawBook || bNameCompact === rawBookCompact) return true;
@@ -537,6 +537,14 @@ export function parseScriptureLookup(query: string): ScriptureLookupResult | nul
       return normA === rawBook || normA.replace(/\s+/g, "") === rawBookCompact;
     });
   });
+
+  if (!bookMeta && rawBookCompact.length >= 1) {
+    bookMeta = BIBLE_METADATA.find(b => {
+      const bName = b.name.toLowerCase();
+      const bNameCompact = bName.replace(/\s+/g, "");
+      return bName.startsWith(rawBook) || bNameCompact.startsWith(rawBookCompact);
+    });
+  }
 
   if (!bookMeta) return null;
 
@@ -607,5 +615,236 @@ export function parseScriptureLookup(query: string): ScriptureLookupResult | nul
     isSingleVerse: false,
     isRange: true,
     isVagueBookOnly: false
+  };
+}
+
+// Curated Logos-style Pericope / Section Headings for key chapters across Scripture
+const CHAPTER_PERICOPES: Record<string, string> = {
+  "Genesis 1": "The Creation of the World",
+  "Genesis 2": "The Seventh-Day Sabbath & Eden",
+  "Genesis 3": "The Fall & First Gospel Promise",
+  "Genesis 6": "Noah Finds Grace in the Eyes of the LORD",
+  "Exodus 20": "The Ten Commandments",
+  "Exodus 25": "The Pattern of the Heavenly Sanctuary",
+  "Leviticus 16": "The Day of Atonement",
+  "Deuteronomy 6": "The Great Commandment (Shema)",
+  "Joshua 1": "God Commissions Joshua — Be Strong & Courageous",
+  "Joshua 24": "Choose You This Day Whom Ye Will Serve",
+  "Job 1": "Job's Faithfulness & the Great Controversy",
+  "Job 19": "I Know That My Redeemer Liveth",
+  "Psalms 1": "The Way of the Righteous and the Wicked",
+  "Psalms 19": "The Heavens Declare the Glory of God",
+  "Psalms 23": "The LORD Is My Shepherd",
+  "Psalms 51": "Create in Me a Clean Heart, O God",
+  "Psalms 91": "Dwelling in the Secret Place of the Most High",
+  "Psalms 119": "Thy Word Is a Lamp Unto My Feet",
+  "Proverbs 3": "Trust in the LORD With All Thine Heart",
+  "Ecclesiastes 9": "The Living Know That They Shall Die",
+  "Ecclesiastes 12": "Remember Now Thy Creator — Fear God",
+  "Isaiah 8": "To the Law and to the Testimony",
+  "Isaiah 53": "The Suffering Servant — Wounded for Our Transgressions",
+  "Isaiah 58": "The True Fast & Repairing the Sabbath Breach",
+  "Jeremiah 31": "The New Covenant Written on the Heart",
+  "Daniel 2": "Nebuchadnezzar's Dream & God's Eternal Kingdom",
+  "Daniel 7": "The Four Beasts & the Pre-Advent Judgment",
+  "Daniel 8": "The 2,300 Days & Cleansing of the Sanctuary",
+  "Daniel 9": "Daniel's Prayer & the Seventy Weeks Prophecy",
+  "Daniel 12": "The Time of the End & Resurrection",
+  "Joel 2": "The Outpouring of the Latter Rain Spirit",
+  "Jonah 1": "Jonah's Call & Flight from Nineveh",
+  "Malachi 3": "The Messenger of the Covenant & Faithful Stewardship",
+  "Matthew 4": "The Temptation of Jesus in the Wilderness",
+  "Matthew 5": "The Sermon on the Mount & Beatitudes",
+  "Matthew 24": "Signs of Christ's Second Coming",
+  "Matthew 28": "The Resurrection & Great Commission",
+  "Mark 2": "The Son of Man Is Lord Also of the Sabbath",
+  "Luke 4": "Jesus' Custom on the Sabbath & Nazareth Ministry",
+  "Luke 15": "The Lost Sheep, Lost Coin, and Prodigal Son",
+  "John 1": "In the Beginning Was the Word — The Word Made Flesh",
+  "John 3": "Born Again & For God So Loved the World",
+  "John 11": "I Am the Resurrection and the Life — Jesus Wept",
+  "John 14": "Let Not Your Heart Be Troubled — I Will Come Again",
+  "John 15": "I Am the True Vine",
+  "John 17": "Christ's High Priestly Prayer",
+  "Acts 2": "Pentecost & the Outpouring of the Holy Spirit",
+  "Romans 3": "Justified Freely by His Grace Through Faith",
+  "Romans 6": "Dead to Sin, Alive in Christ",
+  "Romans 8": "No Condemnation & Life in the Spirit",
+  "1 Corinthians 13": "The More Excellent Way of Love",
+  "1 Corinthians 15": "The Resurrection of Christ and the Saints",
+  "2 Corinthians 5": "New Creatures & Ambassadors for Christ",
+  "2 Corinthians 12": "My Grace Is Sufficient for Thee",
+  "Galatians 2": "Crucified With Christ — Justification by Faith",
+  "Galatians 5": "Freedom in Christ & the Fruit of the Spirit",
+  "Ephesians 2": "Saved by Grace Through Faith",
+  "Ephesians 6": "The Whole Armour of God",
+  "Philippians 2": "The Mind & Humility of Christ",
+  "Philippians 4": "Rejoice in the Lord & Peace of God",
+  "Colossians 1": "The Supremacy of Christ, Creator & Redeemer",
+  "1 Thessalonians 4": "The Second Coming & Resurrection of the Dead in Christ",
+  "2 Timothy 2": "Study to Shew Thyself Approved Unto God",
+  "2 Timothy 3": "All Scripture Is Given by Inspiration of God",
+  "Titus 2": "The Grace of God That Bringeth Salvation",
+  "Hebrews 4": "A Sabbath Rest Remains for the People of God",
+  "Hebrews 8": "Christ Our High Priest in the Heavenly Sanctuary",
+  "Hebrews 9": "The Earthly & Heavenly Sanctuary Ministry",
+  "Hebrews 11": "The Hall of Faith",
+  "James 1": "Count It All Joy — Faith, Trials & Asking for Wisdom",
+  "James 2": "Faith Without Works Is Dead & the Royal Law",
+  "James 3": "Taming the Tongue & Wisdom from Above",
+  "James 4": "Draw Nigh to God & Resist the Devil",
+  "James 5": "Patience Until the Coming of the Lord & Prayer",
+  "1 Peter 2": "A Chosen Generation & Royal Priesthood",
+  "2 Peter 1": "A More Sure Word of Prophecy",
+  "1 John 1": "Walking in the Light & Confession of Sin",
+  "1 John 4": "God Is Love — Testing the Spirits",
+  "Jude 1": "Contend Earnestly for the Faith Once Delivered",
+  "Revelation 1": "The Revelation of Jesus Christ on Patmos",
+  "Revelation 12": "The Great Controversy & the Remnant Church",
+  "Revelation 13": "The Two Beasts & the Mark of the Beast",
+  "Revelation 14": "The Three Angels' Messages & Harvest of the Earth",
+  "Revelation 20": "The Millennium & Final Judgment",
+  "Revelation 21": "A New Heaven and a New Earth",
+  "Revelation 22": "The River of Life — Surely I Come Quickly"
+};
+
+export function getChapterPericope(bookName: string, chapter: number): string {
+  const key = `${bookName} ${chapter}`;
+  if (CHAPTER_PERICOPES[key]) return CHAPTER_PERICOPES[key];
+  const book = BIBLE_METADATA.find(b => b.name.toLowerCase() === bookName.toLowerCase());
+  const verses = book?.chapters[chapter - 1];
+  return verses ? `${bookName} Chapter ${chapter} (${verses} verses)` : `${bookName} Chapter ${chapter}`;
+}
+
+export interface ScriptureAutocompleteState {
+  topBook: BookMetadata | null;
+  matchingBooks: BookMetadata[];
+  ghostSuffix: string;
+  suggestedFullRef: string;
+  pericope: string;
+  chapterInfo: {
+    book: string;
+    chapter: number;
+    maxChapter: number;
+    maxVerse: number;
+    startVerse?: number;
+    hasTrailingHyphen: boolean;
+  } | null;
+}
+
+/**
+ * Provides Logos-style progressive book pre-fill, clean book-only suggestions,
+ * pericope heading preview, and end-of-chapter verse count helper on hyphen (-).
+ */
+export function getScriptureAutocomplete(rawInput: string): ScriptureAutocompleteState {
+  const trimmedStart = (rawInput || "").trimStart();
+  if (!trimmedStart) {
+    return {
+      topBook: null,
+      matchingBooks: [],
+      ghostSuffix: "",
+      suggestedFullRef: "",
+      pericope: "",
+      chapterInfo: null
+    };
+  }
+
+  const normalized = trimmedStart
+    .replace(/^III\s+/i, "3 ")
+    .replace(/^II\s+/i, "2 ")
+    .replace(/^I\s+/i, "1 ")
+    .replace(/^3rd\s+/i, "3 ")
+    .replace(/^2nd\s+/i, "2 ")
+    .replace(/^1st\s+/i, "1 ");
+
+  const hasTrailingHyphen = /[-–—]\s*$/.test(normalized);
+  const partsMatch = normalized.match(/^([1-3]?\s*[A-Za-z][A-Za-z\s.]*?)(?:\s+(\d+)(?:[\s:.]+(\d+)(?:\s*[-–—]\s*(\d+)?)?)?)?\s*$/i);
+
+  const bookQueryRaw = (partsMatch ? partsMatch[1] : normalized).trim().toLowerCase().replace(/\./g, "").replace(/\s+/g, " ");
+  const bookQueryCompact = bookQueryRaw.replace(/\s+/g, "");
+  const chapterRaw = partsMatch?.[2];
+  const startVerseRaw = partsMatch?.[3];
+
+  // Filter canonical Bible books cleanly (prefix match first, then alias match)
+  const prefixMatches = BIBLE_METADATA.filter(b => {
+    const bLow = b.name.toLowerCase();
+    return bLow.startsWith(bookQueryRaw) || bLow.replace(/\s+/g, "").startsWith(bookQueryCompact);
+  });
+
+  const aliasMatches = BIBLE_METADATA.filter(b => {
+    if (prefixMatches.includes(b)) return false;
+    return b.aliases.some(a => {
+      const aLow = a.toLowerCase().replace(/\./g, "").trim();
+      return aLow === bookQueryRaw || aLow.startsWith(bookQueryRaw) || aLow.replace(/\s+/g, "").startsWith(bookQueryCompact);
+    });
+  });
+
+  const matchingBooks = [...prefixMatches, ...aliasMatches].slice(0, 10);
+  const topBook = matchingBooks[0] || null;
+
+  if (!topBook) {
+    return {
+      topBook: null,
+      matchingBooks: [],
+      ghostSuffix: "",
+      suggestedFullRef: "",
+      pericope: "",
+      chapterInfo: null
+    };
+  }
+
+  // Case 1: User typed book + chapter (and optionally verse / trailing hyphen)
+  if (chapterRaw) {
+    const chNum = Math.min(Math.max(1, parseInt(chapterRaw, 10)), topBook.chapters.length);
+    const maxVerse = topBook.chapters[chNum - 1] || 30;
+    const startV = startVerseRaw ? Math.min(maxVerse, Math.max(1, parseInt(startVerseRaw, 10))) : undefined;
+    const pericope = getChapterPericope(topBook.name, chNum);
+
+    // If user typed a trailing hyphen (e.g. "James 1 2-"), ghost-complete the last verse of the chapter!
+    const ghostSuffix = hasTrailingHyphen ? String(maxVerse) : "";
+    const suggestedFullRef = hasTrailingHyphen && startV
+      ? `${topBook.name} ${chNum}:${startV}-${maxVerse}`
+      : startV
+        ? `${topBook.name} ${chNum}:${startV}`
+        : `${topBook.name} ${chNum}`;
+
+    return {
+      topBook,
+      matchingBooks: matchingBooks.slice(0, 5),
+      ghostSuffix,
+      suggestedFullRef,
+      pericope,
+      chapterInfo: {
+        book: topBook.name,
+        chapter: chNum,
+        maxChapter: topBook.chapters.length,
+        maxVerse,
+        startVerse: startV,
+        hasTrailingHyphen
+      }
+    };
+  }
+
+  // Case 2: User is typing a book name prefix (e.g. "J" -> "Joshua", "Ja" -> "James")
+  const rawBookTyped = trimmedStart;
+  const topBookName = topBook.name;
+  let ghostSuffix = "";
+  if (topBookName.toLowerCase().startsWith(rawBookTyped.toLowerCase())) {
+    ghostSuffix = topBookName.slice(rawBookTyped.length);
+  }
+
+  return {
+    topBook,
+    matchingBooks,
+    ghostSuffix,
+    suggestedFullRef: `${topBook.name} 1`,
+    pericope: getChapterPericope(topBook.name, 1),
+    chapterInfo: {
+      book: topBook.name,
+      chapter: 1,
+      maxChapter: topBook.chapters.length,
+      maxVerse: topBook.chapters[0] || 30,
+      hasTrailingHyphen: false
+    }
   };
 }

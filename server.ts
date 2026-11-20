@@ -6,6 +6,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import zlib from "zlib";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Modality, ThinkingLevel, Type } from "@google/genai";
@@ -3835,6 +3836,190 @@ OR IF ALL ARE INVALID (or if you cannot parse any of them):
 const TOPIC_SEARCH_CACHE = new Map<string, any[]>();
 
 // Dynamic Bible Word Search Engine by Topic/Keywords
+// -------------------------------------------------------------
+// FULL GENESIS-TO-REVELATION KJV PURE BIBLE SEARCH ENGINE (31,102 verses)
+// Supports exact quotes ("Jesus wept", "the grace of God"), bracket AND/OR groups ([grace faith]), and whole-word search
+// -------------------------------------------------------------
+interface KjvCorpusVerse {
+  book: string;
+  chapter: number;
+  verseNumber: number;
+  reference: string;
+  text: string;
+  lower: string;
+}
+
+let cachedKjvCorpus: KjvCorpusVerse[] | null = null;
+
+function loadKjvFullCorpus(): KjvCorpusVerse[] {
+  if (cachedKjvCorpus) return cachedKjvCorpus;
+  const candidatePaths = [
+    path.join(process.cwd(), "src", "data", "kjv_full.json.gz"),
+    path.resolve(typeof __dirname !== "undefined" ? __dirname : process.cwd(), "..", "src", "data", "kjv_full.json.gz"),
+    path.resolve(typeof __dirname !== "undefined" ? __dirname : process.cwd(), "src", "data", "kjv_full.json.gz"),
+  ];
+  for (const p of candidatePaths) {
+    try {
+      if (fs.existsSync(p)) {
+        const raw = zlib.gunzipSync(fs.readFileSync(p)).toString("utf8").replace(/^\uFEFF/, "");
+        const books = JSON.parse(raw) as Array<{ name: string; chapters: string[][] }>;
+        const flat: KjvCorpusVerse[] = [];
+        for (const b of books) {
+          const bookName = b.name === "Psalms" ? "Psalms" : b.name;
+          b.chapters.forEach((chArr, ci) => {
+            const chapterNum = ci + 1;
+            chArr.forEach((vText, vi) => {
+              const verseNum = vi + 1;
+              const cleanText = String(vText || "").replace(/\{[^}]*\}/g, "").replace(/\s+/g, " ").trim();
+              flat.push({
+                book: bookName,
+                chapter: chapterNum,
+                verseNumber: verseNum,
+                reference: `${bookName} ${chapterNum}:${verseNum}`,
+                text: cleanText,
+                lower: cleanText.toLowerCase(),
+              });
+            });
+          });
+        }
+        cachedKjvCorpus = flat;
+        console.log(`[KJV Pure Search] Loaded ${flat.length} verses from ${p}`);
+        return flat;
+      }
+    } catch (err) {
+      console.warn("[KJV Pure Search] Failed to load corpus from", p, err);
+    }
+  }
+  return [];
+}
+
+function escapeRegexLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function searchFullKjvCorpus(rawQuery: string): {
+  verses: any[];
+  totalOccurrences: number;
+  highlightTerms: string[];
+} {
+  const corpus = loadKjvFullCorpus();
+  if (corpus.length === 0) {
+    return { verses: [], totalOccurrences: 0, highlightTerms: [] };
+  }
+
+  const trimmed = rawQuery.trim();
+  const requiredPhrases: string[] = [];
+  const orGroups: string[][] = [];
+  const highlightTerms: string[] = [];
+
+  // 1. Extract quoted exact phrases: "Jesus wept", "the grace of God"
+  let remainder = trimmed.replace(/"([^"]+)"/g, (_, phrase) => {
+    const clean = String(phrase || "").trim();
+    if (clean) {
+      requiredPhrases.push(clean);
+      highlightTerms.push(clean);
+    }
+    return " ";
+  });
+
+  // 2. Extract bracket groups: [grace faith] (all required) or [grace|mercy] / [grace OR mercy] (any required)
+  remainder = remainder.replace(/\[([^\]]+)\]/g, (_, inside) => {
+    const cleanInside = String(inside || "").trim();
+    if (!cleanInside) return " ";
+    if (/\||\bOR\b/i.test(cleanInside)) {
+      const alts = cleanInside.split(/\||\bOR\b/i).map((s: string) => s.trim()).filter(Boolean);
+      if (alts.length > 0) {
+        orGroups.push(alts);
+        highlightTerms.push(...alts);
+      }
+    } else {
+      const words = cleanInside.split(/\s+/).filter(Boolean);
+      for (const w of words) {
+        requiredPhrases.push(w);
+        highlightTerms.push(w);
+      }
+    }
+    return " ";
+  });
+
+  // 3. Extract remaining standalone terms
+  const leftoverWords = remainder
+    .replace(/["[\]]/g, " ")
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0 && !/^(and|or)$/i.test(w));
+
+  for (const w of leftoverWords) {
+    requiredPhrases.push(w);
+    highlightTerms.push(w);
+  }
+
+  if (requiredPhrases.length === 0 && orGroups.length === 0) {
+    return { verses: [], totalOccurrences: 0, highlightTerms: [] };
+  }
+
+  const requiredRegexes = requiredPhrases.map(
+    (p) => new RegExp(`\\b${escapeRegexLiteral(p)}\\b`, "gi")
+  );
+  const orGroupRegexes = orGroups.map((alts) =>
+    alts.map((a) => new RegExp(`\\b${escapeRegexLiteral(a)}\\b`, "gi"))
+  );
+
+  const matchedVerses: any[] = [];
+  let totalOccurrences = 0;
+
+  for (const v of corpus) {
+    let ok = true;
+    let verseHits = 0;
+
+    for (const rx of requiredRegexes) {
+      rx.lastIndex = 0;
+      const m = v.text.match(rx);
+      if (!m || m.length === 0) {
+        ok = false;
+        break;
+      }
+      verseHits += m.length;
+    }
+    if (!ok) continue;
+
+    for (const group of orGroupRegexes) {
+      let groupMatched = false;
+      for (const rx of group) {
+        rx.lastIndex = 0;
+        const m = v.text.match(rx);
+        if (m && m.length > 0) {
+          groupMatched = true;
+          verseHits += m.length;
+        }
+      }
+      if (!groupMatched) {
+        ok = false;
+        break;
+      }
+    }
+    if (!ok) continue;
+
+    totalOccurrences += verseHits;
+    matchedVerses.push({
+      verseNumber: v.verseNumber,
+      reference: v.reference,
+      text: {
+        KJV: v.text,
+        NKJV: v.text,
+        ESV: v.text,
+        NASB: v.text,
+      },
+    });
+  }
+
+  return {
+    verses: matchedVerses,
+    totalOccurrences,
+    highlightTerms: Array.from(new Set(highlightTerms)),
+  };
+}
+
 app.post("/api/study/topic-theme", async (req, res) => {
   const { topic, page = 1, limit = 12 } = req.body;
   if (!topic || typeof topic !== "string" || !topic.trim()) {
@@ -3846,7 +4031,40 @@ app.post("/api/study/topic-theme", async (req, res) => {
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = Math.max(1, Math.min(30, parseInt(limit, 10) || 12));
 
-  // 1. Instant curated canonical responses across Genesis to Revelation
+  // 1. Primary: Full Genesis-to-Revelation KJV Pure Bible Search (supports exact quotes "..." and bracket operators [...])
+  const kjvCacheKey = `kjv_full::${lowerTopic}`;
+  let kjvResult = TOPIC_SEARCH_CACHE.get(kjvCacheKey) as
+    | { verses: any[]; totalOccurrences: number; highlightTerms: string[] }
+    | undefined;
+
+  if (!kjvResult) {
+    const scanned = searchFullKjvCorpus(cleanTopic);
+    if (scanned.verses.length > 0) {
+      kjvResult = scanned;
+      TOPIC_SEARCH_CACHE.set(kjvCacheKey, scanned as any);
+    }
+  }
+
+  if (kjvResult && kjvResult.verses.length > 0) {
+    const startIndex = (pageNum - 1) * limitNum;
+    const pagedVerses = kjvResult.verses.slice(startIndex, startIndex + limitNum);
+    const hasMore = startIndex + limitNum < kjvResult.verses.length;
+
+    return res.json({
+      valid: true,
+      dominantTheme: `KJV Bible Search: "${cleanTopic}"`,
+      anchorText: `Topic: ${cleanTopic}`,
+      verses: pagedVerses,
+      page: pageNum,
+      limit: limitNum,
+      total: kjvResult.verses.length,
+      totalOccurrences: kjvResult.totalOccurrences,
+      highlightTerms: kjvResult.highlightTerms,
+      hasMore
+    });
+  }
+
+  // 2. Fallback: Curated canonical responses across Genesis to Revelation (for multi-word conceptual topics)
   const curatedMatches = getCuratedThemeVerses(cleanTopic);
   if (curatedMatches && curatedMatches.length > 0) {
     const startIndex = (pageNum - 1) * limitNum;

@@ -5,7 +5,7 @@ import { useApp } from "../../context/AppContext";
 import { HighlightItem } from "../../types/notebook";
 import { fetchHighlightsFromSupabase, saveHighlightToSupabase, deleteHighlightFromSupabase } from "../../lib/notebookSync";
 import { getElderStephenVoice } from "./RightPaneTools";
-import { getPreviousVerse, getNextVerse } from "./bibleMetadata";
+import { getPreviousVerse, getNextVerse, getScriptureAutocomplete } from "./bibleMetadata";
 import { BIBLICAL_NAMES_DICTIONARY, BiblicalName } from "./biblicalNames";
 import { ViewModeToggle, ViewMode } from "./ViewModeToggle";
 import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
@@ -45,6 +45,9 @@ interface ParallelBibleReaderProps {
   hasMoreTopicVerses?: boolean;
   loadingMoreTopicVerses?: boolean;
   isTopicSearchActive?: boolean;
+  topicTotalVerses?: number | null;
+  topicTotalOccurrences?: number | null;
+  topicHighlightTerms?: string[];
   handleLoadExegesis?: (ref: string, topic: string) => void;
   loading?: boolean;
   errorMsg?: string;
@@ -83,6 +86,9 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
   hasMoreTopicVerses = false,
   loadingMoreTopicVerses = false,
   isTopicSearchActive = false,
+  topicTotalVerses = null,
+  topicTotalOccurrences = null,
+  topicHighlightTerms = [],
   handleLoadExegesis,
   loading = false,
   errorMsg = "",
@@ -94,6 +100,50 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
   const [verses, setVerses] = useState<ParallelVerse[]>([]);
   const [allHighlights, setAllHighlights] = useState<HighlightItem[]>([]);
   const [selectedVersions, setSelectedVersions] = useState<string[]>(["KJV"]);
+  const [refDropdownOpen, setRefDropdownOpen] = useState<boolean>(false);
+  const refDropdownContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (ev: MouseEvent) => {
+      if (refDropdownContainerRef.current && !refDropdownContainerRef.current.contains(ev.target as Node)) {
+        setRefDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const scriptureAuto = React.useMemo(() => getScriptureAutocomplete(queryRef), [queryRef]);
+
+  const highlightSearchTerms = (text: string): React.ReactNode => {
+    if (!isTopicSearchActive || !topicHighlightTerms || topicHighlightTerms.length === 0) {
+      return text;
+    }
+    const cleanTerms = topicHighlightTerms
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 2)
+      .sort((a, b) => b.length - a.length);
+    if (cleanTerms.length === 0) return text;
+
+    const escaped = cleanTerms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const regex = new RegExp(`(\\b(?:${escaped.join("|")})\\b)`, "gi");
+    const parts = text.split(regex);
+    if (parts.length <= 1) return text;
+
+    return parts.map((part, i) => {
+      if (i % 2 === 1) {
+        return (
+          <mark
+            key={`kw-${i}`}
+            className="bg-amber-400/35 text-amber-950 dark:text-amber-100 font-semibold px-0.5 rounded-xs"
+          >
+            {part}
+          </mark>
+        );
+      }
+      return <React.Fragment key={`txt-${i}`}>{part}</React.Fragment>;
+    });
+  };
   const [selectedTextData, setSelectedTextData] = useState<{
     text: string;
     verseRef: string;
@@ -763,42 +813,166 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
           }`}>
             {/* Top Row: Scripture Input, Topic Search, Search Button, and Bible Version Buttons in a single horizontal row */}
             <div className="flex flex-wrap items-center justify-start md:justify-end gap-2 sm:gap-2.5 w-full">
-              {/* Scripture Reference Input */}
-              <div className="relative flex items-center">
-                <input
-                  type="text"
-                  value={queryRef}
-                  onChange={(e) => {
-                    setQueryRef && setQueryRef(e.target.value);
-                    setLastActiveSearchField && setLastActiveSearchField('ref');
-                  }}
-                  onFocus={() => {
-                    setLastActiveSearchField && setLastActiveSearchField('ref');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && handleLoadExegesis) {
-                      e.preventDefault();
+              {/* Scripture Reference Input with Inline Ghost Pre-Fill, Book Dropdown & Pericope Preview */}
+              <div className="relative flex items-center" ref={refDropdownContainerRef}>
+                <div className="relative w-36 sm:w-44 md:w-48">
+                  {/* Inline Ghost Assist Pre-Fill Mirror */}
+                  {refDropdownOpen && queryRef && scriptureAuto.ghostSuffix && (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 flex items-center px-2.5 py-1.5 text-xs font-serif whitespace-pre overflow-hidden"
+                    >
+                      <span className="invisible">{queryRef}</span>
+                      <span className={theme === "dark" ? "text-amber-400/50" : "text-amber-700/50"}>
+                        {scriptureAuto.ghostSuffix}
+                      </span>
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    value={queryRef}
+                    onChange={(e) => {
+                      setQueryRef && setQueryRef(e.target.value);
                       setLastActiveSearchField && setLastActiveSearchField('ref');
-                      handleLoadExegesis(queryRef, "");
-                    }
-                  }}
-                  placeholder="e.g. Genesis or John 1:3"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  className={`px-2.5 py-1.5 text-xs rounded outline-none w-32 sm:w-36 md:w-40 font-serif border transition-all ${
-                    queryRef && queryTopic && lastActiveSearchField === 'ref'
-                      ? "border-[#C9973A] ring-1 ring-[#C9973A] shadow-[0_0_8px_rgba(201,151,58,0.3)]"
-                      : theme === "dark" ? "bg-[#161B22] border-[#30363D] text-white" : "bg-white border-gray-300 text-gray-800"
-                  } ${theme === "dark" ? "bg-[#161B22] text-white" : "bg-white text-gray-800"}`}
-                />
+                      setRefDropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      setLastActiveSearchField && setLastActiveSearchField('ref');
+                      if (queryRef.trim()) setRefDropdownOpen(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if ((e.key === "Tab" || e.key === "ArrowRight") && scriptureAuto.ghostSuffix) {
+                        const inputEl = e.currentTarget;
+                        if (inputEl.selectionStart === queryRef.length) {
+                          e.preventDefault();
+                          const completed = `${queryRef}${scriptureAuto.ghostSuffix}`;
+                          setQueryRef && setQueryRef(completed);
+                          return;
+                        }
+                      }
+                      if (e.key === "Escape") {
+                        setRefDropdownOpen(false);
+                        return;
+                      }
+                      if (e.key === "Enter" && handleLoadExegesis) {
+                        e.preventDefault();
+                        setRefDropdownOpen(false);
+                        setLastActiveSearchField && setLastActiveSearchField('ref');
+                        const toSearch = scriptureAuto.chapterInfo?.hasTrailingHyphen && scriptureAuto.suggestedFullRef
+                          ? scriptureAuto.suggestedFullRef
+                          : queryRef;
+                        if (toSearch !== queryRef && setQueryRef) {
+                          setQueryRef(toSearch);
+                        }
+                        handleLoadExegesis(toSearch, "");
+                      }
+                    }}
+                    placeholder="e.g. Jam 1 or John 1 4"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className={`relative z-10 w-full px-2.5 py-1.5 text-xs rounded outline-none font-serif border transition-all bg-transparent ${
+                      queryRef && queryTopic && lastActiveSearchField === 'ref'
+                        ? "border-[#C9973A] ring-1 ring-[#C9973A] shadow-[0_0_8px_rgba(201,151,58,0.3)]"
+                        : theme === "dark" ? "border-[#30363D] text-white" : "border-gray-300 text-gray-800"
+                    } ${theme === "dark" ? "text-white" : "text-gray-800"}`}
+                    style={{
+                      backgroundColor: theme === "dark" ? "rgba(22, 27, 34, 0.72)" : "rgba(255, 255, 255, 0.78)"
+                    }}
+                  />
+                </div>
                 {queryRef && queryTopic && lastActiveSearchField === 'ref' && (
                   <span 
-                    className="absolute -top-2 right-1.5 bg-[#C9973A] text-white font-mono text-[8px] px-1 py-0.2 rounded font-bold uppercase tracking-tight pointer-events-none shadow-xs"
+                    className="absolute -top-2 right-1.5 z-20 bg-[#C9973A] text-white font-mono text-[8px] px-1 py-0.2 rounded font-bold uppercase tracking-tight pointer-events-none shadow-xs"
                     title="Prioritized search field (most recently edited)"
                   >
                     Priority
                   </span>
+                )}
+
+                {/* Logos-Style Clean Book Dropdown + Pericope Preview + Hyphen Range Helper */}
+                {refDropdownOpen && queryRef.trim().length > 0 && scriptureAuto.topBook && (
+                  <div
+                    className={`absolute left-0 top-full mt-1.5 z-50 w-72 sm:w-80 rounded-xl border shadow-2xl overflow-hidden ${
+                      theme === "dark"
+                        ? "bg-[#141922] border-[#C9973A]/40 text-stone-100"
+                        : "bg-white border-[#C9973A]/40 text-stone-900"
+                    }`}
+                  >
+                    {/* Pericope / Section Heading Banner */}
+                    {scriptureAuto.pericope && (
+                      <div
+                        className={`px-3 py-2 border-b text-[11px] flex flex-col gap-0.5 ${
+                          theme === "dark"
+                            ? "bg-[#1C2331] border-white/10"
+                            : "bg-amber-50/70 border-amber-200/70"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-[9px] uppercase tracking-wider text-[#C9973A] font-bold">
+                            Pericope · {scriptureAuto.chapterInfo ? `${scriptureAuto.chapterInfo.book} ${scriptureAuto.chapterInfo.chapter}` : scriptureAuto.topBook.name}
+                          </span>
+                          {scriptureAuto.chapterInfo && (
+                            <span className="font-mono text-[9px] text-stone-400">
+                              {scriptureAuto.chapterInfo.maxVerse} verses
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-serif font-semibold text-xs leading-snug">
+                          {scriptureAuto.pericope}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Trailing Hyphen End-of-Chapter Helper (e.g. "James 1 2-") */}
+                    {scriptureAuto.chapterInfo?.hasTrailingHyphen && scriptureAuto.suggestedFullRef && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          const full = scriptureAuto.suggestedFullRef;
+                          setQueryRef && setQueryRef(full);
+                          setRefDropdownOpen(false);
+                          handleLoadExegesis && handleLoadExegesis(full, "");
+                        }}
+                        className={`w-full text-left px-3 py-2 border-b text-xs font-mono flex items-center justify-between cursor-pointer transition-colors ${
+                          theme === "dark"
+                            ? "bg-amber-500/15 hover:bg-amber-500/25 border-white/10 text-amber-300"
+                            : "bg-amber-100/70 hover:bg-amber-200/70 border-amber-200 text-amber-900"
+                        }`}
+                      >
+                        <span>Complete to end: <strong>{scriptureAuto.suggestedFullRef}</strong></span>
+                        <span className="text-[10px] opacity-75">Tab ↵</span>
+                      </button>
+                    )}
+
+                    {/* Clean Canonical Bible Book Matches Only (No Non-Book Clutter) */}
+                    <div className="max-h-56 overflow-y-auto divide-y divide-current/5">
+                      {scriptureAuto.matchingBooks.map((book, idx) => (
+                        <button
+                          key={book.name}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            const target = `${book.name} 1`;
+                            setQueryRef && setQueryRef(target);
+                            setRefDropdownOpen(false);
+                            handleLoadExegesis && handleLoadExegesis(target, "");
+                          }}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                            idx === 0
+                              ? theme === "dark" ? "bg-[#C9973A]/15 text-amber-200" : "bg-amber-50 text-amber-950"
+                              : theme === "dark" ? "hover:bg-white/5" : "hover:bg-stone-50"
+                          }`}
+                        >
+                          <span className="font-serif font-semibold">{book.name}</span>
+                          <span className="font-mono text-[10px] opacity-60">
+                            {book.chapters.length} ch · Ch 1 ({book.chapters[0]}v)
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -821,7 +995,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                       handleLoadExegesis("", queryTopic);
                     }
                   }}
-                  placeholder="Topic (e.g. grace, faith)..."
+                  placeholder='Topic, "exact phrase", [word1 word2]...'
                   autoComplete="off"
                   autoCorrect="off"
                   spellCheck={false}
@@ -893,7 +1067,9 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1.5 border-t border-current/10 w-full">
                 {isTopicMode && (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 font-bold border border-amber-500/30 whitespace-nowrap shrink-0">
-                    {verses.length} Scripture Passages
+                    {topicTotalVerses !== null && topicTotalOccurrences !== null
+                      ? `${topicTotalVerses} Scripture Passages (${topicTotalOccurrences} matches)`
+                      : `${topicTotalVerses ?? verses.length} Scripture Passages`}
                   </span>
                 )}
 
@@ -1217,12 +1393,14 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                           )}
                           {/* Render biblical verse text inside explicit data-biblical-text container */}
                           <span data-biblical-text="true" className="select-text">
-                            {renderTextWithUserHighlights(
-                              columnText, 
-                              cellHighlights, 
-                              isSpeakingThis && version === selectedVersions[0], 
-                              speakingCharIndex
-                            )}
+                            {cellHighlights.length === 0 && !isSpeakingThis && isTopicSearchActive && topicHighlightTerms.length > 0
+                              ? highlightSearchTerms(columnText)
+                              : renderTextWithUserHighlights(
+                                  columnText, 
+                                  cellHighlights, 
+                                  isSpeakingThis && version === selectedVersions[0], 
+                                  speakingCharIndex
+                                )}
                           </span>
                         </span>
                       </div>
