@@ -1186,45 +1186,24 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     isElderSpeakingRef.current = true;
     
     const userName = userProfile?.name || "Berean";
-    const payload = {
-      currentMode: "Explain" as const,
-      contextSummary: `Interactive Bible Study Exegesis on ${activeRef}. The student has activated Interactive Mode.`,
-      noteTitle: `Interactive Study on ${activeRef}`,
-      noteContent: report?.text || activeRef,
-      userAction: `Begin our live conversational interaction directly as a gentle, wise teacher on ${activeRef}. Greet ${userName} warmly and ask an engaging, gentle opening question inviting their observations on the passage without any rigid formality.`,
-      historyLog: messages.slice(-4).map(m => ({
-        role: m.sender === "user" ? ("user" as const) : ("model" as const),
-        text: m.text
-      }))
+    const greetingText = `Grace and peace, ${userName}! It is a blessing to study ${activeRef} together. What stands out to you first in this passage?`;
+
+    recentElderSpeechRef.current = [greetingText, ...recentElderSpeechRef.current.filter(t => t !== greetingText).slice(0, 5)];
+    isElderSpeakingRef.current = true;
+
+    const elderMsg: ElderCommentaryItem = {
+      id: `elder-live-${Date.now()}`,
+      sender: "elder",
+      text: greetingText,
+      timestamp: Date.now(),
+      badge: "Interactive Mode"
     };
 
-    callElderStephen(payload)
-      .then(res => {
-        const replyText = res?.text || `Greetings, ${userName}! It is a blessing to open God's Word together on ${activeRef}. What thoughts or observations stand out to you first in this passage? Let us explore together.`;
-        
-        recentElderSpeechRef.current = [replyText, ...recentElderSpeechRef.current.filter(t => t !== replyText).slice(0, 5)];
-        isElderSpeakingRef.current = true;
-
-        const elderMsg: ElderCommentaryItem = {
-          id: `elder-live-${Date.now()}`,
-          sender: "elder",
-          text: replyText,
-          timestamp: Date.now(),
-          badge: "Interactive Mode"
-        };
-        
-        setMessages(prev => [...prev, elderMsg]);
-        setLatestLiveResponse(replyText);
-        setIsLiveNoteSaved(false);
-        setLoading(false);
-        handleSpeakAloudAndResumeListen(replyText);
-      })
-      .catch(e => {
-        console.warn("Error starting browser voice simulation:", e);
-        setLoading(false);
-        setLiveState("ready");
-        isElderSpeakingRef.current = false;
-      });
+    setMessages(prev => [...prev, elderMsg]);
+    setLatestLiveResponse(greetingText);
+    setIsLiveNoteSaved(false);
+    setLoading(false);
+    handleSpeakAloudAndResumeListen(greetingText);
   };
 
   /**
@@ -1395,9 +1374,9 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       let isDisposed = false;
 
       try {
-        // Only send Sec-WebSocket-Protocol to external Supabase Edge Functions; same-origin /api/study/live uses cookies + JSON setup
+        // Align Sec-WebSocket-Protocol with deployed Supabase gemini-live-relay; same-origin localhost /api/study/live stays untouched
         const ws = !isSameOriginLocal && accessToken
-          ? new WebSocket(targetUrl, [accessToken])
+          ? new WebSocket(targetUrl, ["gemini-live.v1", `jwt.${accessToken}`])
           : new WebSocket(targetUrl);
         liveWsRef.current = ws;
         let hasOpened = false;
@@ -1426,7 +1405,8 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
             }
           } catch (_) {}
 
-          if (!hasOpened && allowLocalFallback && targetUrl !== localLiveWsUrl) {
+          const isVercelServerlessHost = typeof window !== "undefined" && /\.vercel\.app$/i.test(window.location.hostname);
+          if (!hasOpened && allowLocalFallback && targetUrl !== localLiveWsUrl && !isVercelServerlessHost) {
             connectLiveSocket(localLiveWsUrl, false, 0);
             return;
           }
