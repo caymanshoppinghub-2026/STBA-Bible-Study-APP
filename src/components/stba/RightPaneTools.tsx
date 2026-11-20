@@ -981,59 +981,36 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   };
 
   const handleSpeakAloudAndResumeListen = (textToSpeak: string) => {
-    if (!("speechSynthesis" in window)) {
+    stopActiveGeminiSpeech();
+    if ("speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+
+    const cleanText = textToSpeak.replace(/[#*`_~]/g, "").slice(0, 750).trim();
+    if (!cleanText) {
       setLiveState("ready");
       return;
     }
-    
-    window.speechSynthesis.cancel();
-    const cleanText = textToSpeak.replace(/[#*`_~]/g, "").slice(0, 750);
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 0.95;
-    utterance.pitch = 0.96;
-    
-    const voices = window.speechSynthesis.getVoices();
-    const pastoralVoice = voices.find(v => 
-      v.lang.startsWith("en") && (
-        v.name.includes("Natural") || 
-        v.name.includes("Guy") || 
-        v.name.includes("David") || 
-        v.name.includes("Daniel") || 
-        v.name.includes("George") ||
-        v.name.includes("Male")
-      )
-    ) || voices.find(v => v.lang.startsWith("en"));
-    
-    if (pastoralVoice) utterance.voice = pastoralVoice;
-    
+
     isElderSpeakingRef.current = true;
     recentElderSpeechRef.current = [cleanText, ...recentElderSpeechRef.current.filter(t => t !== cleanText).slice(0, 5)];
     setIsSpeaking(true);
     setLiveState("playing");
-    
-    // Waveform simulation
+
+    // Waveform simulation while Elder Stephen speaks
     const waveInterval = setInterval(() => {
       setWaveHeights(Array.from({ length: 8 }, () => Math.floor(Math.random() * 16) + 6));
     }, 100);
 
-    // Keepalive to prevent Chrome from pausing speech synthesis after 15 seconds
-    const speechKeepalive = setInterval(() => {
-      if (window.speechSynthesis && window.speechSynthesis.speaking) {
-        window.speechSynthesis.pause();
-        window.speechSynthesis.resume();
-      } else {
-        clearInterval(speechKeepalive);
-      }
-    }, 10000);
-
-    utterance.onend = () => {
+    const finishSpeaking = () => {
       clearInterval(waveInterval);
-      clearInterval(speechKeepalive);
       setWaveHeights([8, 12, 16, 10, 14, 8, 12, 8]);
       setIsSpeaking(false);
       setLiveState("ready");
       lastElderSpeechEndTimeRef.current = Date.now();
-      
+
       // Auto resume listening loop in dynamic interactive mode after echo decay buffer
       if (isDynamicLiveActive) {
         setTimeout(() => {
@@ -1047,25 +1024,19 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       }
     };
 
-    utterance.onerror = () => {
-      clearInterval(waveInterval);
-      clearInterval(speechKeepalive);
-      setIsSpeaking(false);
-      setLiveState("ready");
-      lastElderSpeechEndTimeRef.current = Date.now();
-      if (isDynamicLiveActive) {
-        setTimeout(() => {
-          isElderSpeakingRef.current = false;
-          if (isDynamicLiveActive) startContinuousSpeechLoop();
-        }, 500);
-      } else {
-        setTimeout(() => {
-          isElderSpeakingRef.current = false;
-        }, 500);
-      }
-    };
-
-    window.speechSynthesis.speak(utterance);
+    // Route Interactive Elder Stephen fallback through real neural TTS:
+    // Google Gemini TTS (Charon) primary -> Microsoft Edge Neural (Andrew) fallback -> never robotic Mac voice
+    playGeminiSpeech(cleanText, {
+      voice: "Charon",
+      verbatimReadAloud: false,
+      rate: 0.96,
+      onStart: () => {
+        setIsSpeaking(true);
+        setLiveState("playing");
+      },
+      onEnd: finishSpeaking,
+      onError: finishSpeaking,
+    });
   };
 
   const startContinuousSpeechLoop = () => {
