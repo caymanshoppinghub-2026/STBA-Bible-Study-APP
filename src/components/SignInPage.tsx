@@ -64,11 +64,18 @@ export const SignInPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // 1. Authenticate live against Supabase Auth
-      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+      // 1. Authenticate live against Supabase Auth (with 12s timeout guard so cold starts never hang)
+      const signInPromise = supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password
       });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Sign-in timed out. Please try again.")), 12000)
+      );
+      const { data: signInData, error: signInErr } = await Promise.race([
+        signInPromise,
+        timeoutPromise
+      ]);
 
       let authUser = signInData?.user;
 
@@ -98,36 +105,42 @@ export const SignInPage: React.FC = () => {
         }
       }
 
-      // 2. Strictly fetch live user profile & preferences directly from Supabase
-      const liveProfile = await fetchProfileFromSupabase();
+      // 2. Build active user immediately from the authenticated Supabase user (zero blocking round-trips)
       const meta = authUser?.user_metadata || {};
       const registrationTimestamp =
         meta.createdAt ||
         meta.created_at ||
         meta.signupDate ||
         authUser?.created_at ||
-        liveProfile?.createdAt ||
         undefined;
 
-      const activeUser = liveProfile
-        ? { ...liveProfile, createdAt: registrationTimestamp }
-        : {
-            name: meta.name || email.split("@")[0] || "Scholar",
-            email: authUser?.email || email.trim(),
-            isSda: meta.isSda !== false,
-            firstTrack: meta.firstTrack || "fundamental-beliefs",
-            role: meta.role || "STBAScholar",
-            tier: meta.tier || meta.stba_user_tier || "Beginner",
-            isGuest: false,
-            emailVerified: !!authUser?.email_confirmed_at || meta.emailVerified !== false,
-            createdAt: registrationTimestamp
-          };
+      const activeUser = {
+        name: meta.name || email.split("@")[0] || "Scholar",
+        email: authUser?.email || email.trim(),
+        isSda: meta.isSda !== false,
+        firstTrack: meta.firstTrack || "fundamental-beliefs",
+        role: meta.role || "STBAScholar",
+        tier: meta.tier || meta.stba_user_tier || "Beginner",
+        isGuest: false,
+        emailVerified: !!authUser?.email_confirmed_at || meta.emailVerified !== false,
+        avatar_url: meta.avatar_url || meta.profilePic || "",
+        profilePic: meta.profilePic || meta.avatar_url || "",
+        createdAt: registrationTimestamp
+      };
 
       setUser(activeUser);
 
-      // 3. Ensure baseline database records in Supabase (track_progress & active_recall_mastery)
+      // 3. Hydrate full DB profile & baseline track records in the background so login NEVER stalls
+      fetchProfileFromSupabase()
+        .then((liveProfile) => {
+          if (liveProfile) {
+            setUser({ ...liveProfile, createdAt: registrationTimestamp || liveProfile.createdAt });
+          }
+        })
+        .catch(() => {});
+
       if (authUser?.id) {
-        await ensureInitialUserTrackProgress(authUser.id, activeUser.firstTrack || "fundamental-beliefs");
+        ensureInitialUserTrackProgress(authUser.id, activeUser.firstTrack || "fundamental-beliefs").catch(() => {});
       }
 
       // Bypass Onboarding for returning users by marking completed and clearing stage triggers
