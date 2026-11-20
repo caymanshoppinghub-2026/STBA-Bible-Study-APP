@@ -27,6 +27,7 @@ import {
 } from "../../lib/supabase";
 import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from "../../lib/apiFetch";
 import { decodeAndCleanGeminiPcm, encodeFloat32To16kHzPcmBase64, sanitizeVerbatimSpeechText } from "../../utils/cleanGeminiAudio";
+import { playGeminiSpeech, stopActiveGeminiSpeech } from "../../utils/geminiSpeechPlayer";
 import { saveNoteToSupabase, deleteNoteFromSupabase, fetchCategoriesFromSupabase, checkCategoriesTable, fetchNotesFromSupabase, checkSupabaseConnection } from "../../lib/notebookSync";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
@@ -2292,19 +2293,14 @@ ${formattedNotes}
     setTimeout(() => setCopiedToast(""), 1800);
   };
 
-  // 🔊 Text-To-Speech (TTS) Logic
+  // 🔊 Text-To-Speech (TTS) Logic — Google Gemini TTS primary with Edge Neural fallback
   const handleSpeak = (text: string, idx: number) => {
-    if (!("speechSynthesis" in window)) {
-      console.warn("Speech synthesis is not supported on this browser.");
-      return;
-    }
-
     if (currentlySpeakingIdx === idx && isSpeaking) {
       handleStopSpeech();
       return;
     }
 
-    window.speechSynthesis.cancel();
+    stopActiveGeminiSpeech();
 
     // Clean up markdown markers for a pure reading cadence
     const parsedText = text
@@ -2312,34 +2308,32 @@ ${formattedNotes}
       .replace(/[\[\]]/g, "")
       .trim();
 
-    const utterance = new SpeechSynthesisUtterance(parsedText);
-    utterance.rate = 0.92;
-    utterance.pitch = 0.85;
+    if (!parsedText) return;
 
-    const bestVoice = getElderStephenVoice();
-    if (bestVoice) {
-      utterance.voice = bestVoice;
-    }
+    setIsSpeaking(true);
+    setCurrentlySpeakingIdx(idx);
 
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      setCurrentlySpeakingIdx(idx);
-    };
-
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      setCurrentlySpeakingIdx(null);
-    };
-
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-      setCurrentlySpeakingIdx(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    playGeminiSpeech(parsedText, {
+      voice: "Charon",
+      verbatimReadAloud: false,
+      rate: 0.96,
+      onStart: () => {
+        setIsSpeaking(true);
+        setCurrentlySpeakingIdx(idx);
+      },
+      onEnd: () => {
+        setIsSpeaking(false);
+        setCurrentlySpeakingIdx(null);
+      },
+      onError: () => {
+        setIsSpeaking(false);
+        setCurrentlySpeakingIdx(null);
+      },
+    });
   };
 
   const handleStopSpeech = () => {
+    stopActiveGeminiSpeech();
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -4013,57 +4007,45 @@ ${stepsContent}
   };
 
   const speak = (text: string, chatIdx?: number) => {
-    if (!("speechSynthesis" in window)) {
-      console.warn("Speech synthesis is not supported on this browser.");
-      return;
-    }
-    
-    if (window.speechSynthesis.speaking && currentlySpeakingChatIdx === chatIdx && chatIdx !== undefined) {
-      window.speechSynthesis.cancel();
+    if (isSpeechActive && currentlySpeakingChatIdx === chatIdx && chatIdx !== undefined) {
+      stopActiveGeminiSpeech();
       setIsSpeechActive(false);
       setCurrentlySpeakingChatIdx(null);
       return;
     }
 
-    window.speechSynthesis.cancel();
-    
+    stopActiveGeminiSpeech();
+
     // Clean up markdown markers for a pure reading cadence
     const parsedText = text
       .replace(/\*\*|###|##|\*/g, "")
       .replace(/[\[\]]/g, "")
       .trim();
 
-    const utterance = new SpeechSynthesisUtterance(parsedText);
-    utterance.rate = 0.92;
-    utterance.pitch = 0.85; // Warmer elder voice tuning
+    if (!parsedText) return;
 
-    const bestVoice = getElderStephenVoice();
-
-    if (bestVoice) {
-      utterance.voice = bestVoice;
-    }
-
-    utterance.onstart = () => {
-      setIsSpeechActive(true);
-      if (chatIdx !== undefined) {
-        setCurrentlySpeakingChatIdx(chatIdx);
-      } else {
-        setCurrentlySpeakingChatIdx(null);
-      }
-    };
-
-    utterance.onend = () => {
-      setIsSpeechActive(false);
-      setCurrentlySpeakingChatIdx(null);
-    };
-
-    utterance.onerror = () => {
-      setIsSpeechActive(false);
-      setCurrentlySpeakingChatIdx(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    setIsSpeechActive(true);
+    setCurrentlySpeakingChatIdx(chatIdx !== undefined ? chatIdx : null);
     setLastSpokenText(parsedText);
+
+    // Primary: Google Gemini TTS (Charon) -> seamless Edge Neural fallback -> offline browser fallback
+    playGeminiSpeech(parsedText, {
+      voice: "Charon",
+      verbatimReadAloud: false,
+      rate: 0.96,
+      onStart: () => {
+        setIsSpeechActive(true);
+        setCurrentlySpeakingChatIdx(chatIdx !== undefined ? chatIdx : null);
+      },
+      onEnd: () => {
+        setIsSpeechActive(false);
+        setCurrentlySpeakingChatIdx(null);
+      },
+      onError: () => {
+        setIsSpeechActive(false);
+        setCurrentlySpeakingChatIdx(null);
+      },
+    });
   };
 
   const getTeacherQuestion = (idx: number, chats: any[]): string => {
