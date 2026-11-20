@@ -1012,15 +1012,15 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       lastElderSpeechEndTimeRef.current = Date.now();
 
       // Auto resume listening loop in dynamic interactive mode after echo decay buffer
-      if (isDynamicLiveActive) {
+      if (isDynamicLiveActiveRef.current) {
         setTimeout(() => {
           isElderSpeakingRef.current = false;
-          if (isDynamicLiveActive) startContinuousSpeechLoop();
-        }, 500);
+          if (isDynamicLiveActiveRef.current) startContinuousSpeechLoop();
+        }, 450);
       } else {
         setTimeout(() => {
           isElderSpeakingRef.current = false;
-        }, 500);
+        }, 450);
       }
     };
 
@@ -1079,9 +1079,9 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     rec.onerror = (err: any) => {
       // If error is no-speech, network or transient silence, maintain active conversation and keep listening
       if (err.error === "no-speech" || err.error === "network" || err.error === "audio-capture") {
-        if (isDynamicLiveActive && !isSpeaking && !isElderSpeakingRef.current) {
+        if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
           setTimeout(() => {
-            if (isDynamicLiveActive && !isSpeaking && !isElderSpeakingRef.current) {
+            if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
               startContinuousSpeechLoop();
             }
           }, 300);
@@ -1094,13 +1094,13 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
 
     rec.onend = () => {
       // Maintain Active Conversation: keep listening continuously for as long as user is engaged
-      if (isDynamicLiveActive && !isSpeaking && !isElderSpeakingRef.current) {
+      if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
         setTimeout(() => {
-          if (isDynamicLiveActive && !isSpeaking && !isElderSpeakingRef.current) {
+          if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
             startContinuousSpeechLoop();
           }
         }, 200);
-      } else if (isDynamicLiveActive && liveState === "recording") {
+      } else if (isDynamicLiveActiveRef.current) {
         setLiveState("ready");
       }
     };
@@ -1186,7 +1186,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     isElderSpeakingRef.current = true;
     
     const userName = userProfile?.name || "Berean";
-    const greetingText = `Grace and peace, ${userName}! It is a blessing to open ${activeRef} together. As your exegetical mentor, let us begin by drawing out the author's intended meaning in its original historical and scriptural context—allowing Scripture to interpret Scripture. Follow along with me in the Bible Reader as we examine the setting, original language roots, and SDA commentary insights.`;
+    const greetingText = `Grace and peace, ${userName}! It is a blessing to open ${activeRef} together. Follow along with me as we dissect the Word of God using the workspace tools—try Word Study to examine the original Greek or Hebrew roots, Cross-References to see how Scripture links with Scripture, and the SDA Commentary for deeper insight.`;
 
     recentElderSpeechRef.current = [greetingText, ...recentElderSpeechRef.current.filter(t => t !== greetingText).slice(0, 5)];
     isElderSpeakingRef.current = true;
@@ -1248,6 +1248,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     const sessionRunId = ++liveSessionRunIdRef.current;
     setLiveError(null);
     setLiveState("connecting");
+    isDynamicLiveActiveRef.current = true;
     setIsDynamicLiveActive(true);
     isElderSpeakingRef.current = false;
 
@@ -1595,6 +1596,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
 
   const cleanupLiveSession = (notifyToast: boolean = true) => {
     liveSessionRunIdRef.current += 1;
+    isDynamicLiveActiveRef.current = false;
     setIsDynamicLiveActive(false);
     setLiveState("idle");
     setLiveError(null);
