@@ -1375,12 +1375,13 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       let isDisposed = false;
 
       try {
-        // Align Sec-WebSocket-Protocol with deployed Supabase gemini-live-relay; same-origin localhost /api/study/live stays untouched
+        // Only send Sec-WebSocket-Protocol to external Supabase Edge Functions; same-origin /api/study/live uses cookies + JSON setup
         const ws = !isSameOriginLocal && accessToken
-          ? new WebSocket(targetUrl, ["gemini-live.v1", `jwt.${accessToken}`])
+          ? new WebSocket(targetUrl, [accessToken])
           : new WebSocket(targetUrl);
         liveWsRef.current = ws;
         let hasOpened = false;
+        let hasReceivedReady = false;
         let errorHandled = false;
 
         const disposeSocketHandlers = () => {
@@ -1407,12 +1408,12 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
           } catch (_) {}
 
           const isVercelServerlessHost = typeof window !== "undefined" && /\.vercel\.app$/i.test(window.location.hostname);
-          if (!hasOpened && allowLocalFallback && targetUrl !== localLiveWsUrl && !isVercelServerlessHost) {
+          if (!hasReceivedReady && allowLocalFallback && targetUrl !== localLiveWsUrl && !isVercelServerlessHost) {
             connectLiveSocket(localLiveWsUrl, false, 0);
             return;
           }
 
-          if (!hasOpened && isSameOriginLocal && retryAttempt < 1) {
+          if (!hasReceivedReady && isSameOriginLocal && retryAttempt < 1) {
             liveRetryTimerRef.current = setTimeout(() => {
               liveRetryTimerRef.current = null;
               if (isMountedRef.current && sessionRunId === liveSessionRunIdRef.current) {
@@ -1463,6 +1464,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
             }
             
             if (msg.ready) {
+              hasReceivedReady = true;
               if (msg.model) setLiveModelName(msg.model);
               setLiveState("ready");
               // Pre-initialize output 24kHz AudioContext on user gesture / session ready
@@ -1568,7 +1570,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
           if (isDisposed || !isMountedRef.current || sessionRunId !== liveSessionRunIdRef.current) {
             return;
           }
-          if (!hasOpened && !errorHandled) {
+          if (!hasReceivedReady && !errorHandled) {
             transitionToFallbackOrSimulation(ev);
             return;
           }
@@ -1586,8 +1588,9 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       }
     };
 
-    // Connect directly to the local Gemini 3.8 Live gateway (/api/study/live) unless an explicit custom edge relay override is set
-    if (SUPABASE_EDGE_FUNCTION_URL && hasCustomEdgeFunction && wsUrl) {
+    // On localhost, connect directly to the local Gemini Live gateway (/api/study/live) immediately
+    const isLocalDevHost = typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+    if (!isLocalDevHost && SUPABASE_EDGE_FUNCTION_URL && hasCustomEdgeFunction && wsUrl) {
       connectLiveSocket(wsUrl, true, 0);
     } else {
       connectLiveSocket(localLiveWsUrl, false, 0);
