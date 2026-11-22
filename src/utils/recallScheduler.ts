@@ -44,7 +44,7 @@ export interface DailyRecallProgress {
 const STORAGE_KEYS = {
   DAILY_LIMIT: "stba_daily_verse_limit",
   DECAY_INTERVAL: "stba_recall_queue_frequency",
-  POPUPS_ENABLED: "stba_recall_popups_enabled",
+  POPUPS_ENABLED: "stba_recall_popups_user_activated",
   SETTINGS_CUSTOMIZED: "stba_settings_customized",
   QUEUE_ITEMS: "stba_recall_queue_items_v2",
   TODAY_DATE: "stba_today_recalls_date_v2",
@@ -178,14 +178,14 @@ export function calculateDecayStatus(dueAtIso: string, intervalDays: number): "O
 }
 
 /**
- * Returns user settings with safe fallbacks
+ * Returns user settings with safe fallbacks (inactive by default until user explicitly activates)
  */
 export function getUserRecallSettings(): UserRecallSettings {
   if (typeof window === "undefined") {
     return {
       dailyVerseLimit: 5,
       decayIntervalDays: 3,
-      popupsEnabled: true,
+      popupsEnabled: false,
       snoozeMinutes: 15
     };
   }
@@ -196,7 +196,8 @@ export function getUserRecallSettings(): UserRecallSettings {
 
   const dailyVerseLimit = rawLimit ? Math.max(1, Math.min(7, parseInt(rawLimit, 10) || 5)) : 5;
   const decayIntervalDays = rawInterval ? Math.max(1, Math.min(14, parseInt(rawInterval, 10) || 3)) : 3;
-  const popupsEnabled = rawEnabled !== "false";
+  // Strictly inactive until the user explicitly activates recall pop-ups
+  const popupsEnabled = rawEnabled === "true";
 
   return {
     dailyVerseLimit,
@@ -476,22 +477,8 @@ export function hasUserCustomizedSettings(user?: UserAccount | null): boolean {
     return false;
   }
 
-  // 2. Check if user has explicitly customized their discipleship & recall settings
-  const explicitCustomized = localStorage.getItem(STORAGE_KEYS.SETTINGS_CUSTOMIZED) === "true";
-  const hasCustomLimit = localStorage.getItem(STORAGE_KEYS.DAILY_LIMIT) !== null;
-  const hasCustomDecay = localStorage.getItem(STORAGE_KEYS.DECAY_INTERVAL) !== null;
-  const hasCustomPopups = localStorage.getItem(STORAGE_KEYS.POPUPS_ENABLED) !== null;
-  const hasCustomTranslation =
-    localStorage.getItem("stba_primary_translation") !== null ||
-    localStorage.getItem("stba_bible_version") !== null;
-
-  return (
-    explicitCustomized ||
-    hasCustomLimit ||
-    hasCustomDecay ||
-    hasCustomPopups ||
-    hasCustomTranslation
-  );
+  // 2. Check if user has explicitly activated recall pop-ups
+  return localStorage.getItem(STORAGE_KEYS.POPUPS_ENABLED) === "true";
 }
 
 /**

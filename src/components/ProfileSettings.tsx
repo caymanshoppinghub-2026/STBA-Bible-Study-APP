@@ -50,7 +50,7 @@ import { simulateLiveSectionUpdate, checkForLiveContentUpdates } from "../utils/
 import { ReflectionJournal } from "./ReflectionJournal";
 import { UserStatsPage } from "./UserStatsPage";
 import { WeeklyScribeHeatmap } from "./WeeklyScribeHeatmap";
-import { triggerManualRecallPopup } from "../utils/recallScheduler";
+import { triggerManualRecallPopup, getUserRecallSettings, updateUserRecallSettings } from "../utils/recallScheduler";
 import { useApp } from "../context/AppContext";
 import { saveProfileToSupabase, uploadProfileAvatarToSupabase } from "../lib/notebookSync";
 import { supabase } from "../lib/supabase";
@@ -652,7 +652,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   });
 
   const [recallPopupsEnabled, setRecallPopupsEnabled] = useState<boolean>(() => {
-    return localStorage.getItem("stba_recall_popups_enabled") !== "false";
+    return getUserRecallSettings().popupsEnabled;
   });
 
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -1518,9 +1518,9 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                     onClick={() => {
                       const next = !recallPopupsEnabled;
                       setRecallPopupsEnabled(next);
-                      localStorage.setItem("stba_recall_popups_enabled", next ? "true" : "false");
+                      updateUserRecallSettings({ popupsEnabled: next });
                       localStorage.setItem("stba_settings_customized", "true");
-                      displayMessage(next ? "Dynamic recall pop-ups enabled." : "Dynamic recall pop-ups disabled.");
+                      displayMessage(next ? "Dynamic recall pop-ups activated." : "Dynamic recall pop-ups set to inactive.");
                     }}
                     className={`px-3 py-1.5 text-xs font-bold font-mono rounded-xl border transition-all cursor-pointer ${
                       recallPopupsEnabled
@@ -1529,7 +1529,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                     }`}
                     id="toggle-recall-popups-btn"
                   >
-                    {recallPopupsEnabled ? "Active" : "Paused"}
+                    {recallPopupsEnabled ? "Active" : "Inactive"}
                   </button>
                 </div>
               </div>

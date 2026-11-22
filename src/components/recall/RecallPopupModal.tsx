@@ -159,12 +159,20 @@ export const RecallPopupModal: React.FC = () => {
       }
     };
 
+    const handleSettingsChanged = (e: any) => {
+      if (e.detail && e.detail.popupsEnabled === false) {
+        setIsOpen(false);
+      }
+    };
+
     window.addEventListener("stba-trigger-recall-popup", handleManualTrigger);
     window.addEventListener("stba-recall-completed", handleRecallCompleted);
+    window.addEventListener("stba-recall-settings-changed", handleSettingsChanged);
 
     return () => {
       window.removeEventListener("stba-trigger-recall-popup", handleManualTrigger);
       window.removeEventListener("stba-recall-completed", handleRecallCompleted);
+      window.removeEventListener("stba-recall-settings-changed", handleSettingsChanged);
     };
   }, []);
 
