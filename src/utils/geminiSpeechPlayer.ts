@@ -140,21 +140,7 @@ export function getMicrosoftAndrewUSVoice(): SpeechSynthesisVoice | null {
   const anyAndrew = voices.find((v) => v.name.toLowerCase().includes("andrew"));
   if (anyAndrew) return anyAndrew;
 
-  // 4. Fallback: Microsoft Natural / Online US English voice
-  const msNaturalUS = voices.find((v) => {
-    const n = v.name.toLowerCase();
-    return v.lang.toLowerCase().startsWith("en-us") && n.includes("microsoft") && (n.includes("natural") || n.includes("online"));
-  });
-  if (msNaturalUS) return msNaturalUS;
-
-  // 5. Any Natural / Premium / Enhanced English voice
-  const natural = voices.find((v) => {
-    const n = v.name.toLowerCase();
-    return v.lang.startsWith("en") && (n.includes("natural") || n.includes("premium") || n.includes("enhanced"));
-  });
-  if (natural) return natural;
-
-  return voices.find((v) => v.lang.startsWith("en")) || voices[0] || null;
+  return null;
 }
 
 interface FetchedAudioChunk {

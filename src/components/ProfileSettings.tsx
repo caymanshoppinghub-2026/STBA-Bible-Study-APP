@@ -1747,10 +1747,13 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                     <label className="text-xs font-bold text-teal-900 block">Edge Speech API — Secondary AI Voice:</label>
                     {(() => {
                       const andrewVoice = getMicrosoftAndrewUSVoice();
-                      const andrewLabel = andrewVoice
+                      const hasLocalAndrew = Boolean(andrewVoice && andrewVoice.name.toLowerCase().includes("andrew"));
+                      const andrewLabel = hasLocalAndrew && andrewVoice
                         ? `⭐ ${andrewVoice.name} (${andrewVoice.lang})`
-                        : "⭐ Microsoft Andrew Online (Natural) - English (United States)";
-                      const andrewValue = andrewVoice ? andrewVoice.voiceURI : "Microsoft Andrew Online (Natural) - English (United States)";
+                        : "⭐ Microsoft Andrew Online (Natural) - English (United States) (en-US)";
+                      const andrewValue = hasLocalAndrew && andrewVoice
+                        ? andrewVoice.voiceURI
+                        : "Microsoft Andrew Online (Natural) - English (United States)";
 
                       return (
                         <select
@@ -1760,13 +1763,14 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                             setBrowserVoiceUri(val);
                             localStorage.setItem("stba_browser_voice_uri", val);
                             window.dispatchEvent(new Event("stba_voice_changed"));
-                            displayMessage("Secondary AI voice locked to Microsoft Andrew Natural (US)");
+                            displayMessage("Voice set to Microsoft Andrew Natural (US) / Elder Stephen (Charon)");
                           }}
                           className="w-full px-3 py-2 text-xs font-bold font-sans rounded-xl border border-teal-200 outline-none bg-white text-stone-800 focus:ring-2 focus:ring-teal-500/30"
                           aria-label="Microsoft Andrew Natural US voice"
                           id="select-browser-voice"
                         >
                           <option value={andrewValue}>{andrewLabel}</option>
+                          <option value="Charon">⭐ Elder Stephen — Original Gemini 3.8 Natural Voice (Charon)</option>
                         </select>
                       );
                     })()}
