@@ -12,6 +12,7 @@ import {
   BookOpenText,
   HelpCircle
 } from "lucide-react";
+import { LogosScriptureHoverTrigger } from "./stba/ScriptureLinkedText";
 
 interface ExegesisRendererProps {
   content: string;
@@ -52,26 +53,30 @@ export function renderTextWithVerseButtons(
       parts.push(renderFormattedInline(precedingText, `pre-${lastIndex}`));
     }
 
-    // Verse button
+    // Verse button with frosted glassmorphic Logos Scripture Hover Pop-Up
     parts.push(
-      <button
+      <LogosScriptureHoverTrigger
         key={`verse-${matchIndex}-${matchedRef}`}
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (onVerseClick) {
-            onVerseClick(matchedRef);
-          }
-        }}
-        className="inline-flex items-center gap-1 px-2 py-0.5 mx-1 rounded-lg bg-[#E5B842]/15 hover:bg-[#E5B842]/30 border border-[#E5B842]/40 text-[#F3CF65] hover:text-white font-mono text-[11px] font-semibold transition-all cursor-pointer shadow-xs active:scale-95 group/vbtn align-baseline"
-        title={`Explore ${matchedRef} in Bible Study Mode`}
+        reference={matchedRef}
       >
-        <BookOpen className="w-3 h-3 text-[#F3CF65] group-hover/vbtn:scale-110 transition-transform shrink-0" />
-        <span className="underline decoration-[#F3CF65]/40 group-hover/vbtn:decoration-white">
-          {matchedRef}
-        </span>
-        <ArrowUpRight className="w-2.5 h-2.5 text-[#F3CF65]/70 group-hover/vbtn:text-[#F3CF65] shrink-0" />
-      </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onVerseClick) {
+              onVerseClick(matchedRef);
+            }
+          }}
+          className="inline-flex items-center gap-1 px-2 py-0.5 mx-1 rounded-lg bg-[#E5B842]/15 hover:bg-[#E5B842]/30 border border-[#E5B842]/40 text-[#F3CF65] hover:text-white font-mono text-[11px] font-semibold transition-all cursor-pointer shadow-xs active:scale-95 group/vbtn align-baseline"
+          title={`Explore ${matchedRef} in Bible Study Mode`}
+        >
+          <BookOpen className="w-3 h-3 text-[#F3CF65] group-hover/vbtn:scale-110 transition-transform shrink-0" />
+          <span className="underline decoration-[#F3CF65]/40 group-hover/vbtn:decoration-white">
+            {matchedRef}
+          </span>
+          <ArrowUpRight className="w-2.5 h-2.5 text-[#F3CF65]/70 group-hover/vbtn:text-[#F3CF65] shrink-0" />
+        </button>
+      </LogosScriptureHoverTrigger>
     );
 
     lastIndex = matchIndex + matchLength;

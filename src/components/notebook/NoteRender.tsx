@@ -21,6 +21,7 @@ import {
 import { TieredHighlightDropdown, ToolHighlightableWrapper } from '../stba/HighlightDropdownMenu'
 import { stitchDictatedFragments, recombineFragmentedTranscript } from '../../utils/dictationBuffer'
 import { playGeminiSpeech, stopActiveGeminiSpeech } from '../../utils/geminiSpeechPlayer'
+import { LogosScriptureHoverCard, LogosScriptureHoverTrigger } from '../stba/ScriptureLinkedText'
 
 // Custom Indent and Outdent icons
 const IndentIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -921,11 +922,38 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
     );
   };
 
+  const [hoveredNoteScripture, setHoveredNoteScripture] = useState<{
+    ref: string;
+    rect: { top: number; bottom: number; left: number; width: number };
+  } | null>(null);
+  const scriptureHoverTimerRef = useRef<any>(null);
+
   const handleWorkspaceClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     const scripture = target.getAttribute('data-scripture');
     if (scripture && onScriptureClick) {
       onScriptureClick(scripture);
+    }
+  };
+
+  const handleWorkspaceMouseOver = (e: React.MouseEvent) => {
+    const target = (e.target as HTMLElement)?.closest?.('[data-scripture]') as HTMLElement | null;
+    const scripture = target?.getAttribute('data-scripture');
+    if (target && scripture) {
+      const rect = target.getBoundingClientRect();
+      const snapshot = { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width };
+      if (scriptureHoverTimerRef.current) clearTimeout(scriptureHoverTimerRef.current);
+      scriptureHoverTimerRef.current = setTimeout(() => {
+        setHoveredNoteScripture({ ref: scripture, rect: snapshot });
+      }, 110);
+    }
+  };
+
+  const handleWorkspaceMouseOut = (e: React.MouseEvent) => {
+    const target = (e.target as HTMLElement)?.closest?.('[data-scripture]');
+    if (target) {
+      if (scriptureHoverTimerRef.current) clearTimeout(scriptureHoverTimerRef.current);
+      setHoveredNoteScripture(null);
     }
   };
 
@@ -1314,7 +1342,18 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
             theme="dark"
             className="flex-1 overflow-y-auto p-6 md:p-8 w-full min-h-0"
           >
-            <div id="read-workspace" onClick={handleWorkspaceClick}>
+            <div
+              id="read-workspace"
+              onClick={handleWorkspaceClick}
+              onMouseOver={handleWorkspaceMouseOver}
+              onMouseOut={handleWorkspaceMouseOut}
+            >
+              {hoveredNoteScripture && (
+                <LogosScriptureHoverCard
+                  reference={hoveredNoteScripture.ref}
+                  anchorRect={hoveredNoteScripture.rect}
+                />
+              )}
               {/* Render Markdown Content */}
               <div className="max-w-3xl mx-auto mb-12">
                 {renderReadMode()}
@@ -1331,15 +1370,16 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
                     const tagLabel = typeof tag === 'string' ? tag : (tag as any)?.reference || String(tag || '');
                     if (!tagLabel) return null;
                     return (
-                      <button
-                        key={`${tagLabel}-${tIdx}`} 
-                        type="button"
-                        onClick={() => onScriptureClick?.(tagLabel)}
-                        className="px-2 py-1 rounded bg-[var(--nb-gold-muted)] text-[var(--nb-gold)] border border-[var(--nb-border-gold)] font-mono text-xs hover:bg-[var(--nb-gold)] hover:text-stone-950 transition-colors cursor-pointer"
-                        title={`Study ${tagLabel} with Elder Stephen`}
-                      >
-                        {tagLabel}
-                      </button>
+                      <LogosScriptureHoverTrigger key={`${tagLabel}-${tIdx}`} reference={tagLabel}>
+                        <button
+                          type="button"
+                          onClick={() => onScriptureClick?.(tagLabel)}
+                          className="px-2 py-1 rounded bg-[var(--nb-gold-muted)] text-[var(--nb-gold)] border border-[var(--nb-border-gold)] font-mono text-xs hover:bg-[var(--nb-gold)] hover:text-stone-950 transition-colors cursor-pointer"
+                          title={`Study ${tagLabel} with Elder Stephen`}
+                        >
+                          {tagLabel}
+                        </button>
+                      </LogosScriptureHoverTrigger>
                     );
                   })}
                 </div>

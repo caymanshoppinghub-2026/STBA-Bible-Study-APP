@@ -250,7 +250,90 @@ interface LogosScriptureHoverTriggerProps {
 }
 
 /**
- * Logos-style hover preview wrapper strictly scoped to the STBA Study Workspace.
+ * Standalone floating frosted glassmorphic Scripture hover card portal.
+ * Shared across STBA Study Workspace, Ask STBA AI, Dashboard Note Viewer, and Notebook Read Mode.
+ */
+export const LogosScriptureHoverCard: React.FC<{
+  reference: string;
+  anchorRect: { top: number; bottom: number; left: number; width: number };
+}> = ({ reference, anchorRect }) => {
+  const [lookupData, setLookupData] = useState<QuickVerseLookupData | null>(null);
+  const parsed = useMemo(() => parseScriptureLookup(reference), [reference]);
+  const fallbackPericope = useMemo(
+    () => (parsed ? getChapterPericope(parsed.book, parsed.chapter) : ""),
+    [parsed]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const key = (parsed?.canonicalRef || reference.trim()).toLowerCase();
+    if (clientVerseLookupCache.has(key)) {
+      setLookupData(clientVerseLookupCache.get(key)!);
+      return;
+    }
+    resolveQuickVerseLookup(reference).then((res) => {
+      if (!cancelled) {
+        setLookupData(res);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reference, parsed]);
+
+  if (typeof document === "undefined") return null;
+
+  const showAbove = anchorRect.top > 210;
+  const left = Math.min(Math.max(16, anchorRect.left + anchorRect.width / 2 - 170), window.innerWidth - 356);
+  const top = showAbove ? anchorRect.top - 10 : anchorRect.bottom + 10;
+
+  return createPortal(
+    <div
+      style={{
+        position: "fixed",
+        top,
+        left,
+        transform: showAbove ? "translateY(-100%)" : "translateY(0)",
+        zIndex: 99999,
+      }}
+      className="w-[340px] max-w-[92vw] pointer-events-none select-none animate-in fade-in zoom-in-95 duration-150"
+    >
+      <div className="rounded-2xl bg-[#06162c]/70 backdrop-blur-xl text-[#EEF2FA] border border-[#E5B842]/45 shadow-[0_18px_50px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.2)] px-4 py-3.5 font-sans not-italic">
+        {(lookupData?.pericope || fallbackPericope) && (
+          <div className="text-[13px] font-bold text-[#F3CF65] mb-1 leading-snug not-italic">
+            {lookupData?.pericope || fallbackPericope}
+          </div>
+        )}
+
+        <div className="max-h-[220px] overflow-y-auto space-y-1.5 text-[14px] leading-relaxed text-[#E6ECF8] not-italic font-normal">
+          {lookupData && lookupData.verses.length > 0 ? (
+            lookupData.verses.slice(0, 6).map((v) => (
+              <p key={v.verseNumber} className="not-italic font-normal leading-relaxed">
+                <sup className="text-[10.5px] font-bold text-[#F3CF65]/90 mr-1 select-none">
+                  {v.verseNumber}
+                </sup>
+                <span>{v.text}</span>
+              </p>
+            ))
+          ) : (
+            <p className="text-[13px] text-[#C8D4EA] not-italic font-normal">
+              {parsed?.canonicalRef || reference}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-2.5 pt-2 border-t border-[#0d3060] flex items-center justify-between text-[13px] font-normal text-[#B2C0D8] not-italic">
+          <span>KJV</span>
+          <span className="text-[#F3CF65]/90">{lookupData?.canonicalReference || parsed?.canonicalRef || reference}</span>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+/**
+ * Logos-style hover preview wrapper.
  * Hovering over a Scripture reference displays a floating card with the canonical reference,
  * chapter pericope heading, and full verbatim KJV verse text.
  */
@@ -261,62 +344,22 @@ export const LogosScriptureHoverTrigger: React.FC<LogosScriptureHoverTriggerProp
   className = "",
   asBlock = false,
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const [coords, setCoords] = useState<{ top: number; left: number; showAbove: boolean }>({
-    top: 0,
-    left: 0,
-    showAbove: true,
-  });
-  const [lookupData, setLookupData] = useState<QuickVerseLookupData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const triggerRef = useRef<HTMLElement | null>(null);
+  const [hoverRect, setHoverRect] = useState<{ top: number; bottom: number; left: number; width: number } | null>(null);
   const hoverTimeoutRef = useRef<any>(null);
 
-  const parsed = useMemo(() => parseScriptureLookup(reference), [reference]);
-  const fallbackPericope = useMemo(
-    () => (parsed ? getChapterPericope(parsed.book, parsed.chapter) : ""),
-    [parsed]
-  );
-
   const handleMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
-    const el = e.currentTarget;
-    triggerRef.current = el;
-    const rect = el.getBoundingClientRect();
-    const showAbove = rect.top > 210;
-    const left = Math.min(Math.max(16, rect.left + rect.width / 2 - 170), window.innerWidth - 356);
-    const top = showAbove ? rect.top - 10 : rect.bottom + 10;
-    setCoords({ top, left, showAbove });
-
+    const rect = e.currentTarget.getBoundingClientRect();
+    const snapshot = { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width };
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => {
-      setIsHovered(true);
+      setHoverRect(snapshot);
     }, 110);
   };
 
   const handleMouseLeave = () => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    setIsHovered(false);
+    setHoverRect(null);
   };
-
-  useEffect(() => {
-    if (!isHovered) return;
-    let cancelled = false;
-    const key = (parsed?.canonicalRef || reference.trim()).toLowerCase();
-    if (clientVerseLookupCache.has(key)) {
-      setLookupData(clientVerseLookupCache.get(key)!);
-      return;
-    }
-    setIsLoading(true);
-    resolveQuickVerseLookup(reference).then((res) => {
-      if (!cancelled) {
-        setLookupData(res);
-        setIsLoading(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isHovered, reference, parsed]);
 
   useEffect(() => {
     return () => {
@@ -324,55 +367,9 @@ export const LogosScriptureHoverTrigger: React.FC<LogosScriptureHoverTriggerProp
     };
   }, []);
 
-  const tooltipPortal =
-    isHovered && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            style={{
-              position: "fixed",
-              top: coords.top,
-              left: coords.left,
-              transform: coords.showAbove ? "translateY(-100%)" : "translateY(0)",
-              zIndex: 99999,
-            }}
-            className="w-[340px] max-w-[92vw] pointer-events-none select-none animate-in fade-in zoom-in-95 duration-150"
-          >
-            <div className="rounded-2xl bg-[#06162c]/70 backdrop-blur-xl text-[#EEF2FA] border border-[#E5B842]/45 shadow-[0_18px_50px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.2)] px-4 py-3.5 font-sans not-italic">
-              {/* Pericope Title at Top Left */}
-              {(lookupData?.pericope || fallbackPericope) && (
-                <div className="text-[13px] font-bold text-[#F3CF65] mb-1 leading-snug not-italic">
-                  {lookupData?.pericope || fallbackPericope}
-                </div>
-              )}
-
-              {/* Verbatim Scripture Body — Uniform Font, Zero Italics */}
-              <div className="max-h-[220px] overflow-y-auto space-y-1.5 text-[14px] leading-relaxed text-[#E6ECF8] not-italic font-normal">
-                {lookupData && lookupData.verses.length > 0 ? (
-                  lookupData.verses.slice(0, 6).map((v) => (
-                    <p key={v.verseNumber} className="not-italic font-normal leading-relaxed">
-                      <sup className="text-[10.5px] font-bold text-[#F3CF65]/90 mr-1 select-none">
-                        {v.verseNumber}
-                      </sup>
-                      <span>{v.text}</span>
-                    </p>
-                  ))
-                ) : (
-                  <p className="text-[13px] text-[#C8D4EA] not-italic font-normal">
-                    {parsed?.canonicalRef || reference}
-                  </p>
-                )}
-              </div>
-
-              {/* Clean Bottom Row: Bible Version on Bottom-Left, Reference on Bottom-Right */}
-              <div className="mt-2.5 pt-2 border-t border-[#0d3060] flex items-center justify-between text-[13px] font-normal text-[#B2C0D8] not-italic">
-                <span>KJV</span>
-                <span className="text-[#F3CF65]/90">{lookupData?.canonicalReference || parsed?.canonicalRef || reference}</span>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )
-      : null;
+  const tooltipPortal = hoverRect ? (
+    <LogosScriptureHoverCard reference={reference} anchorRect={hoverRect} />
+  ) : null;
 
   if (children) {
     const WrapperTag = asBlock ? "div" : "span";
