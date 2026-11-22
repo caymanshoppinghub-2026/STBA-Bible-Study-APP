@@ -5647,200 +5647,202 @@ export const CrossReferenceEngine: React.FC<ToolProps> = ({
           </span>
         </div>
 
-        {/* Scriptural Witnesses Chain Container — Upgraded Logos Power Lookup View */}
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between gap-2 select-none">
-            <span className="text-[10px] font-mono font-bold tracking-wider text-gray-400 uppercase flex items-center gap-1.5">
-              <Zap className="w-3 h-3 text-[#C9973A]" />
-              <span>Power Lookup Chain ({currentWitnessesList.length + manualWitnesses.length} Witnesses)</span>
-            </span>
+        {/* Scriptural Witnesses Chain Container — Clean Logos Power Lookup Panel */}
+        <div
+          className={`rounded-xl border font-sans not-italic overflow-hidden ${
+            theme === "dark"
+              ? "bg-[#1A1D24] border-[#2C313C] text-[#E6E8EC]"
+              : "bg-[#FFFFFF] border-stone-200 text-stone-900 shadow-2xs"
+          }`}
+        >
+          {/* Logos Power Lookup Top Action Bar: Copy */}
+          <div
+            className={`px-3.5 py-2 border-b flex items-center justify-between text-xs ${
+              theme === "dark" ? "bg-[#22262F] border-[#2F3542]" : "bg-stone-100 border-stone-200"
+            }`}
+          >
             <button
               type="button"
-              onClick={() => setPowerLookupExpanded((prev) => !prev)}
-              className={`px-2 py-0.5 rounded text-[9.5px] font-mono font-bold border transition-all cursor-pointer ${
-                powerLookupExpanded
-                  ? "bg-[#C9973A]/20 border-[#C9973A]/60 text-[#C9973A]"
+              onClick={() => {
+                const allChainText = [
+                  ...currentWitnessesList.map((w: { ref: string; description: string }) => {
+                    const lk = powerLookupMap[w.ref];
+                    return `${lk?.canonicalReference || w.ref}\n${lk?.combinedText || w.description}`;
+                  }),
+                  ...manualWitnesses.map((r) => {
+                    const lk = powerLookupMap[r];
+                    return `${lk?.canonicalReference || r}\n${lk?.combinedText || ""}`;
+                  }),
+                ].join("\n\n");
+                try {
+                  navigator.clipboard?.writeText(allChainText);
+                } catch {}
+                setCopiedWitnessRef("__ALL__");
+                setTimeout(() => setCopiedWitnessRef(""), 2000);
+              }}
+              className={`font-sans text-xs font-medium cursor-pointer transition-colors ${
+                copiedWitnessRef === "__ALL__"
+                  ? "text-emerald-400 font-semibold"
                   : theme === "dark"
-                    ? "bg-[#1C222D] border-stone-700 text-stone-400 hover:text-stone-200"
-                    : "bg-stone-100 border-stone-300 text-stone-600 hover:text-stone-900"
+                    ? "text-[#D1D5DB] hover:text-white"
+                    : "text-stone-700 hover:text-black"
               }`}
-              title="Toggle Logos Power Lookup inline verbatim Scripture stack"
+              title="Copy all Power Lookup verses to clipboard"
             >
-              {powerLookupExpanded ? "Power Lookup: Expanded" : "Power Lookup: Compact"}
+              {copiedWitnessRef === "__ALL__" ? "Copied ✓" : "Copy"}
             </button>
+
+            <span className={`text-[11px] font-sans ${theme === "dark" ? "text-stone-400" : "text-stone-500"}`}>
+              Power Lookup
+            </span>
           </div>
 
-          <div className="space-y-3">
+          {/* References | KJV Subheader */}
+          <div
+            className={`px-3.5 py-2 border-b flex items-center gap-3 text-xs ${
+              theme === "dark" ? "border-[#2C313C]" : "border-stone-200"
+            }`}
+          >
+            <span className="font-bold">References</span>
+            <span className={theme === "dark" ? "text-stone-400" : "text-stone-500"}>KJV</span>
+          </div>
+
+          {/* Top Chain Reference Summary Line: a Ref 1; Ref 2; Ref 3 (each hoverable & clickable) */}
+          <div className="px-3.5 pt-2.5 pb-1 text-[13px] leading-relaxed flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span className={theme === "dark" ? "text-stone-400 mr-0.5" : "text-stone-500 mr-0.5"}>a</span>
+            {[...currentWitnessesList.map((w: { ref: string }) => w.ref), ...manualWitnesses].map((refItem, rIdx, arr) => (
+              <React.Fragment key={`summary-ref-${refItem}-${rIdx}`}>
+                <LogosScriptureHoverTrigger
+                  reference={refItem}
+                  onNavigateRef={onReferenceChange}
+                  className="text-[#58A6FF] hover:text-[#79B8FF] hover:underline font-normal cursor-pointer not-italic"
+                />
+                {rIdx < arr.length - 1 && (
+                  <span className={theme === "dark" ? "text-stone-400" : "text-stone-500"}>;</span>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+
+          {/* Continuous Stream of Already-Laid-Out Verses (Every item hoverable & clickable) */}
+          <div className="px-3.5 py-2 space-y-3.5">
             {currentWitnessesList.map((comp: { ref: string; description: string }, idx: number) => {
               const lookup = powerLookupMap[comp.ref];
-              const verbatimKjv = lookup?.combinedText || "";
+              const verses = lookup?.verses || [];
               const pericopeTitle = lookup?.pericope || "";
-              const isCopied = copiedWitnessRef === comp.ref;
+              const canonicalRef = lookup?.canonicalReference || comp.ref;
 
               return (
-                <div 
-                  key={idx} 
-                  onClick={() => onReferenceChange(comp.ref)}
-                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
-                    theme === "dark" 
-                      ? "bg-[#1B222E] border-[#2C3648] hover:border-[#C9973A]/60 shadow-xs" 
-                      : "bg-[#FDFAF5] border-[#E6DEC8] hover:border-[#C9973A] shadow-2xs"
-                  }`}
+                <LogosScriptureHoverTrigger
+                  key={`power-witness-${idx}`}
+                  reference={canonicalRef}
+                  asBlock
                 >
-                  {/* Top Header Row: Reference with Logos Hover Preview + Pericope + Action Buttons */}
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <LogosScriptureHoverTrigger
-                        reference={comp.ref}
-                        onNavigateRef={onReferenceChange}
-                      />
+                  <div
+                    onClick={() => onReferenceChange(canonicalRef)}
+                    className={`py-1.5 px-2 -mx-2 rounded-lg transition-colors cursor-pointer not-italic ${
+                      theme === "dark" ? "hover:bg-[#252A34]" : "hover:bg-stone-100"
+                    }`}
+                  >
+                    <p
+                      className={`text-[13.5px] leading-relaxed font-sans not-italic font-normal ${
+                        theme === "dark" ? "text-[#E6E8EC]" : "text-stone-900"
+                      }`}
+                    >
                       {pericopeTitle && (
-                        <span className={`text-[10px] font-sans font-medium truncate hidden sm:inline ${
-                          theme === "dark" ? "text-amber-200/70" : "text-amber-900/75"
-                        }`}>
-                          • {pericopeTitle}
-                        </span>
+                        <strong className="font-bold mr-1.5 not-italic">
+                          {pericopeTitle}
+                        </strong>
                       )}
-                    </div>
+                      {verses.length > 0 ? (
+                        verses.map((v, vIdx) => (
+                          <span key={v.verseNumber} className="not-italic">
+                            <sup className="text-[10.5px] font-bold opacity-85 mr-1 select-none">
+                              {v.verseNumber}
+                            </sup>
+                            <span>{v.text}</span>
+                            {vIdx < verses.length - 1 ? " " : ""}
+                          </span>
+                        ))
+                      ) : (
+                        <span>{comp.description}</span>
+                      )}
+                    </p>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) =>
-                          handleCopyWitnessToNotes(
-                            e,
-                            comp.ref,
-                            verbatimKjv || comp.description,
-                            comp.description
-                          )
-                        }
-                        className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold border transition-all cursor-pointer flex items-center gap-1 ${
-                          isCopied
-                            ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
-                            : theme === "dark"
-                              ? "bg-[#121722] border-stone-700 text-stone-300 hover:border-[#C9973A] hover:text-[#F3CF65]"
-                              : "bg-white border-stone-300 text-stone-700 hover:border-[#C9973A] hover:text-amber-900"
-                        }`}
-                        title="Add verbatim witness verse & connection to your Synthesis Notes below"
-                      >
-                        {isCopied ? <Check className="w-2.5 h-2.5" /> : <Plus className="w-2.5 h-2.5" />}
-                        <span>{isCopied ? "Added to Notes" : "+ Note"}</span>
-                      </button>
-                      <span className="text-[9px] font-mono text-[#C9973A] font-semibold">
-                        Open &rarr;
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-[13px] text-[#58A6FF] hover:underline font-normal not-italic">
+                        {canonicalRef}
                       </span>
                     </div>
                   </div>
-
-                  {/* Logos Power Lookup Inline Verbatim KJV Scripture Block */}
-                  {powerLookupExpanded && verbatimKjv && (
-                    <div
-                      className={`mt-2.5 p-2.5 rounded-lg border-l-2 border-[#C9973A] font-serif text-xs leading-relaxed ${
-                        theme === "dark"
-                          ? "bg-[#111722] text-stone-100"
-                          : "bg-amber-50/70 text-stone-900"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#C9973A]">
-                          Verbatim KJV Text
-                        </span>
-                        {pericopeTitle && (
-                          <span className="text-[9px] font-mono text-stone-400 truncate sm:hidden">
-                            {pericopeTitle}
-                          </span>
-                        )}
-                      </div>
-                      <p className="select-text">“{verbatimKjv}”</p>
-                    </div>
-                  )}
-
-                  {/* Doctrinal / Exegetical Connection Note */}
-                  <div className="mt-2 pt-1.5 border-t border-stone-500/15">
-                    <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-500 mr-1.5">
-                      Doctrinal Link:
-                    </span>
-                    <span className={`text-xs leading-relaxed font-sans ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                      <ScriptureLinkedText text={comp.description} onNavigateRef={onReferenceChange} />
-                    </span>
-                  </div>
-                </div>
+                </LogosScriptureHoverTrigger>
               );
             })}
 
-            {/* Custom Interactive Witnesses added by user — with Power Lookup Inline Verse */}
+            {/* User Added Witnesses in the same continuous Logos Power Lookup stream */}
             {manualWitnesses.map((ref, idx) => {
               const lookup = powerLookupMap[ref];
-              const verbatimKjv = lookup?.combinedText || "";
+              const verses = lookup?.verses || [];
               const pericopeTitle = lookup?.pericope || "";
-              const isCopied = copiedWitnessRef === ref;
+              const canonicalRef = lookup?.canonicalReference || ref;
 
               return (
-                <div 
-                  key={`manual-${idx}`}
-                  onClick={() => onReferenceChange(ref)}
-                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
-                    theme === "dark" 
-                      ? "bg-[#11161D] border-blue-900/40 hover:border-[#C9973A]" 
-                      : "bg-[#FFFFFF] border-blue-200 hover:border-[#C9973A]"
-                  }`}
+                <LogosScriptureHoverTrigger
+                  key={`manual-power-${idx}`}
+                  reference={canonicalRef}
+                  asBlock
                 >
-                  <div className="flex items-center justify-between gap-2 select-none">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <LogosScriptureHoverTrigger
-                        reference={lookup?.canonicalReference || ref}
-                        onNavigateRef={onReferenceChange}
-                      />
+                  <div
+                    onClick={() => onReferenceChange(canonicalRef)}
+                    className={`py-1.5 px-2 -mx-2 rounded-lg transition-colors cursor-pointer not-italic ${
+                      theme === "dark" ? "hover:bg-[#252A34]" : "hover:bg-stone-100"
+                    }`}
+                  >
+                    <p
+                      className={`text-[13.5px] leading-relaxed font-sans not-italic font-normal ${
+                        theme === "dark" ? "text-[#E6E8EC]" : "text-stone-900"
+                      }`}
+                    >
                       {pericopeTitle && (
-                        <span className="text-[10px] font-sans text-amber-400/75 truncate">
-                          • {pericopeTitle}
-                        </span>
+                        <strong className="font-bold mr-1.5 not-italic">
+                          {pericopeTitle}
+                        </strong>
                       )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {verbatimKjv && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleCopyWitnessToNotes(e, lookup?.canonicalReference || ref, verbatimKjv)}
-                          className="px-2 py-0.5 rounded text-[9px] font-mono font-bold border border-stone-700 text-stone-300 hover:border-[#C9973A] cursor-pointer"
-                        >
-                          {isCopied ? "Added ✓" : "+ Note"}
-                        </button>
+                      {verses.length > 0 ? (
+                        verses.map((v, vIdx) => (
+                          <span key={v.verseNumber} className="not-italic">
+                            <sup className="text-[10.5px] font-bold opacity-85 mr-1 select-none">
+                              {v.verseNumber}
+                            </sup>
+                            <span>{v.text}</span>
+                            {vIdx < verses.length - 1 ? " " : ""}
+                          </span>
+                        ))
+                      ) : (
+                        <span>Click to load {canonicalRef} in the Bible Reader.</span>
                       )}
+                    </p>
+
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-[13px] text-[#58A6FF] hover:underline font-normal not-italic">
+                        {canonicalRef}
+                      </span>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDetachManualWitness(ref);
                         }}
-                        className="text-gray-400 hover:text-red-500 font-mono text-[9px] z-25 cursor-pointer underline p-0.5"
+                        className="text-stone-400 hover:text-rose-400 text-[10px] cursor-pointer underline"
                       >
-                        Detach
+                        Remove
                       </button>
                     </div>
                   </div>
-
-                  {powerLookupExpanded && verbatimKjv ? (
-                    <div
-                      className={`mt-2 p-2.5 rounded-lg border-l-2 border-[#C9973A] font-serif text-xs leading-relaxed ${
-                        theme === "dark" ? "bg-[#161D2A] text-stone-100" : "bg-amber-50/70 text-stone-900"
-                      }`}
-                    >
-                      “{verbatimKjv}”
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 font-sans italic mt-1 pointer-events-none">
-                      User Added Witness. Hover to preview or click card to open in Bible Reader.
-                    </p>
-                  )}
-                </div>
+                </LogosScriptureHoverTrigger>
               );
             })}
           </div>
-
-          <p className="text-[10.5px] font-mono text-gray-500 text-center select-none">
-            *Hover over any Scripture reference for an instant Logos pop-up, or click to load in the Bible Reader.
-          </p>
         </div>
 
         {/* Form to attach custom Scripture matches */}
