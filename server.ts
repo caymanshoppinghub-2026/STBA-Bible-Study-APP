@@ -2792,25 +2792,35 @@ function cleanServerGeminiPcmBase64(base64Audio: string, _sampleRate = 24000): s
 }
 
 // Persistent Server-Side Audio Cache for Instant 0ms Narration
+const BUNDLED_TOUR_TTS_CACHE_FILE = path.join(process.cwd(), "data", "tour_audio_cache.json");
 const TOUR_TTS_CACHE_FILE = process.env.VERCEL
   ? "/tmp/tour_audio_cache.json"
-  : path.join(process.cwd(), "data", "tour_audio_cache.json");
+  : BUNDLED_TOUR_TTS_CACHE_FILE;
 const serverTtsCache = new Map<string, string>();
 
 function loadServerTtsCache() {
-  try {
-    if (fs.existsSync(TOUR_TTS_CACHE_FILE)) {
-      const raw = fs.readFileSync(TOUR_TTS_CACHE_FILE, "utf-8");
-      const data = JSON.parse(raw);
-      for (const [k, v] of Object.entries(data)) {
-        if (typeof v === "string" && v.length > 50) {
-          serverTtsCache.set(k, v);
+  const candidateFiles = [
+    BUNDLED_TOUR_TTS_CACHE_FILE,
+    path.resolve(typeof __dirname !== "undefined" ? __dirname : process.cwd(), "..", "data", "tour_audio_cache.json"),
+    TOUR_TTS_CACHE_FILE,
+  ];
+  for (const filePath of candidateFiles) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        const data = JSON.parse(raw);
+        for (const [k, v] of Object.entries(data)) {
+          if (typeof v === "string" && v.length > 50) {
+            serverTtsCache.set(k, v);
+          }
         }
       }
-      console.log(`[TTS Cache] Loaded ${serverTtsCache.size} persistent audio entries from disk.`);
+    } catch (err) {
+      console.warn("[TTS Cache] Could not load audio cache from", filePath, err);
     }
-  } catch (err) {
-    console.warn("[TTS Cache] Could not load audio cache from disk:", err);
+  }
+  if (serverTtsCache.size > 0) {
+    console.log(`[TTS Cache] Loaded ${serverTtsCache.size} persistent audio entries from disk.`);
   }
 }
 loadServerTtsCache();
@@ -3572,6 +3582,75 @@ app.get("/api/study/verse-of-the-day", (req, res) => {
   });
 });
 
+  // Instant 1ms KJV Quick-Verse Lookup Endpoint (Backed by 31,102-verse kjv_full.json.gz corpus)
+  // Used by STBA Workspace Logos Hover Pop-Up & Power Lookup Chain Reference View
+  app.post("/api/study/quick-verse", (req, res) => {
+    const { reference, references } = req.body || {};
+    const requestedList: string[] = Array.isArray(references)
+      ? references.map((r: any) => String(r || "").trim()).filter(Boolean)
+      : reference && typeof reference === "string"
+        ? [reference.trim()]
+        : [];
+
+    if (requestedList.length === 0) {
+      return res.status(400).json({ valid: false, error: "reference or references is required." });
+    }
+
+    const corpus = loadKjvFullCorpus();
+    const results: Record<
+      string,
+      {
+        canonicalReference: string;
+        book: string;
+        chapter: number;
+        verses: Array<{ verseNumber: number; text: string }>;
+        combinedText: string;
+      }
+    > = {};
+
+    for (const rawRef of requestedList) {
+      const parsed = parseScriptureLookup(rawRef);
+      if (!parsed || corpus.length === 0) continue;
+
+      const startV = parsed.startVerse || 1;
+      const endV = parsed.endVerse || (parsed.startVerse ? parsed.startVerse : 10);
+      const matched = corpus.filter(
+        (cv) =>
+          cv.book.toLowerCase() === parsed.book.toLowerCase() &&
+          cv.chapter === parsed.chapter &&
+          cv.verseNumber >= startV &&
+          cv.verseNumber <= endV
+      );
+
+      if (matched.length > 0) {
+        const verses = matched.map((m) => ({
+          verseNumber: m.verseNumber,
+          text: m.text,
+        }));
+        const combinedText =
+          verses.length === 1
+            ? verses[0].text
+            : verses.map((v) => `[v.${v.verseNumber}] ${v.text}`).join(" ");
+        results[rawRef] = {
+          canonicalReference: parsed.canonicalRef,
+          book: parsed.book,
+          chapter: parsed.chapter,
+          verses,
+          combinedText,
+        };
+        results[parsed.canonicalRef] = results[rawRef];
+      }
+    }
+
+    const firstKey = requestedList[0];
+    const single = firstKey ? results[firstKey] || null : null;
+    return res.json({
+      valid: Object.keys(results).length > 0,
+      single,
+      results,
+    });
+  });
+
   // Dynamic Passage Parsing & Translation Fetching
 app.post("/api/study/fetch-passage", async (req, res) => {
   const { reference } = req.body;
@@ -3685,6 +3764,44 @@ app.post("/api/study/fetch-passage", async (req, res) => {
       }
 
       if (presetMatched) continue;
+
+      // Primary instant 1ms KJV lookup from the bundled 31,102-verse kjv_full.json.gz corpus
+      try {
+        const parsedPart = parseScriptureLookup(part);
+        if (parsedPart) {
+          const corpus = loadKjvFullCorpus();
+          if (corpus.length > 0) {
+            const startV = parsedPart.startVerse || 1;
+            const endV = parsedPart.endVerse || (parsedPart.startVerse ? parsedPart.startVerse : 200);
+            const matchedCorpusVerses = corpus.filter(
+              (cv) =>
+                cv.book.toLowerCase() === parsedPart.book.toLowerCase() &&
+                cv.chapter === parsedPart.chapter &&
+                cv.verseNumber >= startV &&
+                cv.verseNumber <= endV
+            );
+            if (matchedCorpusVerses.length > 0) {
+              const canonical = parsedPart.canonicalRef;
+              parsedRefs.push(canonical);
+              for (const cv of matchedCorpusVerses) {
+                parsedVerses.push({
+                  verseNumber: cv.verseNumber,
+                  reference: canonical,
+                  text: {
+                    KJV: cv.text,
+                    NKJV: cv.text,
+                    ESV: cv.text,
+                    NASB: cv.text
+                  }
+                });
+              }
+              continue;
+            }
+          }
+        }
+      } catch (corpusErr) {
+        console.warn("[FetchPassage] Local KJV corpus lookup note:", corpusErr);
+      }
 
       // Try fetching online from bible-api.com for any non-preset reference
       try {

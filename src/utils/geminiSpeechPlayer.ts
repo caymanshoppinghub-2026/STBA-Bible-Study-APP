@@ -17,9 +17,15 @@ export interface GeminiSpeechOptions {
 
 export interface GeminiSpeechController {
   stop: () => void;
+  pause: () => void;
+  resume: () => void;
+  isPaused: () => boolean;
 }
 
 let activeStopFn: (() => void) | null = null;
+let activePauseFn: (() => void) | null = null;
+let activeResumeFn: (() => void) | null = null;
+let activeIsPausedFn: (() => boolean) | null = null;
 
 /**
  * Stops any currently playing Gemini Speech or browser speechSynthesis narration.
@@ -28,6 +34,9 @@ export function stopActiveGeminiSpeech(): void {
   if (activeStopFn) {
     const fn = activeStopFn;
     activeStopFn = null;
+    activePauseFn = null;
+    activeResumeFn = null;
+    activeIsPausedFn = null;
     try {
       fn();
     } catch {}
@@ -37,6 +46,35 @@ export function stopActiveGeminiSpeech(): void {
       window.speechSynthesis.cancel();
     } catch {}
   }
+}
+
+export function pauseActiveGeminiSpeech(): boolean {
+  if (activePauseFn) {
+    try {
+      activePauseFn();
+      return true;
+    } catch {}
+  }
+  return false;
+}
+
+export function resumeActiveGeminiSpeech(): boolean {
+  if (activeResumeFn) {
+    try {
+      activeResumeFn();
+      return true;
+    } catch {}
+  }
+  return false;
+}
+
+export function isActiveGeminiSpeechPaused(): boolean {
+  if (activeIsPausedFn) {
+    try {
+      return activeIsPausedFn();
+    } catch {}
+  }
+  return false;
 }
 
 /**
@@ -191,16 +229,50 @@ export function playGeminiSpeech(
   const chunks = splitTextIntoSpeechChunks(rawText);
   if (chunks.length === 0) {
     options.onEnd?.();
-    return { stop: () => {} };
+    return { stop: () => {}, pause: () => {}, resume: () => {}, isPaused: () => false };
   }
 
   let cancelled = false;
+  let paused = false;
   let activeCtx: AudioContext | null = null;
   let activeSource: AudioBufferSourceNode | null = null;
+
+  const pause = () => {
+    if (cancelled || paused) return;
+    paused = true;
+    try {
+      if (activeCtx && activeCtx.state === "running") {
+        activeCtx.suspend().catch(() => {});
+      }
+    } catch {}
+    if (typeof window !== "undefined" && "speechSynthesis" in window && window.speechSynthesis.speaking) {
+      try {
+        window.speechSynthesis.pause();
+      } catch {}
+    }
+  };
+
+  const resume = () => {
+    if (cancelled || !paused) return;
+    paused = false;
+    try {
+      if (activeCtx && activeCtx.state === "suspended") {
+        activeCtx.resume().catch(() => {});
+      }
+    } catch {}
+    if (typeof window !== "undefined" && "speechSynthesis" in window && window.speechSynthesis.paused) {
+      try {
+        window.speechSynthesis.resume();
+      } catch {}
+    }
+  };
+
+  const isPaused = () => paused;
 
   const stop = () => {
     if (cancelled) return;
     cancelled = true;
+    paused = false;
     try {
       if (activeSource) {
         activeSource.onended = null;
@@ -222,10 +294,16 @@ export function playGeminiSpeech(
     }
     if (activeStopFn === stop) {
       activeStopFn = null;
+      activePauseFn = null;
+      activeResumeFn = null;
+      activeIsPausedFn = null;
     }
   };
 
   activeStopFn = stop;
+  activePauseFn = pause;
+  activeResumeFn = resume;
+  activeIsPausedFn = isPaused;
 
   const savedEngine =
     (typeof window !== "undefined"
@@ -394,5 +472,5 @@ export function playGeminiSpeech(
     }
   })();
 
-  return { stop };
+  return { stop, pause, resume, isPaused };
 }

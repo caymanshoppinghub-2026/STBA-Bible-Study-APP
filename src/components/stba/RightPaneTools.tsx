@@ -27,13 +27,24 @@ import {
 } from "../../lib/supabase";
 import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from "../../lib/apiFetch";
 import { decodeAndCleanGeminiPcm, encodeFloat32To16kHzPcmBase64, sanitizeVerbatimSpeechText } from "../../utils/cleanGeminiAudio";
-import { playGeminiSpeech, stopActiveGeminiSpeech } from "../../utils/geminiSpeechPlayer";
+import {
+  playGeminiSpeech,
+  stopActiveGeminiSpeech,
+  pauseActiveGeminiSpeech,
+  resumeActiveGeminiSpeech,
+} from "../../utils/geminiSpeechPlayer";
 import { saveNoteToSupabase, deleteNoteFromSupabase, fetchCategoriesFromSupabase, checkCategoriesTable, fetchNotesFromSupabase, checkSupabaseConnection } from "../../lib/notebookSync";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { useElderStephen } from "../../context/ElderStephenContext";
 import { SDABibleCommentary } from "./SDABibleCommentary";
 export { SDABibleCommentary } from "./SDABibleCommentary";
+import {
+  ScriptureLinkedText,
+  LogosScriptureHoverTrigger,
+  resolveBatchQuickVerseLookups,
+  type QuickVerseLookupData,
+} from "./ScriptureLinkedText";
 import { stbaStorage } from "../../lib/storage/indexedDbClient";
 import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
 import { useSabbathSchoolStore } from "../../store/useSabbathSchoolStore";
@@ -1053,12 +1064,13 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     rec.lang = "en-US";
 
     rec.onstart = () => {
+      if (fallbackSpeechRecRef.current !== rec || !isDynamicLiveActiveRef.current) return;
       setLiveState("recording");
       setIsListening(true);
     };
 
     rec.onresult = (event: any) => {
-      if (isElderSpeakingRef.current) return;
+      if (fallbackSpeechRecRef.current !== rec || !isDynamicLiveActiveRef.current || isElderSpeakingRef.current) return;
       let finalTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
@@ -1077,11 +1089,12 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     };
 
     rec.onerror = (err: any) => {
+      if (fallbackSpeechRecRef.current !== rec) return;
       // If error is no-speech, network or transient silence, maintain active conversation and keep listening
       if (err.error === "no-speech" || err.error === "network" || err.error === "audio-capture") {
         if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
           setTimeout(() => {
-            if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
+            if (fallbackSpeechRecRef.current === rec && isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
               startContinuousSpeechLoop();
             }
           }, 300);
@@ -1093,10 +1106,11 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     };
 
     rec.onend = () => {
+      if (fallbackSpeechRecRef.current !== rec) return;
       // Maintain Active Conversation: keep listening continuously for as long as user is engaged
       if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
         setTimeout(() => {
-          if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
+          if (fallbackSpeechRecRef.current === rec && isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
             startContinuousSpeechLoop();
           }
         }, 200);
@@ -1222,7 +1236,24 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   };
 
   const startDynamicLiveSession = async () => {
-    // Tear down any previous socket/timers quietly before launching a new session
+    // Tear down any previous socket/timers/speech quietly before launching a new session
+    stopActiveGeminiSpeech();
+    if ("speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+    if (fallbackSpeechRecRef.current) {
+      const oldRec = fallbackSpeechRecRef.current;
+      fallbackSpeechRecRef.current = null;
+      oldRec.onstart = null;
+      oldRec.onresult = null;
+      oldRec.onerror = null;
+      oldRec.onend = null;
+      try {
+        oldRec.abort();
+      } catch {}
+    }
     if (liveRetryTimerRef.current) {
       clearTimeout(liveRetryTimerRef.current);
       liveRetryTimerRef.current = null;
@@ -1248,6 +1279,7 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     const sessionRunId = ++liveSessionRunIdRef.current;
     setLiveError(null);
     setLiveState("connecting");
+    setIsAudioPaused(false);
     isDynamicLiveActiveRef.current = true;
     setIsDynamicLiveActive(true);
     isElderSpeakingRef.current = false;
@@ -1643,12 +1675,19 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     }
 
     if (fallbackSpeechRecRef.current) {
-      try {
-        fallbackSpeechRecRef.current.abort();
-      } catch (e) {}
+      const oldRec = fallbackSpeechRecRef.current;
       fallbackSpeechRecRef.current = null;
+      oldRec.onstart = null;
+      oldRec.onresult = null;
+      oldRec.onerror = null;
+      oldRec.onend = null;
+      try {
+        oldRec.abort();
+      } catch (e) {}
     }
 
+    setIsListening(false);
+    isElderSpeakingRef.current = false;
     clearPlaybackQueue();
     endLiveReplyAccumulation();
     handleStopSpeech();
@@ -1667,31 +1706,29 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       return;
     }
 
-    // Single-click toggle: Pause / Resume audio immediately (Stop is handled by the dedicated Stop button)
-    if (outputAudioCtxRef.current) {
-      if (outputAudioCtxRef.current.state === "running") {
-        outputAudioCtxRef.current.suspend().then(() => {
-          setIsAudioPaused(true);
-          if (window.speechSynthesis && window.speechSynthesis.speaking) {
-            window.speechSynthesis.pause();
-          }
-        }).catch(() => {});
-      } else if (outputAudioCtxRef.current.state === "suspended") {
-        outputAudioCtxRef.current.resume().then(() => {
-          setIsAudioPaused(false);
-          if (window.speechSynthesis && window.speechSynthesis.paused) {
-            window.speechSynthesis.resume();
-          }
-        }).catch(() => {});
+    // Single-click toggle: Pause / Resume audio immediately (works for both Live WebSocket AudioContext AND Gemini/Edge Neural TTS!)
+    if (!isAudioPaused) {
+      pauseActiveGeminiSpeech();
+      if (outputAudioCtxRef.current && outputAudioCtxRef.current.state === "running") {
+        outputAudioCtxRef.current.suspend().catch(() => {});
       }
-    } else if (window.speechSynthesis) {
-      if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
-        window.speechSynthesis.pause();
-        setIsAudioPaused(true);
-      } else if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-        setIsAudioPaused(false);
+      if (window.speechSynthesis && window.speechSynthesis.speaking) {
+        try {
+          window.speechSynthesis.pause();
+        } catch {}
       }
+      setIsAudioPaused(true);
+    } else {
+      resumeActiveGeminiSpeech();
+      if (outputAudioCtxRef.current && outputAudioCtxRef.current.state === "suspended") {
+        outputAudioCtxRef.current.resume().catch(() => {});
+      }
+      if (window.speechSynthesis && window.speechSynthesis.paused) {
+        try {
+          window.speechSynthesis.resume();
+        } catch {}
+      }
+      setIsAudioPaused(false);
     }
   };
 
@@ -2602,7 +2639,12 @@ ${formattedNotes}
                 m.sender !== "user"
                   ? "elder-stephen-output font-['SF_Pro_Text',_-apple-system,_BlinkMacSystemFont,_'San_Francisco',_'Helvetica_Neue',_Helvetica,_sans-serif] tracking-[0.65px] antialiased"
                   : ""
-              }`}>{m.sender === "elder" ? ensureElderStephenOutlineCompletion(m.text, m.verseRef || activeRef, report?.topic) : m.text}</p>
+              }`}>
+                <ScriptureLinkedText
+                  text={m.sender === "elder" ? ensureElderStephenOutlineCompletion(m.text, m.verseRef || activeRef, report?.topic) : m.text}
+                  onNavigateRef={(ref) => onReferenceChange(ref)}
+                />
+              </p>
             </div>
           </div>
         ))}
@@ -4324,10 +4366,12 @@ ${stepsContent}
                       {idx === 0 && (
                         <div className={`space-y-4 text-xs sm:text-sm leading-relaxed font-normal ${theme === "dark" ? "text-white" : "text-black"}`}>
                           <p>
-                            <strong className="font-semibold">Introduction:</strong> {report.introduction}
+                            <strong className="font-semibold">Introduction:</strong>{" "}
+                            <ScriptureLinkedText text={report.introduction} onNavigateRef={onReferenceChange} />
                           </p>
                           <p>
-                            <strong className="font-semibold">Summary:</strong> {report.step1.summary}
+                            <strong className="font-semibold">Summary:</strong>{" "}
+                            <ScriptureLinkedText text={report.step1.summary} onNavigateRef={onReferenceChange} />
                           </p>
                         </div>
                       )}
@@ -4341,55 +4385,64 @@ ${stepsContent}
                             <strong className="font-semibold block">Systematic Observations:</strong>
                             <ul className="list-disc pl-5 space-y-1">
                               {report.step2.observations.map((o: any, oIdx: number) => (
-                                <li key={oIdx} className="leading-[12px] text-xs py-0.5 font-normal">{o}</li>
+                                <li key={oIdx} className="leading-[12px] text-xs py-0.5 font-normal">
+                                  <ScriptureLinkedText text={String(o)} onNavigateRef={onReferenceChange} />
+                                </li>
                               ))}
                             </ul>
                           </div>
                           <p>
-                            <strong className="font-semibold">Semantic Connectors:</strong> {report.step2.connectors.join(", ")}
+                            <strong className="font-semibold">Semantic Connectors:</strong>{" "}
+                            <ScriptureLinkedText text={report.step2.connectors.join(", ")} onNavigateRef={onReferenceChange} />
                           </p>
                           <p>
-                            <strong className="font-semibold">Analytical Commentary:</strong> {report.step2.commentary}
+                            <strong className="font-semibold">Analytical Commentary:</strong>{" "}
+                            <ScriptureLinkedText text={report.step2.commentary} onNavigateRef={onReferenceChange} />
                           </p>
                         </div>
                       )}
 
                       {idx === 2 && (
                         <div className={`space-y-4 text-xs sm:text-sm leading-relaxed font-normal ${theme === "dark" ? "text-white" : "text-black"}`}>
-                          <p><strong className="font-semibold">Intent:</strong> {report.step3.author_intent}</p>
-                          <p><strong className="font-semibold">Historical Context:</strong> {report.step3.historical_setting}</p>
+                          <p><strong className="font-semibold">Intent:</strong> <ScriptureLinkedText text={report.step3.author_intent} onNavigateRef={onReferenceChange} /></p>
+                          <p><strong className="font-semibold">Historical Context:</strong> <ScriptureLinkedText text={report.step3.historical_setting} onNavigateRef={onReferenceChange} /></p>
                         </div>
                       )}
 
                       {idx === 3 && (
                         <div className={`space-y-4 text-xs sm:text-sm leading-relaxed font-normal ${theme === "dark" ? "text-white" : "text-black"}`}>
                           <p>
-                            <strong className="font-semibold">Enduring Principle:</strong> {report.step4.timeless_principle}
+                            <strong className="font-semibold">Enduring Principle:</strong>{" "}
+                            <ScriptureLinkedText text={report.step4.timeless_principle} onNavigateRef={onReferenceChange} />
                           </p>
                           <p>
-                            <strong className="font-semibold">Theological Definitions:</strong> {report.step4.theological_truths}
+                            <strong className="font-semibold">Theological Definitions:</strong>{" "}
+                            <ScriptureLinkedText text={report.step4.theological_truths} onNavigateRef={onReferenceChange} />
                           </p>
                           <p>
-                            <strong className="font-semibold">Amazing Facts Core:</strong> {report.step4.amazing_facts}
+                            <strong className="font-semibold">Amazing Facts Core:</strong>{" "}
+                            <ScriptureLinkedText text={report.step4.amazing_facts} onNavigateRef={onReferenceChange} />
                           </p>
                         </div>
                       )}
 
                       {idx === 4 && (
                         <div className={`space-y-4 text-xs sm:text-sm leading-relaxed font-normal ${theme === "dark" ? "text-white" : "text-black"}`}>
-                          <p><strong className="font-semibold">Sins to Avoid:</strong> {report.step5.sins_to_avoid.join(" & ")}</p>
-                          <p><strong className="font-semibold">Claims &amp; Promises:</strong> {report.step5.promises_to_claim.join(" & ")}</p>
-                          <p><strong className="font-semibold">Commands to Obey:</strong> {report.step5.commands_to_obey.join(" & ")}</p>
+                          <p><strong className="font-semibold">Sins to Avoid:</strong> <ScriptureLinkedText text={report.step5.sins_to_avoid.join(" & ")} onNavigateRef={onReferenceChange} /></p>
+                          <p><strong className="font-semibold">Claims &amp; Promises:</strong> <ScriptureLinkedText text={report.step5.promises_to_claim.join(" & ")} onNavigateRef={onReferenceChange} /></p>
+                          <p><strong className="font-semibold">Commands to Obey:</strong> <ScriptureLinkedText text={report.step5.commands_to_obey.join(" & ")} onNavigateRef={onReferenceChange} /></p>
                         </div>
                       )}
 
                       {idx === 5 && (
                         <div className={`space-y-4 text-xs sm:text-sm leading-relaxed font-normal ${theme === "dark" ? "text-white" : "text-black"}`}>
                           <p>
-                            <strong className="font-semibold">Great Controversy Perspective:</strong> {report.step6.great_controversy_angle}
+                            <strong className="font-semibold">Great Controversy Perspective:</strong>{" "}
+                            <ScriptureLinkedText text={report.step6.great_controversy_angle} onNavigateRef={onReferenceChange} />
                           </p>
                           <p>
-                            <strong className="font-semibold">God's Government Vindication:</strong> {report.step6.vindication_themes}
+                            <strong className="font-semibold">God's Government Vindication:</strong>{" "}
+                            <ScriptureLinkedText text={report.step6.vindication_themes} onNavigateRef={onReferenceChange} />
                           </p>
                         </div>
                       )}
@@ -4397,10 +4450,12 @@ ${stepsContent}
                       {idx === 6 && (
                         <div className={`space-y-4 text-xs sm:text-sm leading-relaxed font-normal ${theme === "dark" ? "text-white" : "text-black"}`}>
                           <p>
-                            <strong className="font-semibold">Devotional Takeaway:</strong> {report.step7.devotional_takeaway}
+                            <strong className="font-semibold">Devotional Takeaway:</strong>{" "}
+                            <ScriptureLinkedText text={report.step7.devotional_takeaway} onNavigateRef={onReferenceChange} />
                           </p>
                           <p>
-                            <strong className="font-semibold">Surrender Prayer:</strong> {report.step7.prayer_prompt}
+                            <strong className="font-semibold">Surrender Prayer:</strong>{" "}
+                            <ScriptureLinkedText text={report.step7.prayer_prompt} onNavigateRef={onReferenceChange} />
                           </p>
                         </div>
                       )}
@@ -4452,7 +4507,9 @@ ${stepsContent}
                                     )}
                                   </div>
 
-                                  <p className="whitespace-pre-line select-text pr-2">{msg.text}</p>
+                                  <p className="whitespace-pre-line select-text pr-2">
+                                    <ScriptureLinkedText text={msg.text} onNavigateRef={onReferenceChange} />
+                                  </p>
                                 </div>
                               </div>
                             );
@@ -5233,27 +5290,31 @@ export const WordStudy: React.FC<ToolProps> = ({
                 <span>SDA EXEGETICAL COMMENTARY & THEOLOGICAL INSIGHT</span>
               </div>
               <p className={`font-sans leading-relaxed text-xs sm:text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-750"}`}>
-                {studyData.usageNote}
+                <ScriptureLinkedText text={studyData.usageNote} onNavigateRef={handleCrossCitedRefClick} />
               </p>
             </div>
 
-            {/* Scriptural occurrences lists - Clickable references */}
+            {/* Scriptural occurrences lists - Clickable references with Logos Hover Preview */}
             {studyData.occurrences && studyData.occurrences.length > 0 && (
               <div className={`p-3.5 rounded-xl border ${theme === "dark" ? "bg-stone-900/10 border-gray-850" : "bg-stone-150/20 border-gray-200"}`}>
                 <h4 className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-2 select-none">
-                  KEY CROSS-CITED OCCURRENCES
+                  KEY CROSS-CITED OCCURRENCES (HOVER TO PREVIEW VERSE)
                 </h4>
                 <div className="flex flex-col gap-1.5">
                   {studyData.occurrences.map((occ: string, idx: number) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleCrossCitedRefClick(occ)}
-                      className="w-full flex justify-between items-center py-1.5 border-b border-transparent hover:border-emerald-500/30 hover:bg-emerald-500/5 px-2 rounded duration-150 text-left cursor-pointer"
-                    >
-                      <span className="text-xs font-sans font-bold text-[#C9973A] hover:underline hover:text-emerald-500">{occ}</span>
-                      <span className="text-[10px] font-mono text-gray-500">Related lexical context</span>
-                    </button>
+                    <LogosScriptureHoverTrigger key={idx} reference={occ} asBlock>
+                      <button
+                        type="button"
+                        onClick={() => handleCrossCitedRefClick(occ)}
+                        className="w-full flex justify-between items-center py-1.5 border-b border-transparent hover:border-emerald-500/30 hover:bg-emerald-500/5 px-2 rounded duration-150 text-left cursor-pointer"
+                      >
+                        <span className="text-xs font-sans font-bold text-[#C9973A] hover:underline hover:text-emerald-500 flex items-center gap-1.5">
+                          <BookOpen className="w-3 h-3 text-[#C9973A] shrink-0" />
+                          <span>{occ}</span>
+                        </span>
+                        <span className="text-[10px] font-mono text-gray-500">Hover to preview • Click to open</span>
+                      </button>
+                    </LogosScriptureHoverTrigger>
                   ))}
                 </div>
               </div>
@@ -5427,6 +5488,9 @@ export const CrossReferenceEngine: React.FC<ToolProps> = ({
       return [];
     }
   });
+  const [powerLookupExpanded, setPowerLookupExpanded] = useState<boolean>(true);
+  const [powerLookupMap, setPowerLookupMap] = useState<Record<string, QuickVerseLookupData>>({});
+  const [copiedWitnessRef, setCopiedWitnessRef] = useState<string>("");
 
   // Sync state into localStorage for current scripture session
   useEffect(() => {
@@ -5464,6 +5528,37 @@ export const CrossReferenceEngine: React.FC<ToolProps> = ({
           { ref: "Revelation 12:17", description: "And the dragon was wroth with the woman, and went to make war with the remnant... which keep the commandments of God." },
           { ref: "Exodus 20:11", description: "For in six days the Lord made heaven and earth... and rested the seventh day, wherefore the Lord hallowed it." }
         ];
+
+  // Logos Power Lookup: batch-fetch verbatim KJV Scripture text + Pericope for all active witnesses
+  useEffect(() => {
+    let cancelled = false;
+    const allRefs = [
+      currentBaseRef,
+      ...currentWitnessesList.map((w: { ref: string }) => w.ref),
+      ...manualWitnesses,
+    ].filter(Boolean);
+
+    resolveBatchQuickVerseLookups(allRefs).then((batchMap) => {
+      if (!cancelled && batchMap) {
+        setPowerLookupMap((prev) => ({ ...prev, ...batchMap }));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentBaseRef, currentWitnessesList, manualWitnesses]);
+
+  const handleCopyWitnessToNotes = (e: React.MouseEvent, ref: string, kjvText: string, noteDesc?: string) => {
+    e.stopPropagation();
+    const entry = `${ref} — "${kjvText}"${noteDesc ? ` (${noteDesc})` : ""}`;
+    setStudyNotes((prev) => (prev.trim() ? `${prev.trim()}\n• ${entry}` : `• ${entry}`));
+    try {
+      navigator.clipboard?.writeText(entry);
+    } catch {}
+    setCopiedWitnessRef(ref);
+    setTimeout(() => setCopiedWitnessRef(""), 2200);
+  };
 
   const handleAddManualWitness = (e: React.FormEvent) => {
     e.preventDefault();
@@ -5552,65 +5647,199 @@ export const CrossReferenceEngine: React.FC<ToolProps> = ({
           </span>
         </div>
 
-        {/* Scriptural Witnesses Chain Container */}
+        {/* Scriptural Witnesses Chain Container — Upgraded Logos Power Lookup View */}
         <div className="space-y-2.5">
-          <span className="text-[10px] font-mono font-bold tracking-wider text-gray-400 uppercase block select-none">
-            Divine Witnesses ({currentWitnessesList.length + manualWitnesses.length})
-          </span>
+          <div className="flex items-center justify-between gap-2 select-none">
+            <span className="text-[10px] font-mono font-bold tracking-wider text-gray-400 uppercase flex items-center gap-1.5">
+              <Zap className="w-3 h-3 text-[#C9973A]" />
+              <span>Power Lookup Chain ({currentWitnessesList.length + manualWitnesses.length} Witnesses)</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setPowerLookupExpanded((prev) => !prev)}
+              className={`px-2 py-0.5 rounded text-[9.5px] font-mono font-bold border transition-all cursor-pointer ${
+                powerLookupExpanded
+                  ? "bg-[#C9973A]/20 border-[#C9973A]/60 text-[#C9973A]"
+                  : theme === "dark"
+                    ? "bg-[#1C222D] border-stone-700 text-stone-400 hover:text-stone-200"
+                    : "bg-stone-100 border-stone-300 text-stone-600 hover:text-stone-900"
+              }`}
+              title="Toggle Logos Power Lookup inline verbatim Scripture stack"
+            >
+              {powerLookupExpanded ? "Power Lookup: Expanded" : "Power Lookup: Compact"}
+            </button>
+          </div>
 
-          <div className="space-y-2.5">
-            {currentWitnessesList.map((comp: { ref: string; description: string }, idx: number) => (
-              <div 
-                key={idx} 
-                onClick={() => onReferenceChange(comp.ref)}
-                className={`p-3.5 rounded-lg border text-left cursor-pointer transition-all hover:bg-emerald-550/10 ${
-                  theme === "dark" 
-                    ? "bg-[#1E2530] border-[#2C3545] hover:border-blue-500/50" 
-                    : "bg-[#FDFAF5] border-[#EAE3D5] hover:border-emerald-600/55"
-                }`}
-              >
-                <div className="flex items-center justify-between pointer-events-none select-none">
-                  <span className="font-serif text-xs font-bold text-[#C9973A]">{comp.ref}</span>
-                  <span className="text-[9px] font-mono text-gray-500">View Reference &rarr;</span>
-                </div>
-                <p className={`text-xs mt-1.5 leading-relaxed font-sans ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                  {comp.description}
-                </p>
-              </div>
-            ))}
+          <div className="space-y-3">
+            {currentWitnessesList.map((comp: { ref: string; description: string }, idx: number) => {
+              const lookup = powerLookupMap[comp.ref];
+              const verbatimKjv = lookup?.combinedText || "";
+              const pericopeTitle = lookup?.pericope || "";
+              const isCopied = copiedWitnessRef === comp.ref;
 
-            {/* Custom Interactive Witnesses added by user */}
-            {manualWitnesses.map((ref, idx) => (
-              <div 
-                key={`manual-${idx}`}
-                onClick={() => onReferenceChange(ref)}
-                className={`p-3.5 rounded-lg border text-style text-left cursor-pointer transition-all ${
-                  theme === "dark" 
-                    ? "bg-[#11161D] border-blue-900/40 hover:border-blue-500" 
-                    : "bg-[#FFFFFF] border-blue-200 hover:border-blue-500"
-                }`}
-              >
-                <div className="flex items-center justify-between select-none">
-                  <span className="font-serif text-xs font-bold text-amber-500">{ref}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDetachManualWitness(ref);
-                    }}
-                    className="text-gray-400 hover:text-red-500 font-mono text-[9px] z-25 cursor-pointer underline p-0.5"
-                  >
-                    Detach
-                  </button>
+              return (
+                <div 
+                  key={idx} 
+                  onClick={() => onReferenceChange(comp.ref)}
+                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
+                    theme === "dark" 
+                      ? "bg-[#1B222E] border-[#2C3648] hover:border-[#C9973A]/60 shadow-xs" 
+                      : "bg-[#FDFAF5] border-[#E6DEC8] hover:border-[#C9973A] shadow-2xs"
+                  }`}
+                >
+                  {/* Top Header Row: Reference with Logos Hover Preview + Pericope + Action Buttons */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <LogosScriptureHoverTrigger
+                        reference={comp.ref}
+                        onNavigateRef={onReferenceChange}
+                      />
+                      {pericopeTitle && (
+                        <span className={`text-[10px] font-sans font-medium truncate hidden sm:inline ${
+                          theme === "dark" ? "text-amber-200/70" : "text-amber-900/75"
+                        }`}>
+                          • {pericopeTitle}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) =>
+                          handleCopyWitnessToNotes(
+                            e,
+                            comp.ref,
+                            verbatimKjv || comp.description,
+                            comp.description
+                          )
+                        }
+                        className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                          isCopied
+                            ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
+                            : theme === "dark"
+                              ? "bg-[#121722] border-stone-700 text-stone-300 hover:border-[#C9973A] hover:text-[#F3CF65]"
+                              : "bg-white border-stone-300 text-stone-700 hover:border-[#C9973A] hover:text-amber-900"
+                        }`}
+                        title="Add verbatim witness verse & connection to your Synthesis Notes below"
+                      >
+                        {isCopied ? <Check className="w-2.5 h-2.5" /> : <Plus className="w-2.5 h-2.5" />}
+                        <span>{isCopied ? "Added to Notes" : "+ Note"}</span>
+                      </button>
+                      <span className="text-[9px] font-mono text-[#C9973A] font-semibold">
+                        Open &rarr;
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Logos Power Lookup Inline Verbatim KJV Scripture Block */}
+                  {powerLookupExpanded && verbatimKjv && (
+                    <div
+                      className={`mt-2.5 p-2.5 rounded-lg border-l-2 border-[#C9973A] font-serif text-xs leading-relaxed ${
+                        theme === "dark"
+                          ? "bg-[#111722] text-stone-100"
+                          : "bg-amber-50/70 text-stone-900"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#C9973A]">
+                          Verbatim KJV Text
+                        </span>
+                        {pericopeTitle && (
+                          <span className="text-[9px] font-mono text-stone-400 truncate sm:hidden">
+                            {pericopeTitle}
+                          </span>
+                        )}
+                      </div>
+                      <p className="select-text">“{verbatimKjv}”</p>
+                    </div>
+                  )}
+
+                  {/* Doctrinal / Exegetical Connection Note */}
+                  <div className="mt-2 pt-1.5 border-t border-stone-500/15">
+                    <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-500 mr-1.5">
+                      Doctrinal Link:
+                    </span>
+                    <span className={`text-xs leading-relaxed font-sans ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                      <ScriptureLinkedText text={comp.description} onNavigateRef={onReferenceChange} />
+                    </span>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400 font-sans italic mt-1 pointer-events-none">
-                  User Added Witness. Click card to load and study translations.
-                </p>
-              </div>
-            ))}
+              );
+            })}
+
+            {/* Custom Interactive Witnesses added by user — with Power Lookup Inline Verse */}
+            {manualWitnesses.map((ref, idx) => {
+              const lookup = powerLookupMap[ref];
+              const verbatimKjv = lookup?.combinedText || "";
+              const pericopeTitle = lookup?.pericope || "";
+              const isCopied = copiedWitnessRef === ref;
+
+              return (
+                <div 
+                  key={`manual-${idx}`}
+                  onClick={() => onReferenceChange(ref)}
+                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
+                    theme === "dark" 
+                      ? "bg-[#11161D] border-blue-900/40 hover:border-[#C9973A]" 
+                      : "bg-[#FFFFFF] border-blue-200 hover:border-[#C9973A]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 select-none">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <LogosScriptureHoverTrigger
+                        reference={lookup?.canonicalReference || ref}
+                        onNavigateRef={onReferenceChange}
+                      />
+                      {pericopeTitle && (
+                        <span className="text-[10px] font-sans text-amber-400/75 truncate">
+                          • {pericopeTitle}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {verbatimKjv && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyWitnessToNotes(e, lookup?.canonicalReference || ref, verbatimKjv)}
+                          className="px-2 py-0.5 rounded text-[9px] font-mono font-bold border border-stone-700 text-stone-300 hover:border-[#C9973A] cursor-pointer"
+                        >
+                          {isCopied ? "Added ✓" : "+ Note"}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDetachManualWitness(ref);
+                        }}
+                        className="text-gray-400 hover:text-red-500 font-mono text-[9px] z-25 cursor-pointer underline p-0.5"
+                      >
+                        Detach
+                      </button>
+                    </div>
+                  </div>
+
+                  {powerLookupExpanded && verbatimKjv ? (
+                    <div
+                      className={`mt-2 p-2.5 rounded-lg border-l-2 border-[#C9973A] font-serif text-xs leading-relaxed ${
+                        theme === "dark" ? "bg-[#161D2A] text-stone-100" : "bg-amber-50/70 text-stone-900"
+                      }`}
+                    >
+                      “{verbatimKjv}”
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 font-sans italic mt-1 pointer-events-none">
+                      User Added Witness. Hover to preview or click card to open in Bible Reader.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <p className="text-[10.5px] font-mono text-gray-500 text-center select-none">
-            *Click cross-reference cards to load and study their translations inside the reader list.
+            *Hover over any Scripture reference for an instant Logos pop-up, or click to load in the Bible Reader.
           </p>
         </div>
 

@@ -10,7 +10,7 @@ import { BIBLE_METADATA, parseScriptureLookup } from "./bibleMetadata";
 import { saveResponseAsNewNote } from "../../data/notebookData";
 import { stbaStorage } from "../../lib/storage/indexedDbClient";
 import { panelSyncBus } from "../../lib/storage/panelSyncChannel";
-import { ScriptureLinkedText } from "./ScriptureLinkedText";
+import { ScriptureLinkedText, LogosScriptureHoverTrigger } from "./ScriptureLinkedText";
 import { bibleService } from "../../services/bibleService";
 import { ToolHighlightableWrapper } from "./HighlightDropdownMenu";
 import { apiFetch, safeParseResponseJson } from "../../lib/apiFetch";
@@ -1329,27 +1329,29 @@ export const SDABibleCommentary: React.FC<ToolProps> = ({
                 <Layers className="w-4 h-4" /> Scriptural Cross-Reference Chain
               </h3>
               <div className="space-y-2">
-                {commentaryData.scripturalCrossReferences.map((xref, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      const refOnly = xref.split(" (")[0].trim();
-                      handleScriptureLinkClick(refOnly);
-                    }}
-                    className={`w-full text-left p-2.5 rounded-lg flex items-center justify-between border transition-all cursor-pointer font-serif not-italic ${
-                      theme === "dark"
-                        ? "bg-[#141E33] border-[#243556] hover:border-[#C9973A] hover:bg-[#1A2844]"
-                        : "bg-stone-50 border-stone-200 hover:border-amber-400 hover:bg-amber-50"
-                    }`}
-                    style={{ fontSize: `${Math.round(fontSize * 0.875)}px` }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <BookOpen className="w-3.5 h-3.5 text-[#C9973A] shrink-0" />
-                      <span className="font-semibold text-[#C9973A]">{xref}</span>
-                    </div>
-                    <ArrowRight className="w-3.5 h-3.5 opacity-60" />
-                  </button>
-                ))}
+                {commentaryData.scripturalCrossReferences.map((xref, idx) => {
+                  const refOnly = xref.split(" (")[0].trim();
+                  return (
+                    <LogosScriptureHoverTrigger key={idx} reference={refOnly} asBlock>
+                      <button
+                        type="button"
+                        onClick={() => handleScriptureLinkClick(refOnly)}
+                        className={`w-full text-left p-2.5 rounded-lg flex items-center justify-between border transition-all cursor-pointer font-serif not-italic ${
+                          theme === "dark"
+                            ? "bg-[#141E33] border-[#243556] hover:border-[#C9973A] hover:bg-[#1A2844]"
+                            : "bg-stone-50 border-stone-200 hover:border-amber-400 hover:bg-amber-50"
+                        }`}
+                        style={{ fontSize: `${Math.round(fontSize * 0.875)}px` }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="w-3.5 h-3.5 text-[#C9973A] shrink-0" />
+                          <span className="font-semibold text-[#C9973A]">{xref}</span>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 opacity-60" />
+                      </button>
+                    </LogosScriptureHoverTrigger>
+                  );
+                })}
               </div>
             </div>
           </div>
