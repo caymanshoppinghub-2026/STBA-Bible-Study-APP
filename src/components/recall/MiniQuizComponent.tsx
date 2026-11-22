@@ -53,8 +53,8 @@ export function getVerseQuizData(verse: RecallQueueItem): {
 } {
   const ref = verse.reference.toLowerCase();
 
-  // 1. 2 Timothy 3:16-17
-  if (ref.includes("2 timothy 3") || ref.includes("timothy 3")) {
+  // 1a. 2 Timothy 3:16 specifically
+  if (ref.includes("2 timothy 3:16") && !ref.includes("17")) {
     return {
       contextQuestions: [
         {
@@ -78,22 +78,22 @@ export function getVerseQuizData(verse: RecallQueueItem): {
           ]
         },
         {
-          question: "According to verse 17, what is the ultimate spiritual purpose of Scripture's inspiration?",
+          question: "According to 2 Timothy 3:16, what fourfold ministry is God-breathed Scripture profitable for?",
           options: [
             {
-              text: "That the person of God may be complete, thoroughly equipped for every good work.",
+              text: "For doctrine, for reproof, for correction, and for instruction in righteousness.",
               isCorrect: true,
-              explanation: "God's Word is intensely practical—it equips believers fully for Christlike character and active ministry."
+              explanation: "2 Timothy 3:16 explicitly lists doctrine, reproof, correction, and instruction in righteousness as the fourfold profit of inspired Scripture."
             },
             {
-              text: "To provide hidden mystic codes accessible only to an elite priesthood.",
+              text: "To provide hidden mystic codes accessible only to an elite philosophical priesthood.",
               isCorrect: false,
-              explanation: "The Bible was given clearly so that every sincere believer can read, understand, and apply truth."
+              explanation: "The Bible was given clearly so that every sincere believer can learn doctrine and grow in righteousness."
             },
             {
-              text: "To exempt believers from personal study once church doctrine has been published.",
+              text: "To exempt believers from personal study once human traditions have been established.",
               isCorrect: false,
-              explanation: "God calls every Christian to study diligently to be approved unto God (2 Timothy 2:15)."
+              explanation: "God's Word personally instructs, reproves, and corrects every believer in righteousness."
             }
           ]
         },
@@ -119,18 +119,94 @@ export function getVerseQuizData(verse: RecallQueueItem): {
         }
       ],
       reflectionQ: {
-        prompt: "How does the divine inspiration of God's Word ground your personal discipleship today?",
+        prompt: "How does the divine inspiration of 2 Timothy 3:16 ground your personal discipleship today?",
         quickAnchors: [
           "Anchors my faith in timeless divine truth over shifting cultural opinions",
-          "Renews my daily devotion for character growth and doctrinal clarity",
-          "Equips me with love and patience to share Scripture with seeking hearts"
+          "Welcomes Scripture's loving reproof, correction, and instruction in righteousness",
+          "Equips me with love and patience to share God's Word with seeking hearts"
+        ]
+      }
+    };
+  }
+
+  // 1b. 2 Timothy 3:17 or 2 Timothy 3:16-17
+  if (ref.includes("2 timothy 3:17") || ref.includes("2 timothy 3:16-17")) {
+    return {
+      contextQuestions: [
+        {
+          question: `What is the central spiritual goal declared in ${verse.reference}?`,
+          options: [
+            {
+              text: "That the man of God may be perfect (complete), throughly furnished unto all good works.",
+              isCorrect: true,
+              explanation: "God's Word matures the believer's character and equips them completely for every good work."
+            },
+            {
+              text: "To provide hidden mystic codes accessible only to an elite priesthood.",
+              isCorrect: false,
+              explanation: "The Bible was given clearly so that every sincere believer can be equipped for active ministry."
+            },
+            {
+              text: "To exempt believers from practical service once doctrinal study is completed.",
+              isCorrect: false,
+              explanation: "Scriptural maturity always bears fruit in being 'throughly furnished unto all good works.'"
+            }
+          ]
+        },
+        {
+          question: `What does "throughly furnished" signify in ${verse.reference}?`,
+          options: [
+            {
+              text: "Being completely equipped and outfitted by God's Word for every duty of Christian life and service.",
+              isCorrect: true,
+              explanation: "The Greek root exartizo means to equip completely, leaving no spiritual lack for God's service."
+            },
+            {
+              text: "Accumulating worldly wealth and secular prestige.",
+              isCorrect: false,
+              explanation: "Paul speaks of spiritual readiness and Christlike character for good works."
+            },
+            {
+              text: "Relying on human self-righteousness apart from the Holy Scriptures.",
+              isCorrect: false,
+              explanation: "It is through the God-breathed Scriptures that the servant of God is thoroughly equipped."
+            }
+          ]
+        },
+        {
+          question: `How does ${verse.reference} connect doctrinal truth with daily Christian living?`,
+          options: [
+            {
+              text: "True biblical doctrine transforms character so the believer actively performs 'all good works' to God's glory.",
+              isCorrect: true,
+              explanation: "In biblical discipleship, sound doctrine and practical good works are inseparable."
+            },
+            {
+              text: "It separates intellectual belief from practical compassion and obedience.",
+              isCorrect: false,
+              explanation: "Scripture equips the whole person for active, loving service."
+            },
+            {
+              text: "It teaches that good works earn salvation apart from faith in Christ.",
+              isCorrect: false,
+              explanation: "Good works are the fruit of being equipped by God's grace and Word, never a replacement for Christ's merit."
+            }
+          ]
+        }
+      ],
+      reflectionQ: {
+        prompt: `How does ${verse.reference} call you to be thoroughly equipped for good works today?`,
+        quickAnchors: [
+          "Equips my life through daily Scripture study for practical Christian service",
+          "Surrenders my habits to God so I may grow into spiritual maturity",
+          "Inspires me to put biblical truth into loving action for others"
         ]
       }
     };
   }
 
   // 2. Revelation 14:12
-  if (ref.includes("revelation 14") || ref.includes("rev 14")) {
+  if (ref.includes("revelation 14:12") || ref.includes("rev 14:12")) {
     return {
       contextQuestions: [
         {
@@ -206,7 +282,7 @@ export function getVerseQuizData(verse: RecallQueueItem): {
   }
 
   // 3. Daniel 8:14
-  if (ref.includes("daniel 8:14") || ref.includes("dan 8")) {
+  if (ref.includes("daniel 8:14") || ref.includes("dan 8:14")) {
     return {
       contextQuestions: [
         {
@@ -282,7 +358,7 @@ export function getVerseQuizData(verse: RecallQueueItem): {
   }
 
   // 4. Exodus 20:8-11
-  if (ref.includes("exodus 20") || ref.includes("sabbath") || ref.includes("ex 20")) {
+  if (ref.includes("exodus 20:8") || ref.includes("ex 20:8")) {
     return {
       contextQuestions: [
         {
@@ -357,70 +433,78 @@ export function getVerseQuizData(verse: RecallQueueItem): {
     };
   }
 
-  // 5. Generic / Dynamic 3-Question Generator for Any Bible Passage
-  const words = verse.text.replace(/[,.;:?!"'()]/g, "").split(/\s+/).filter((w) => w.length > 4);
+  // 5. Generic / Dynamic 3-Question Generator for Any Specific Bible Verse Selected by User
+  const words = verse.text
+    .replace(/[,.;:?!"'()]/g, "")
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !COMMON_STOP_WORDS.has(w.toLowerCase()));
   const keyword1 = verse.keywords?.[0] || words[0] || "truth";
-  const keyword2 = verse.keywords?.[1] || words[1] || "covenant";
+  const keyword2 = verse.keywords?.[1] || words[1] || words[0] || "faith";
+  const shortExcerpt =
+    verse.text.length > 110 ? `${verse.text.slice(0, 107).trim()}...` : verse.text;
 
   return {
     contextQuestions: [
       {
-        question: `What is the central theological truth proclaimed in ${verse.reference}?`,
+        question: `What is the central biblical message declared in ${verse.reference}?`,
         options: [
           {
-            text: verse.theologicalContext || `Divine revelation in ${verse.reference} calling believers to unreserved faith, obedience, and spiritual holiness.`,
+            text:
+              verse.theologicalContext && !verse.theologicalContext.startsWith("Scripture committed to memory")
+                ? verse.theologicalContext
+                : `${verse.reference} proclaims: "${shortExcerpt}" — anchoring the believer in God's revealed Word and covenant faithfulness.`,
             isCorrect: true,
-            explanation: "All Scripture is God-breathed, providing divine instruction for character transformation and righteous living."
+            explanation: `${verse.reference} directly instructs and strengthens the believer in sound biblical truth.`
           },
           {
-            text: "A historical narrative without ongoing moral or doctrinal authority for modern Christian life.",
+            text: `That ${verse.reference} was a temporary cultural opinion with no spiritual authority for believers today.`,
             isCorrect: false,
-            explanation: "Scripture's principles are eternal, written for our admonition and spiritual guidance."
+            explanation: "All Scripture is God-breathed and remains eternally authoritative for faith and practice."
           },
           {
-            text: "A philosophical allegory that contradicts the rest of the biblical canon.",
+            text: `That human philosophy and tradition supersede the plain declaration of ${verse.reference}.`,
             isCorrect: false,
-            explanation: "Scripture interprets Scripture with divine harmony and perfect consistency."
+            explanation: "Scripture interprets Scripture and stands above all human traditions."
           }
         ]
       },
       {
-        question: `How does the key emphasis on "${keyword1}" in ${verse.reference} support Christian discipleship?`,
+        question: `In ${verse.reference}, how do the key terms "${keyword1}" and "${keyword2}" shape the verse's meaning?`,
         options: [
           {
-            text: `It reveals God's righteous character and provides divine power for overcoming temptation through Christ.`,
+            text: `They highlight the core focus of ${verse.reference}, calling the believer to live out "${keyword1}" and "${keyword2}" through Christ's power.`,
             isCorrect: true,
-            explanation: "God gives His Word so that the believer may be thoroughly equipped for every good work."
+            explanation: `Every word in ${verse.reference} works together to equip the believer for faithful obedience and trust.`
           },
           {
-            text: "It encourages believers to rely on self-effort rather than the Holy Spirit's transforming grace.",
+            text: `They encourage believers to rely on human self-righteousness apart from the Holy Spirit's grace.`,
             isCorrect: false,
-            explanation: "Discipleship is an inward work of the Holy Spirit writing God's law on our hearts."
+            explanation: "Biblical obedience and faith are always fruits of the Holy Spirit working in the heart."
           },
           {
-            text: "It limits salvation exclusively to intellectual knowledge without heart obedience.",
+            text: `They limit ${verse.reference} to outward formality without inward heart transformation.`,
             isCorrect: false,
-            explanation: "True faith works by love and purifies the soul."
+            explanation: "God's Word transforms the heart, motives, and daily life."
           }
         ]
       },
       {
-        question: `In what way does ${verse.reference} connect with the broader theme of the Great Controversy?`,
+        question: `How should a disciple apply the exact teaching of ${verse.reference} in daily Christian living?`,
         options: [
           {
-            text: "It vindicates God's justice, mercy, and truth against the deceptions and accusations of the enemy.",
+            text: `By hiding the truth of ${verse.reference} in the heart, obeying its counsel by faith, and sharing its light with others.`,
             isCorrect: true,
-            explanation: "Every passage of Scripture contributes to revealing God's glorious love and victory in Christ."
+            explanation: `Memorizing and applying ${verse.reference} fortifies the mind against deception and anchors our walk with Christ.`
           },
           {
-            text: "It suggests evil and righteousness are equal forces with no final divine judgment.",
+            text: `By treating ${verse.reference} as mere intellectual trivia detached from character and obedience.`,
             isCorrect: false,
-            explanation: "Scripture assures us that God's kingdom and righteousness will ultimately triumph forever."
+            explanation: "God's Word is given for practical transformation, holiness, and loving service."
           },
           {
-            text: "It instructs believers to remain neutral between truth and error.",
+            text: `By setting aside ${verse.reference} whenever worldly pressure opposes biblical truth.`,
             isCorrect: false,
-            explanation: "God calls us to stand firmly for truth as the needle to the pole."
+            explanation: "God calls His people to stand faithfully upon His Word in every circumstance."
           }
         ]
       }
@@ -428,9 +512,9 @@ export function getVerseQuizData(verse: RecallQueueItem): {
     reflectionQ: {
       prompt: `How does the truth of ${verse.reference} inspire your walk with God and your witness to others today?`,
       quickAnchors: [
-        "Strengthens my daily prayer life and heartfelt surrender to Jesus",
-        "Inspires me to share biblical truth with kindness and conviction",
-        "Deepens my trust in God's promises during seasons of uncertainty"
+        `Anchors my heart daily in the specific promise and counsel of ${verse.reference}`,
+        "Inspires me to share this biblical truth with kindness and conviction",
+        "Deepens my trust and obedience to Christ through His living Word"
       ]
     }
   };
