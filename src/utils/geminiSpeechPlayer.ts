@@ -171,31 +171,48 @@ async function fetchGeminiChunkBase64(
       return w.__STBA_TTS_CACHE__[cacheKey];
     }
 
-    try {
-      const response = await apiFetch("/api/study/narrate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: chunkText,
-          voice,
-          verbatimReadAloud: Boolean(verbatimReadAloud),
-          model: "gemini-3.8-live",
-        }),
-      });
-      if (!response.ok || isAuthRedirectResponse(response)) {
-        return null;
+    const requestNarrate = async (useVerbatimEdge: boolean): Promise<FetchedAudioChunk | null> => {
+      try {
+        const response = await apiFetch("/api/study/narrate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: chunkText,
+            voice,
+            verbatimReadAloud: useVerbatimEdge,
+            model: "gemini-3.8-live",
+          }),
+        });
+        if (!response.ok || isAuthRedirectResponse(response)) {
+          return null;
+        }
+        const data = await safeParseResponseJson<any>(response);
+        if (data?.success && data?.audio) {
+          const result: FetchedAudioChunk = {
+            audio: data.audio,
+            format: data.format === "mp3" ? "mp3" : "pcm",
+          };
+          w.__STBA_TTS_CACHE__[cacheKey] = result;
+          return result;
+        }
+      } catch (err) {
+        console.warn("[GeminiSpeechPlayer] Narrate fetch error:", err);
       }
-      const data = await safeParseResponseJson<any>(response);
-      if (data?.success && data?.audio) {
-        const result: FetchedAudioChunk = {
-          audio: data.audio,
-          format: data.format === "mp3" ? "mp3" : "pcm",
-        };
-        w.__STBA_TTS_CACHE__[cacheKey] = result;
-        return result;
+      return null;
+    };
+
+    const primaryResult = await requestNarrate(Boolean(verbatimReadAloud));
+    if (primaryResult) {
+      return primaryResult;
+    }
+
+    // If primary Gemini TTS returned null or timed out, immediately retry with server-side
+    // Microsoft Edge Neural (Andrew US / Charon mapping) so it NEVER drops to robotic OS speechSynthesis
+    if (!verbatimReadAloud) {
+      const neuralFallbackResult = await requestNarrate(true);
+      if (neuralFallbackResult) {
+        return neuralFallbackResult;
       }
-    } catch (err) {
-      console.warn("[GeminiSpeechPlayer] Narrate fetch error:", err);
     }
   }
   return null;

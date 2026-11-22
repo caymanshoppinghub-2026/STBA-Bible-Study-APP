@@ -2854,10 +2854,20 @@ async function synthesizeMicrosoftNeuralAudio(text: string, voiceKey: string): P
   };
   const edgeVoice = neuralVoiceMap[voiceKey] || "en-US-AndrewMultilingualNeural";
 
+  // Escape XML/SSML reserved characters (&, <, >, quotes) so MsEdgeTTS _SSMLTemplate never fails on "&" in headings
+  const ssmlSafeText = text
+    .replace(/&/g, " and ")
+    .replace(/[<>]/g, " ")
+    .replace(/[•▪▸►]/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!ssmlSafeText) return null;
+
   try {
     const tts = new MsEdgeTTS();
     await tts.setMetadata(edgeVoice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-    const { audioStream } = tts.toStream(text);
+    const { audioStream } = tts.toStream(ssmlSafeText);
     const chunks: Buffer[] = [];
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -2946,7 +2956,16 @@ app.post("/api/study/narrate", async (req, res) => {
   const aiClient = getGeminiClient();
 
   if (!aiClient) {
-    // If no client, return fallback cue to utilize browser SpeechSynthesis with custom pacing
+    const mp3Base64 = await synthesizeMicrosoftNeuralAudio(verbatimText, selectedVoice);
+    if (mp3Base64) {
+      saveServerTtsCache(cacheKey, `mp3:${mp3Base64}`);
+      return res.json({
+        success: true,
+        audio: mp3Base64,
+        format: "mp3",
+        engine: "edge-neural"
+      });
+    }
     return res.json({
       success: false,
       fallback: true,

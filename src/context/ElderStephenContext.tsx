@@ -282,17 +282,9 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
     );
   }, [studyFlow.currentPassage, studyFlow.activeStepIndex, studyFlow.activeTab, studyFlow.currentMode]);
 
-  // Text-To-Speech Clean Handling (Unified Gemini 3.8 Charon Voice)
+  // Text-To-Speech Clean Handling (Unified Gemini 3.8 Charon / Andrew US Voice)
   const speakMessage = useCallback((msgId: string, text: string) => {
     if (typeof window === "undefined") {
-      return;
-    }
-
-    // Pause automatic playback only if the guided onboarding tour is actively running
-    const activeOnboardingStage = localStorage.getItem("stba_onboarding_stage");
-    if (activeOnboardingStage) {
-      stopActiveGeminiSpeech();
-      setSpeakingMsgId(null);
       return;
     }
 
@@ -304,10 +296,13 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     stopActiveGeminiSpeech();
 
-    // Clean markdown and formatting tags for natural speech flow
+    // Clean markdown, bullet symbols, and formatting tags for natural speech flow
     const clean = text
       .replace(/[*#_`~>]/g, "")
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/[•▪▸►]/g, " ")
+      .replace(/&/g, " and ")
+      .replace(/\s+/g, " ")
       .trim();
 
     if (!clean) return;

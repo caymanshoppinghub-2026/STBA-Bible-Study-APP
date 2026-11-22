@@ -319,27 +319,27 @@ export const ElderStephenChat: React.FC<ElderStephenChatProps> = ({ note, trigge
       </div>
 
       {/* Quick Suggestion Chips */}
-      <div className="flex flex-wrap gap-1 px-3 py-1.5 bg-[var(--nb-sidebar)] border-t border-[var(--nb-border)] select-none shrink-0" id="chat-suggestion-chips">
+      <div className="flex flex-nowrap items-center justify-between gap-1.5 px-3 py-1.5 bg-[var(--nb-sidebar)] border-t border-[var(--nb-border)] select-none shrink-0 overflow-x-auto no-scrollbar" id="chat-suggestion-chips">
         <button
           type="button"
           onClick={() => handleChipClick("Show me the prophetic/theological cross references matching this note's study theme.")}
-          className="px-2 py-0.5 text-[10px] font-mono rounded bg-stone-900 border border-[var(--nb-border)] text-[var(--nb-text-muted)] hover:text-[var(--nb-gold)] hover:border-[var(--nb-border-gold)] transition-colors cursor-pointer"
+          className="flex-1 text-center whitespace-nowrap px-1.5 py-1 text-[10px] font-mono rounded bg-stone-900 border border-[var(--nb-border)] text-[var(--nb-text-muted)] hover:text-[var(--nb-gold)] hover:border-[var(--nb-border-gold)] transition-colors cursor-pointer"
         >
-          📖 Cross Refs
+          Cross Refs
         </button>
         <button
           type="button"
           onClick={() => handleChipClick("Are there any notable Ellen White quotes or visions that shed light on this specific topic?")}
-          className="px-2 py-0.5 text-[10px] font-mono rounded bg-stone-900 border border-[var(--nb-border)] text-[var(--nb-text-muted)] hover:text-[var(--nb-gold)] hover:border-[var(--nb-border-gold)] transition-colors cursor-pointer"
+          className="flex-1 text-center whitespace-nowrap px-1.5 py-1 text-[10px] font-mono rounded bg-stone-900 border border-[var(--nb-border)] text-[var(--nb-text-muted)] hover:text-[var(--nb-gold)] hover:border-[var(--nb-border-gold)] transition-colors cursor-pointer"
         >
-          🔍 EGW Insights
+          EGW Insights
         </button>
         <button
           type="button"
           onClick={() => handleChipClick("Give me a practical, devotional lesson or outline from this to share in family worship or Sabbath school.")}
-          className="px-2 py-0.5 text-[10px] font-mono rounded bg-stone-900 border border-[var(--nb-border)] text-[var(--nb-text-muted)] hover:text-[var(--nb-gold)] hover:border-[var(--nb-border-gold)] transition-colors cursor-pointer"
+          className="flex-1 text-center whitespace-nowrap px-1.5 py-1 text-[10px] font-mono rounded bg-stone-900 border border-[var(--nb-border)] text-[var(--nb-text-muted)] hover:text-[var(--nb-gold)] hover:border-[var(--nb-border-gold)] transition-colors cursor-pointer"
         >
-          💡 Practical Devotion
+          Practical Devotion
         </button>
       </div>
 
