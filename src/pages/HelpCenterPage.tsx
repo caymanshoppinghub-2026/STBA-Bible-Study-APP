@@ -265,8 +265,8 @@ export const HelpCenterPage: React.FC = () => {
       setActiveTab("chat");
       scrollToElement("section-chat");
     } else if (target === "contact" || target === "support") {
-      setActiveTab("contact");
-      scrollToElement("section-contact");
+      setActiveTab("chat");
+      scrollToElement("section-chat");
     } else {
       setActiveTab("overview");
     }
@@ -413,7 +413,7 @@ export const HelpCenterPage: React.FC = () => {
   };
 
   // Interactive Live Chat response engine
-  const handleSendMessage = (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || chatInput).trim();
     if (!text) return;
 
@@ -424,15 +424,32 @@ export const HelpCenterPage: React.FC = () => {
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     };
 
-    setChatMessages((prev) => [...prev, userMessage]);
+    const nextHistory = [...chatMessages, userMessage];
+    setChatMessages(nextHistory);
     setChatInput("");
     setIsBotTyping(true);
 
-    // Simulate intelligent support agent reasoning
-    setTimeout(() => {
-      let botResponse = "";
-      const lower = text.toLowerCase();
+    let botResponse = "";
+    try {
+      const response = await apiFetch("/api/support/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          history: nextHistory.slice(-6),
+          userName: user?.name || ticketName || "Berean Student"
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.reply) {
+          botResponse = String(data.reply).trim();
+        }
+      }
+    } catch {}
 
+    if (!botResponse) {
+      const lower = text.toLowerCase();
       if (lower.includes("audio") || lower.includes("voice") || lower.includes("skip") || lower.includes("narrat")) {
         botResponse = "Regarding the Audio Narrator: In Sabbath School mode, Microsoft Natural Voice TTS is intentionally tuned to read only the author's expository paragraphs while skipping quoted Bible verses. This allows you to pause and recite or examine the Scripture directly! If audio is not playing at all, ensure your device volume is up and media permissions are granted.";
       } else if (lower.includes("recall") || lower.includes("memory") || lower.includes("vault") || lower.includes("schedule")) {
@@ -446,18 +463,18 @@ export const HelpCenterPage: React.FC = () => {
       } else {
         botResponse = "Thank you for sharing. I'm here to ensure you have a seamless study experience. If your question requires specialized theological review or a technical fix, please click 'Escalate to Administrator' below and our staff will respond directly via email.";
       }
+    }
 
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: `bot-${Date.now()}`,
-          sender: "bot",
-          text: botResponse,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        }
-      ]);
-      setIsBotTyping(false);
-    }, 750);
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: `bot-${Date.now()}`,
+        sender: "bot",
+        text: botResponse,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      }
+    ]);
+    setIsBotTyping(false);
   };
 
   // Administrator Escalation Handler
@@ -963,7 +980,7 @@ export const HelpCenterPage: React.FC = () => {
           {/* ------------------------------------------------------------- */}
           <div
             id="section-chat"
-            className="bg-white rounded-3xl border border-stone-200 shadow-xl overflow-hidden flex flex-col h-[650px] scroll-mt-6 relative"
+            className="bg-white rounded-3xl border border-stone-200 shadow-xl overflow-hidden flex flex-col h-[650px] scroll-mt-24 relative"
           >
             {/* Chat Top Header */}
             <div className="p-4 sm:p-5 bg-[#041336] text-white flex items-center justify-between border-b border-[#E5B842]/20">

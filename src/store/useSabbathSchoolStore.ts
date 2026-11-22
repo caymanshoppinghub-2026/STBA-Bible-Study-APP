@@ -579,17 +579,30 @@ export const useSabbathSchoolStore = () => {
     try {
       const payload = await getSabbathSchoolSyncData(forceRefresh);
       if (payload && (payload.dailyLessons || payload.quarterlyTitle)) {
+        const incomingLessonId = String(payload.lessonId || "").trim();
+        const currentLessonId = String(globalStateStore.lessonId || "").trim();
+        const incomingLessonTitle = String(payload.lessonTitle || "").trim().toLowerCase();
+        const currentLessonTitle = String(globalStateStore.lessonTitle || "").trim().toLowerCase();
+        const isSameLesson =
+          (incomingLessonId && currentLessonId && incomingLessonId === currentLessonId) ||
+          (incomingLessonTitle && currentLessonTitle && incomingLessonTitle === currentLessonTitle);
+
         let mappedDailyLessons: DailyLesson[] = globalStateStore.dailyLessons;
         if (Array.isArray(payload.dailyLessons) && payload.dailyLessons.length > 0) {
-          mappedDailyLessons = payload.dailyLessons.map((d: any) => {
+          mappedDailyLessons = payload.dailyLessons.map((d: any, idx: number) => {
             const rawContent = Array.isArray(d.lessonContent)
               ? d.lessonContent.join("\n\n")
               : (d.lessonContent || d.content || "");
             const { mainParagraphs, egwParagraphs } = separateLessonAndEgwNotes(rawContent, d.egwNotes);
+            const existingDay = globalStateStore.dailyLessons[idx];
+            const preservedStatus =
+              isSameLesson && existingDay?.status
+                ? existingDay.status
+                : "Not Started";
             return {
               label: `${d.dayName} (${d.dateString})`,
               title: d.title || d.dayName,
-              status: "Not Started",
+              status: preservedStatus,
               content: mainParagraphs.join("\n\n"),
               egwNotes: egwParagraphs,
               egwVideoUrl: d.egwVideoUrl || "",
@@ -707,10 +720,15 @@ export const useSabbathSchoolStore = () => {
         } catch (e) {}
       }
 
+      const weekOverview = globalStateStore.dailyLessons
+        .map((d, idx) => `Day ${idx + 1} (${d.label}): ${d.title}`)
+        .join(" | ");
+
       journeyContext = `[Cross-Mode User Journey Context]:
 - Current Mode: Sabbath School Studies
 - Role: ${globalStateStore.userRole}
 - Active Sabbath School Lesson: "${globalStateStore.lessonTitle}" (Quarterly: "${globalStateStore.quarterlyTitle}")
+- Full 7-Day Lesson Arc: ${weekOverview}
 - Studied Bible Passage (Bible Study Mode): "${lastReadBible}"
 ${notesSnippet ? `- Notebook Activity: ${notesSnippet}\n` : ""}${tracksProgress ? `- Theological Tracks Progress: ${tracksProgress}\n` : ""}
 ${contextSummary ? `Special Context: ${contextSummary}` : ""}`;

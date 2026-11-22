@@ -153,7 +153,7 @@ export const DailyLessonView: React.FC = () => {
 
   const handleAskElderStephenAboutThisDay = () => {
     const prompt = `Could you give a simple summary or key takeaway for today's study on "${activeDay?.title}"?`;
-    chatWithElderStephen(prompt, `Discussing ${activeDay?.label}: "${activeDay?.title}"`);
+    chatWithElderStephen(prompt, `Discussing ${activeDay?.label}: "${activeDay?.title}"`, "velocity");
   };
 
   if (!activeDay) {

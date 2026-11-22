@@ -264,13 +264,10 @@ export const SabbathSchoolPage: React.FC = () => {
               {/* 1. Collapsible Lesson Section (Day 1 - 7) */}
               <CollapsibleDailyLessonsSection />
 
-              {/* 2. Theological Takeaways Section */}
-              <TalkingPointsSummary />
-
-              {/* 3. Ellen White Commentary Section */}
+              {/* 2. Ellen White Commentary Section */}
               <FurtherThought />
 
-              {/* 4. Video Playback Quiz Results Section */}
+              {/* 3. Video Playback Quiz Results Section */}
               <VideoQuizResultsSection />
             </div>
           )}
@@ -281,19 +278,16 @@ export const SabbathSchoolPage: React.FC = () => {
               {/* 1. Daily Lesson Study (Collapsible Day 1 - 7) */}
               <CollapsibleDailyLessonsSection />
 
-              {/* 2. Theological Takeaways Section */}
-              <TalkingPointsSummary />
-
-              {/* 3. Ellen White Commentary Section */}
+              {/* 2. Ellen White Commentary Section */}
               <FurtherThought />
 
-              {/* 4. Video Playback Quiz Results Section */}
+              {/* 3. Video Playback Quiz Results Section */}
               <VideoQuizResultsSection />
 
-              {/* 5. Discussion Deck Cards */}
+              {/* 4. Discussion Deck Cards */}
               <DiscussionDeckSection />
 
-              {/* 6. Classroom Metrics & Intelligence */}
+              {/* 5. Classroom Metrics & Intelligence */}
               <ClassroomMetricsSection />
             </div>
           )}

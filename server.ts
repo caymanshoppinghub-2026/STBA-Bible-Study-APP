@@ -996,10 +996,17 @@ async function sendWelcomeEmail(email: string, name: string, tier?: string): Pro
 
 async function sendSupportTicketEmail(ticket: SupportTicket): Promise<{ success: boolean; emailSent: boolean; message: string }> {
   const config = parseSmtpConfig();
-  const adminRecipient = 
-    cleanEnvValue(process.env.ADMIN_SUPPORT_EMAIL) || 
-    cleanEnvValue(process.env.ADMIN_EMAIL) || 
-    (config.configured && config.user && !config.user.includes("@smtp-brevo.com") ? config.user : "admin@stba.org");
+  const isValidEmail = (val?: string) => Boolean(val && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim()));
+  const envAdminSupport = cleanEnvValue(process.env.ADMIN_SUPPORT_EMAIL);
+  const envAdmin = cleanEnvValue(process.env.ADMIN_EMAIL);
+  const adminRecipient =
+    (isValidEmail(envAdminSupport) ? envAdminSupport : "") ||
+    (isValidEmail(envAdmin) ? envAdmin : "") ||
+    (config.configured && isValidEmail(config.user) && !config.user.includes("@smtp-brevo.com")
+      ? config.user
+      : isValidEmail(cleanEnvValue(process.env.SMTP_FROM))
+      ? cleanEnvValue(process.env.SMTP_FROM)
+      : "ststsapprovedMinistry@gmail.com");
 
   supportTicketsList.unshift(ticket);
 
@@ -1147,6 +1154,52 @@ app.post("/api/support/ticket", async (req, res) => {
     ticketId: ticket.id,
     message: result.message
   });
+});
+
+// Live Support Chat Endpoint (Sister Evelyn)
+app.post("/api/support/chat", async (req, res) => {
+  const { message, history = [], userName = "Berean Student" } = req.body || {};
+  const userText = String(message || "").trim();
+  if (!userText) {
+    return res.status(400).json({ error: "Message is required." });
+  }
+
+  const aiClient = getGeminiClient();
+  if (!aiClient) {
+    return res.status(503).json({ error: "Live assistant unavailable" });
+  }
+
+  try {
+    const recentHistory = Array.isArray(history)
+      ? history.slice(-6).map((m: any) => `${m.sender === "user" ? userName : "Sister Evelyn"}: ${String(m.text || "")}`).join("\n")
+      : "";
+
+    const prompt = `${recentHistory ? `Recent conversation:\n${recentHistory}\n\n` : ""}User (${userName}) asks: "${userText}"`;
+    const response = await generateContentWithFallback(aiClient, {
+      model: "gemini-3.8-flash",
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        systemInstruction: `You are Sister Evelyn, the warm, helpful Live Support Assistant for "Study To Be Approved" (STBA), a Seventh-day Adventist Scripture mastery and discipleship app.
+Answer the user's specific question directly, clearly, and concisely (2-4 sentences).
+App knowledge:
+- Sabbath School Studies: Daily Lesson Study (Day 1-7), Ellen White Commentary, Video Quizzes, and Elder Stephen Day Discussions.
+- STBA Bible Study Mode: Parallel translations, Word Study (Strong's), SDA Commentary, Cross-References, Daily Syllabus, and Discipleship Vault (Notebook).
+- Active Recall Studio: Verbatim Recall, Spaced Repetition queue, 30-Day Discipleship Track, and Elder Stephen Live Voice Memorization Coach.
+- Teach It Studio: 5-stage sermon/lesson preparation with Elder Stephen.
+- Support Tickets: Users can submit a ticket right next to this chat or click "Escalate to Administrator" for direct email follow-up.`,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
+      },
+      timeoutMs: 12000
+    });
+
+    const reply = String(response?.text || "").trim();
+    if (!reply) {
+      return res.status(502).json({ error: "Empty assistant reply" });
+    }
+    return res.json({ reply });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Live assistant error" });
+  }
 });
 
 app.get("/api/support/tickets", (req, res) => {
@@ -6103,8 +6156,22 @@ app.post("/api/elder-stephen", async (req, res) => {
 
     let text = "";
     if (isSabbathSchool) {
-      text = `Greetings, ${actualName}. I am Elder Stephen, here to answer your questions regarding today's lesson on ${studyDoc}. How can I assist you today?`;
-      return res.json({ text: formatProperElderSpacing(text), commentaryMode: "prestige", modeUsed: "prestige", latencyMs });
+      if (latestUserText && latestUserText.trim().length > 10 && noteContent) {
+        const cleanSentences = String(noteContent)
+          .replace(/\s+/g, " ")
+          .match(/[^.!?]+[.!?]+/g) || [];
+        const picked = cleanSentences
+          .map((s) => s.trim())
+          .filter((s) => s.length >= 30 && !s.endsWith("?"))
+          .slice(0, 3)
+          .join(" ");
+        text = picked
+          ? `${picked} Across this week's 7-day study on *${studyDoc}*, this reminds us to test every teaching by Scripture and apply it faithfully.`
+          : `Today's study in *${studyDoc}* calls us to test every spiritual claim by Scripture and apply God's prophetic truth to our daily walk.`;
+      } else {
+        text = `Greetings, ${actualName}. I am Elder Stephen, here to answer your questions regarding today's lesson on ${studyDoc}. How can I assist you today?`;
+      }
+      return res.json({ text: formatProperElderSpacing(text), commentaryMode: resolvedMode, modeUsed: resolvedMode, latencyMs });
     }
 
     if (mode === "Recall") {
@@ -6207,6 +6274,39 @@ The Seventh-day Adventist movement was raised to proclaim the everlasting gospel
 
     // User's active request text
     const userRequestText = latestUserText || `Please share your pastoral guidance on ${activePassage}.`;
+
+    if (effectiveMode === "velocity" && isSabbathSchool) {
+      const ssVelocityInstruction = `You are Elder Stephen, a warm Seventh-day Adventist pastoral mentor in "Study To Be Approved" (STBA).
+The student just clicked "Discuss Day with Elder Stephen" in Sabbath School Studies and asked for a simple summary or key takeaway.
+
+CRITICAL RULES:
+- Do NOT greet the user (no "Shalom", no "Greetings", no "Listen", no "How can I assist you today?"). Jump straight into the answer.
+- Keep your response VERY SHORT — a quick 30-second read (3 to 4 crisp sentences, ~70 to 100 words total).
+- Draw on the "Full 7-Day Lesson Arc" in the context so your insight connects today's day to the broader 7-day week and feels distinct from the Daily Syllabus summary.
+- Focus on the practical spiritual takeaway for ${actualName}.
+- Format with proper spaces between words and punctuation.`;
+
+      const ssUserBlock = `Weekly Lesson: "${documentTitle}"
+${noteContent ? `Active Day Content:\n"""\n${noteContent.slice(0, 1800)}\n"""\n` : ""}${contextSummary ? `${contextSummary}\n` : ""}Student Question: "${userRequestText}"`;
+
+      const ssResult = await generateContentWithFallback(aiClient, {
+        model: "gemini-3.8-flash",
+        contents: [{ role: "user", parts: [{ text: ssUserBlock }] }],
+        config: {
+          systemInstruction: ssVelocityInstruction,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
+        },
+        timeoutMs: 12000
+      });
+
+      const ssText = formatProperElderSpacing(ssResult?.text || "");
+      return res.json({
+        text: ssText,
+        commentaryMode: "velocity",
+        modeUsed: "velocity",
+        latencyMs: Date.now() - startTime
+      });
+    }
 
     // ==========================================
     // BRANCH A: VELOCITY MODE (Fast, Concise Elder Stephen)
