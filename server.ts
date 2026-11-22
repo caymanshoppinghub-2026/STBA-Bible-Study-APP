@@ -6632,10 +6632,13 @@ app.post("/api/sabbath/daily-syllabus-ai", async (req, res) => {
   try {
     const prompt = `You are a Seventh-day Adventist Bible scholar summarizing today's Sabbath School lesson for "Study To Be Approved" (STBA).
 Synthesize the following daily lesson ("${dayTitle}" in "${lessonTitle}") into:
-1. "narrativeParagraphs": An array of 2 rich, substantive narrative paragraphs (3-5 sentences each, NO bullet points) that give the student a clear, plain-spoken understanding of what today's actual lesson ("${dayTitle}") is teaching.
+1. "narrativeParagraphs": An array of 1 or 2 concise, plain-spoken paragraphs (2-4 sentences each, NO bullet points) that capture what today's actual lesson ("${dayTitle}") is teaching and what the reader should take away from it.
+   STYLE EXAMPLE (use this exact clarity, brevity, and takeaway-focused tone—do NOT copy its content for other days):
+   "Just as a real diamond proves its authenticity by surviving extreme tests—like intense heat followed by cold water—while a counterfeit shatters, any claim to the gift of prophecy must be tested rather than accepted at face value. Because true prophecy is more valuable than any gem, this study examines biblical principles (Deuteronomy 13:1-5; Isaiah 8:20) to help us distinguish genuine prophetic messengers from counterfeits."
    CRITICAL:
-   - Do NOT write meta-commentary like "today's study walks through..." or "we should summarize these texts." Actually summarize and explain the lesson's core teaching, biblical message, and practical spiritual truth so the reader clearly understands what the day's lesson is saying!
-   - Explicitly weave in ALL of today's exact Scripture references [${refList.map((r) => `"${r}"`).join(", ")}] naturally as you explain what each passage teaches in the lesson.
+   - Dynamically synthesize ONLY today's scraped lesson paragraphs below—never reuse the diamond example on other days.
+   - Do NOT write meta-commentary like "today's study walks through..." or "we should summarize these texts." Directly state what the lesson teaches and what the reader should grasp.
+   - Explicitly weave in ALL of today's exact Scripture references [${refList.map((r) => `"${r}"`).join(", ")}] naturally within the summary.
 2. "scriptureInsights": A JSON object mapping each scripture reference in [${refList.map((r) => `"${r}"`).join(", ")}] to a crisp 1-sentence explanation of WHY that specific scripture was selected for "${dayTitle}" ("${lessonTitle}") and WHAT the lesson expects the student to understand from it.
    CRITICAL: Jump directly into the passage and its purpose in the lesson. Do NOT repeat any boilerplate prefix like "In the theological framework of...", do NOT mention the quarterly title or quarter code (e.g. "The Gift of Prophecy", "2026 Q4"), do NOT include verbatim scripture quotes, and do NOT reuse the same template across verses.
 
