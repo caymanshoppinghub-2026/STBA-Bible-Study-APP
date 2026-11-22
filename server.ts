@@ -6572,13 +6572,13 @@ app.post("/api/sabbath/daily-syllabus-ai", async (req, res) => {
     : [];
 
   const buildFallbackResponse = () => {
-    const refClause = refList.length > 0 ? ` (${refList.slice(0, 4).join("; ")})` : "";
+    const refClause = refList.length > 0 ? ` (${refList.join("; ")})` : "";
     const narrativeParagraphs = [
-      `In Lesson ${safeIdx + 1}, focusing on "${cleanQuarter}" and "${dayTitle}," we examine how the prophetic and apostolic witness of "${lessonTitle}"${refClause} illuminates Christ's redemptive mission. Rather than reading passages in isolation, comparing Scripture with Scripture within its historical and literary context opens our minds and hearts to the unified meaning of God's Word.`
+      `In "${dayTitle}" from Lesson ${safeIdx + 1} (${lessonTitle}), today's study walks through ${refList.length > 0 ? `key passages including ${refList.join(", ")}` : "Scripture"} to uncover what God reveals about His prophetic Word. Comparing these verses in their biblical context helps us grasp the central truth of the day's lesson and apply it faithfully.`
     ];
     const scriptureInsights: Record<string, string> = {};
     for (const ref of refList) {
-      scriptureInsights[ref] = `Explains the theological foundation of "${dayTitle}" within "${lessonTitle}," demonstrating how ${ref} reveals Christ's covenant faithfulness and guides sound biblical interpretation.`;
+      scriptureInsights[ref] = `Selected for "${dayTitle}" in "${lessonTitle}" to show how ${ref} establishes today's core biblical truth and guides faithful interpretation.`;
     }
     return { narrativeParagraphs, scriptureInsights };
   };
@@ -6591,11 +6591,10 @@ app.post("/api/sabbath/daily-syllabus-ai", async (req, res) => {
   try {
     const prompt = `You are the theological synthesizer for the Sabbath School Daily Syllabus in "Study To Be Approved" (STBA).
 Synthesize the following daily Sabbath School lesson into:
-1. "narrativeParagraphs": An array of 1 or 2 cohesive, multi-sentence narrative paragraphs (NO bullet points) that synthesize all key theological points and verse references from the day's lesson.
-   Follow this exact narrative style and tone:
-   Example: "In Lesson 1, focusing on \\"The Gift of Prophecy,\\" we examine Christ's interaction with two disciples on the road to Emmaus. Christ dispelled their disappointment by explaining scriptures in a broader context, opening their minds and hearts to the true meaning of Old Testament prophecies regarding his mission."
-2. "scriptureInsights": A JSON object mapping each scripture reference in [${refList.map((r) => `"${r}"`).join(", ")}] to a specific, 1-2 sentence theological insight explaining the theological relevance of that specific scripture in the context of today's lesson ("${dayTitle}").
-   CRITICAL: Do NOT include verbatim scripture quotes, do NOT copy raw sentences from the lesson, and do NOT use generic filler connections. Explain the specific theological relevance of each passage to the day's theme.
+1. "narrativeParagraphs": An array of 1 or 2 cohesive, multi-sentence narrative paragraphs (NO bullet points) that provide an actual summary of today's specific lesson ("${dayTitle}" in "${lessonTitle}").
+   CRITICAL: Explicitly weave in ALL of today's exact Scripture references [${refList.map((r) => `"${r}"`).join(", ")}] naturally within the summary so the reader sees how each passage drives today's study.
+2. "scriptureInsights": A JSON object mapping each scripture reference in [${refList.map((r) => `"${r}"`).join(", ")}] to a crisp 1-sentence dynamic explanation of WHY that specific scripture was selected to be part of "${dayTitle}" ("${lessonTitle}") and WHAT the lesson expects the student to understand from it.
+   CRITICAL: Jump directly into the passage and its purpose in the lesson. Do NOT repeat any boilerplate prefix like "In the theological framework of...", do NOT mention the quarterly title or quarter code (e.g. "The Gift of Prophecy", "2026 Q4"), do NOT include verbatim scripture quotes, and do NOT use generic filler or reuse the same template across multiple verses. Explain specifically why each verse was chosen for today's lesson.
 
 Lesson Context:
 - Lesson Number: Lesson ${safeIdx + 1}
