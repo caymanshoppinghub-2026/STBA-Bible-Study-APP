@@ -456,6 +456,62 @@ const COMMON_STOP_WORDS = new Set([
   "so", "no", "not", "my", "your", "his", "her", "our", "their", "unto", "ye", "thee", "thou", "thy"
 ]);
 
+function scrambleQuizQuestions(raw: {
+  contextQuestions: ContextQuestionData[];
+  reflectionQ: ReflectionAnchorData;
+}): {
+  contextQuestions: ContextQuestionData[];
+  reflectionQ: ReflectionAnchorData;
+} {
+  // Choose a random permutation of target correct-option positions (0 = A, 1 = B, 2 = C)
+  // so the correct answer moves unpredictably across A, B, and C and never stays on the same letter
+  const positionPermutations = [
+    [0, 1, 2],
+    [0, 2, 1],
+    [1, 0, 2],
+    [1, 2, 0],
+    [2, 0, 1],
+    [2, 1, 0]
+  ];
+  const targetPositions =
+    positionPermutations[Math.floor(Math.random() * positionPermutations.length)];
+
+  const scrambledQuestions = raw.contextQuestions.map((q, qIdx) => {
+    const correctOpt = q.options.find((o) => o.isCorrect);
+    const wrongOpts = q.options
+      .filter((o) => !o.isCorrect)
+      .sort(() => Math.random() - 0.5);
+
+    if (!correctOpt || q.options.length !== 3) {
+      return {
+        ...q,
+        options: [...q.options].sort(() => Math.random() - 0.5)
+      };
+    }
+
+    const targetPos = targetPositions[qIdx % 3];
+    const arranged: typeof q.options = [];
+    let wrongIdx = 0;
+    for (let i = 0; i < 3; i++) {
+      if (i === targetPos) {
+        arranged.push(correctOpt);
+      } else {
+        arranged.push(wrongOpts[wrongIdx++]);
+      }
+    }
+
+    return {
+      ...q,
+      options: arranged
+    };
+  });
+
+  return {
+    ...raw,
+    contextQuestions: scrambledQuestions
+  };
+}
+
 export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
   verse,
   sabbathMode = false,
@@ -465,7 +521,7 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
   onOpenFullRecall
 }) => {
   const { showConfetti } = useApp();
-  const quizData = useMemo(() => getVerseQuizData(verse), [verse]);
+  const quizData = useMemo(() => scrambleQuizQuestions(getVerseQuizData(verse)), [verse]);
 
   // Steps: 1 = Passage Context (3 Questions), 2 = Key Phrases (Cloze Recall), 3 = Personal Anchor
   const [internalStep, setInternalStep] = useState<1 | 2 | 3>(propActiveStep || 1);
