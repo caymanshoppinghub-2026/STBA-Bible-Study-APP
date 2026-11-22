@@ -418,7 +418,7 @@ export const FloatingQuickNote: React.FC = () => {
         <div
           id="floating-quick-note-trigger-wrapper"
           style={{ top: `${triggerTopPct}%`, fontFamily: "'Lato', sans-serif" }}
-          className="fixed -translate-y-1/2 right-0 z-40 select-none touch-none font-['Lato',sans-serif] not-italic overflow-hidden"
+          className="fixed -translate-y-1/2 right-0 z-40 select-none touch-none font-['Lato',sans-serif] not-italic"
           onMouseEnter={() => {
             if (!isHovered) {
               setIsHovered(true);
