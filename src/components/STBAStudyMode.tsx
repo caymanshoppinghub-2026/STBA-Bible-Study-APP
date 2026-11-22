@@ -1389,6 +1389,8 @@ export function STBAStudyMode() {
                   {activeRightTab === "xref" && (
                     <CrossReferenceEngine
                       report={report}
+                      customVerses={customVerses}
+                      currentPassageRef={customReference || report?.reference || queryRef || ""}
                       activeVerseIndex={activeVerseIndex}
                       activeStepIndex={activeStepIndex}
                       setActiveStepIndex={setActiveStepIndex}

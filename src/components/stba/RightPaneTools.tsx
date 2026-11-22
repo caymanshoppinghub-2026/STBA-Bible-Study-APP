@@ -5443,26 +5443,153 @@ const PRECOMPILED_XREFS: Record<string, Array<{ ref: string; description: string
     { ref: "Ezekiel 4:6", description: "And when thou hast accomplished them, lie again on thy right side, and thou shalt bear the iniquity of the house of Judah forty days: I have appointed thee each day for a year." },
     { ref: "Daniel 9:24-27", description: "Seventy weeks are determined upon thy people and upon thy holy city... from the going forth of the commandment to restore and to build Jerusalem." },
     { ref: "Hebrews 9:23", description: "It was therefore necessary that the patterns of things in the heavens should be purified with these; but the heavenly things themselves with better sacrifices." }
+  ],
+
+  // John 1 (Logos Treasury of Scripture Knowledge Chain)
+  "john 1:1": [
+    { ref: "Genesis 1:1", description: "In the beginning God created the heaven and the earth." },
+    { ref: "Colossians 1:17", description: "And he is before all things, and by him all things consist." },
+    { ref: "1 John 1:1", description: "That which was from the beginning, which we have heard, which we have seen with our eyes, which we have looked upon, and our hands have handled, of the Word of life." },
+    { ref: "John 1:14", description: "And the Word was made flesh, and dwelt among us, (and we beheld his glory, the glory as of the only begotten of the Father,) full of grace and truth." },
+    { ref: "Revelation 19:13", description: "And he was clothed with a vesture dipped in blood: and his name is called The Word of God." },
+    { ref: "John 17:5", description: "And now, O Father, glorify thou me with thine own self with the glory which I had with thee before the world was." },
+    { ref: "1 John 1:2", description: "For the life was manifested, and we have seen it, and bear witness, and shew unto you that eternal life, which was with the Father, and was manifested unto us." }
+  ],
+  "john 1:2": [
+    { ref: "Genesis 1:1", description: "In the beginning God created the heaven and the earth." },
+    { ref: "Proverbs 8:22-30", description: "The LORD possessed me in the beginning of his way, before his works of old... Then I was by him, as one brought up with him." },
+    { ref: "John 17:5", description: "And now, O Father, glorify thou me with thine own self with the glory which I had with thee before the world was." },
+    { ref: "1 John 1:2", description: "For the life was manifested, and we have seen it, and bear witness, and shew unto you that eternal life, which was with the Father." }
+  ],
+  "john 1:3": [
+    { ref: "Colossians 1:16-17", description: "For by him were all things created, that are in heaven, and that are in earth, visible and invisible... all things were created by him, and for him." },
+    { ref: "Hebrews 1:2", description: "Hath in these last days spoken unto us by his Son, whom he hath appointed heir of all things, by whom also he made the worlds." },
+    { ref: "Psalms 33:6", description: "By the word of the LORD were the heavens made; and all the host of them by the breath of his mouth." },
+    { ref: "Ephesians 3:9", description: "And to make all men see what is the fellowship of the mystery, which from the beginning of the world hath been hid in God, who created all things by Jesus Christ." },
+    { ref: "1 Corinthians 8:6", description: "But to us there is but one God, the Father, of whom are all things, and we in him; and one Lord Jesus Christ, by whom are all things, and we by him." }
+  ],
+  "john 1:4": [
+    { ref: "John 5:26", description: "For as the Father hath life in himself; so hath he given to the Son to have life in himself." },
+    { ref: "John 8:12", description: "Then spake Jesus again unto them, saying, I am the light of the world: he that followeth me shall not walk in darkness, but shall have the light of life." },
+    { ref: "John 14:6", description: "Jesus saith unto him, I am the way, the truth, and the life: no man cometh unto the Father, but by me." },
+    { ref: "1 John 5:11", description: "And this is the record, that God hath given to us eternal life, and this life is in his Son." }
+  ],
+  "john 1:5": [
+    { ref: "John 3:19", description: "And this is the condemnation, that light is come into the world, and men loved darkness rather than light, because their deeds were evil." },
+    { ref: "John 12:35", description: "Then Jesus said unto them, Yet a little while is the light with you. Walk while ye have the light, lest darkness come upon you." },
+    { ref: "1 John 2:8", description: "Again, a new commandment I write unto you, which thing is true in him and in you: because the darkness is past, and the true light now shineth." }
+  ],
+  "john 1:14": [
+    { ref: "1 Timothy 3:16", description: "And without controversy great is the mystery of godliness: God was manifest in the flesh, justified in the Spirit, seen of angels." },
+    { ref: "Hebrews 2:14", description: "Forasmuch then as the children are partakers of flesh and blood, he also himself likewise took part of the same." },
+    { ref: "Matthew 1:23", description: "Behold, a virgin shall be with child, and shall bring forth a son, and they shall call his name Emmanuel, which being interpreted is, God with us." },
+    { ref: "Exodus 25:8", description: "And let them make me a sanctuary; that I may dwell among them." },
+    { ref: "2 Peter 1:16-17", description: "We were eyewitnesses of his majesty. For he received from God the Father honour and glory." },
+    { ref: "Colossians 2:9", description: "For in him dwelleth all the fulness of the Godhead bodily." }
+  ],
+  "john 1:29": [
+    { ref: "Isaiah 53:7", description: "He was oppressed, and he was afflicted, yet he opened not his mouth: he is brought as a lamb to the slaughter." },
+    { ref: "1 Peter 1:19", description: "But with the precious blood of Christ, as of a lamb without blemish and without spot." },
+    { ref: "Exodus 12:3-6", description: "In the tenth day of this month they shall take to them every man a lamb... Your lamb shall be without blemish." },
+    { ref: "Revelation 5:6", description: "And I beheld, and, lo, in the midst of the throne... stood a Lamb as it had been slain." }
+  ],
+  "genesis 1:1": [
+    { ref: "John 1:1-3", description: "In the beginning was the Word, and the Word was with God, and the Word was God. All things were made by him." },
+    { ref: "Hebrews 11:3", description: "Through faith we understand that the worlds were framed by the word of God." },
+    { ref: "Psalms 33:6", description: "By the word of the LORD were the heavens made; and all the host of them by the breath of his mouth." },
+    { ref: "Colossians 1:16-17", description: "For by him were all things created, that are in heaven, and that are in earth... and by him all things consist." },
+    { ref: "Exodus 20:11", description: "For in six days the LORD made heaven and earth, the sea, and all that in them is." }
+  ],
+  "genesis 3:15": [
+    { ref: "Revelation 12:17", description: "And the dragon was wroth with the woman, and went to make war with the remnant of her seed." },
+    { ref: "Galatians 4:4", description: "But when the fulness of the time was come, God sent forth his Son, made of a woman." },
+    { ref: "Romans 16:20", description: "And the God of peace shall bruise Satan under your feet shortly." },
+    { ref: "Hebrews 2:14", description: "That through death he might destroy him that had the power of death, that is, the devil." },
+    { ref: "1 John 3:8", description: "For this purpose the Son of God was manifested, that he might destroy the works of the devil." }
+  ],
+  "james 1:2": [
+    { ref: "Romans 5:3-5", description: "We glory in tribulations also: knowing that tribulation worketh patience; And patience, experience; and experience, hope." },
+    { ref: "1 Peter 1:6-7", description: "That the trial of your faith, being much more precious than of gold that perisheth, though it be tried with fire, might be found unto praise." },
+    { ref: "Matthew 5:11-12", description: "Blessed are ye, when men shall revile you, and persecute you... Rejoice, and be exceeding glad." },
+    { ref: "Hebrews 12:11", description: "Now no chastening for the present seemeth to be joyous, but grievous: nevertheless afterward it yieldeth the peaceable fruit of righteousness." }
+  ],
+  "james 1:5": [
+    { ref: "Proverbs 2:3-6", description: "For the LORD giveth wisdom: out of his mouth cometh knowledge and understanding." },
+    { ref: "1 Kings 3:9-12", description: "Give therefore thy servant an understanding heart... Behold, I have given thee a wise and an understanding heart." },
+    { ref: "Matthew 7:7-8", description: "Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you." },
+    { ref: "Jeremiah 29:12-13", description: "And ye shall seek me, and find me, when ye shall search for me with all your heart." }
   ]
 };
 
 export const CrossReferenceEngine: React.FC<ToolProps> = ({ 
   report, 
+  customVerses,
+  currentPassageRef,
   activeVerseIndex, 
   onReferenceChange, 
   theme 
 }) => {
-  // Calculate current baseline verse reference
-  const currentBaseRef = report
-    ? activeVerseIndex
-      ? `${report.reference.split(":")[0].split(" ")[0]} ${report.reference.split(" ")[1]?.split(":")[0] || ""}:${activeVerseIndex}`
-      : report.reference
-    : "Revelation 14:12";
+  // Calculate current baseline verse reference accurately across 1/2/3-prefixed books and custom searches
+  const currentBaseRef = React.useMemo(() => {
+    // 1. If a specific verse is clicked and exists in customVerses with its own reference (e.g. Topic search or loaded chapter)
+    if (activeVerseIndex && Array.isArray(customVerses) && customVerses.length > 0) {
+      const matchedVerse = customVerses.find((v: any) => v.verseNumber === activeVerseIndex);
+      if (matchedVerse?.reference) {
+        const parsedMatch = parseScriptureLookup(matchedVerse.reference);
+        if (parsedMatch) {
+          return `${parsedMatch.book} ${parsedMatch.chapter}:${activeVerseIndex}`;
+        }
+      }
+    }
 
-  // Match precompiled SDA-aligned list of scriptures
+    // 2. Parse the active passage reference from currentPassageRef or report.reference
+    const rawPassage =
+      (currentPassageRef && !currentPassageRef.startsWith("Topic:") && !currentPassageRef.startsWith("Search:")
+        ? currentPassageRef
+        : "") ||
+      report?.reference ||
+      "Revelation 14:12";
+
+    const parsed = parseScriptureLookup(rawPassage);
+    if (parsed) {
+      const targetV = activeVerseIndex || parsed.startVerse || 1;
+      return `${parsed.book} ${parsed.chapter}:${targetV}`;
+    }
+
+    return rawPassage;
+  }, [currentPassageRef, report?.reference, activeVerseIndex, customVerses]);
+
+  // Match precompiled SDA-aligned & Logos TSK list of scriptures
   const activeLookupKey = currentBaseRef.toLowerCase().trim();
   const sessionXrefKey = `stba_xref_insight_${encodeURIComponent(activeLookupKey)}`;
   const precompiledMatch = PRECOMPILED_XREFS[activeLookupKey];
+  const [dynamicWitnessesMap, setDynamicWitnessesMap] = useState<
+    Record<string, Array<{ ref: string; description: string }>>
+  >({});
+
+  // Dynamically fetch interconnected TSK cross-references for ANY verse in the Bible
+  useEffect(() => {
+    if (precompiledMatch || dynamicWitnessesMap[activeLookupKey]) return;
+    let cancelled = false;
+    apiFetch("/api/study/cross-references", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reference: currentBaseRef }),
+    })
+      .then((res) => (res.ok ? safeParseResponseJson<any>(res) : null))
+      .then((data) => {
+        if (!cancelled && data?.valid && Array.isArray(data.witnesses) && data.witnesses.length > 0) {
+          setDynamicWitnessesMap((prev) => ({
+            ...prev,
+            [activeLookupKey]: data.witnesses,
+          }));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLookupKey, currentBaseRef, precompiledMatch, dynamicWitnessesMap]);
 
   const [customWitnessInput, setCustomWitnessInput] = useState("");
   const [studyNotes, setStudyNotes] = useState(() => {
@@ -5519,15 +5646,44 @@ export const CrossReferenceEngine: React.FC<ToolProps> = ({
     } catch (e) {}
   }, [sessionXrefKey]);
 
-  // Derive final witnesses list to render instantly of parallel covenants
-  const currentWitnessesList = precompiledMatch 
-    ? precompiledMatch 
-    : report && report.step3 && report.step3.scripture_compares 
-      ? report.step3.scripture_compares 
-      : [
-          { ref: "Revelation 12:17", description: "And the dragon was wroth with the woman, and went to make war with the remnant... which keep the commandments of God." },
-          { ref: "Exodus 20:11", description: "For in six days the Lord made heaven and earth... and rested the seventh day, wherefore the Lord hallowed it." }
-        ];
+  // Derive final witnesses list to render instantly for the exact selected verse
+  const currentWitnessesList = React.useMemo(() => {
+    if (precompiledMatch) return precompiledMatch;
+    if (dynamicWitnessesMap[activeLookupKey]) return dynamicWitnessesMap[activeLookupKey];
+
+    // Only use report.step3.scripture_compares if it is NOT the static generic fallback
+    // AND the report reference matches the currently selected verse
+    if (
+      report?.step3?.scripture_compares &&
+      Array.isArray(report.step3.scripture_compares) &&
+      report.step3.scripture_compares.length > 0 &&
+      report.reference?.toLowerCase().trim() === activeLookupKey &&
+      report.step3.scripture_compares[0]?.ref !== "Leviticus 16:1-2"
+    ) {
+      return report.step3.scripture_compares;
+    }
+
+    // Book/Theme-aware instant fallback while /api/study/cross-references resolves (1ms)
+    if (activeLookupKey.startsWith("john 1")) {
+      return PRECOMPILED_XREFS["john 1:1"];
+    }
+    if (activeLookupKey.startsWith("genesis 1") || activeLookupKey.startsWith("genesis 2")) {
+      return PRECOMPILED_XREFS["genesis 1:1"];
+    }
+    if (activeLookupKey.startsWith("james 1")) {
+      return PRECOMPILED_XREFS["james 1:2"];
+    }
+    if (activeLookupKey.startsWith("hebrews 8") || activeLookupKey.startsWith("hebrews 9")) {
+      return PRECOMPILED_XREFS["hebrews 8:1"];
+    }
+    if (activeLookupKey.startsWith("daniel ")) {
+      return PRECOMPILED_XREFS["daniel 8:14"];
+    }
+    if (activeLookupKey.startsWith("romans ")) {
+      return PRECOMPILED_XREFS["romans 12:1"];
+    }
+    return PRECOMPILED_XREFS["revelation 14:12"];
+  }, [precompiledMatch, dynamicWitnessesMap, activeLookupKey, report]);
 
   // Logos Power Lookup: batch-fetch verbatim KJV Scripture text + Pericope for all active witnesses
   useEffect(() => {
