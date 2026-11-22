@@ -174,8 +174,9 @@ export const ElderStephenChat: React.FC<ElderStephenChatProps> = ({ note, trigge
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mr-9">
           <button 
+            type="button"
             onClick={handleEraseTopMessage}
             disabled={messages.length === 0}
             className="p-1.5 rounded text-[var(--nb-text-dim)] hover:text-rose-400 hover:bg-rose-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"

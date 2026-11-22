@@ -2869,10 +2869,11 @@ export const NotebookPage: React.FC = () => {
             <div className="flex flex-col h-full relative" id="drawer-loaded-space bg-stone-950/20">
               {/* Drawer header close anchor */}
               <button
+                type="button"
                 onClick={() => setDrawerMode('closed')}
-                className="absolute top-3.5 right-3.5 p-1 rounded-md text-[var(--nb-text-dim)] hover:text-[var(--nb-text-muted)] hover:bg-white/5 transition-colors z-20 cursor-pointer"
+                className="absolute top-4 right-3.5 p-1.5 rounded-md text-[var(--nb-text-dim)] hover:text-[var(--nb-text-muted)] hover:bg-white/5 transition-colors z-20 cursor-pointer"
                 title="Collapse study drawer"
-                id="btn-close-drawer animate-fade-in"
+                id="btn-close-drawer"
               >
                 <X className="w-4 h-4" />
               </button>

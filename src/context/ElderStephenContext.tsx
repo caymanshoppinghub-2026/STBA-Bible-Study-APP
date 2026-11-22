@@ -600,9 +600,14 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const eraseTopMessage = useCallback(() => {
     setMessages(prev => {
       if (prev.length === 0) return [];
+      const topMsg = prev[0];
+      if (topMsg && speakingMsgId === topMsg.id) {
+        stopActiveGeminiSpeech();
+        setSpeakingMsgId(null);
+      }
       return prev.slice(1);
     });
-  }, []);
+  }, [speakingMsgId]);
 
   // Summary generation helper for prompts
   const getContextSummaryString = useCallback((): string => {
