@@ -7643,8 +7643,8 @@ function buildDailyNarrativeSummary(
   const lowerTitle = (dayTitle || "").toLowerCase();
   const lowerLesson = (lessonTitle || "").toLowerCase();
 
-  // Curated cohesive multi-sentence narrative syntheses for "Interpreting Prophetic Writings" (The Gift of Prophecy)
-  if (lowerLesson.includes("interpreting prophetic writings") || cleanQuarter.toLowerCase().includes("gift of prophecy")) {
+  // Curated fallback ONLY for the specific "Interpreting Prophetic Writings" lesson (never hijack other weeks in the quarterly)
+  if (lowerLesson.includes("interpreting prophetic writings")) {
     if (dayIndex === 0 || lowerTitle.includes("interpreting prophetic writings")) {
       return [
         `In Lesson 1, focusing on "${cleanQuarter}," we examine Christ's interaction with two disciples on the road to Emmaus (Luke 24:21, 25–27). Christ dispelled their disappointment by explaining scriptures in a broader context, opening their minds and hearts to the true meaning of Old Testament prophecies regarding his mission (Luke 24:31–32, 44–49).`,
@@ -7732,12 +7732,12 @@ function buildDailyNarrativeSummary(
 
   const refSummaryClause =
     extractedRefs.length > 0
-      ? ` (${extractedRefs.slice(0, 4).join("; ")})`
+      ? ` (${extractedRefs.join(", ")})`
       : "";
 
   if (narrativeSentences.length === 0) {
     return [
-      `In Lesson ${dayIndex + 1}, focusing on "${cleanQuarter}" and "${dayTitle}," we examine how the biblical witness of "${lessonTitle}"${refSummaryClause} reveals Christ's redemptive mission and covenant faithfulness. By comparing Scripture with Scripture in its historical and literary context, believers gain a unified understanding of God's prophetic truth and its practical application for daily discipleship.`
+      `In "${dayTitle}" from Lesson ${dayIndex + 1} (${lessonTitle}), today's study examines ${extractedRefs.length > 0 ? extractedRefs.join(", ") : "Scripture"} to uncover Christ's redemptive mission and covenant faithfulness. Comparing these passages in context reveals how God's prophetic Word guides daily discipleship.`
     ];
   }
 
@@ -7745,7 +7745,7 @@ function buildDailyNarrativeSummary(
   const loweredFirst =
     firstSentenceBody.charAt(0).toLowerCase() + firstSentenceBody.slice(1);
   const introParagraph = [
-    `In Lesson ${dayIndex + 1}, focusing on "${cleanQuarter}" and "${dayTitle}," we examine how ${loweredFirst}`,
+    `In "${dayTitle}" (${lessonTitle})${refSummaryClause}, we examine how ${loweredFirst}`,
     ...narrativeSentences.slice(1, 3)
   ].join(" ");
 
@@ -7939,7 +7939,14 @@ function buildSpecificScriptureInsight(
     return `Within "${dayTitle}," ${canonicalRef} highlights the continuity of God's everlasting covenant of grace, showing how divine promises are realized through living faith and Spirit-empowered obedience.`;
   }
 
-  return `In the theological framework of "${dayTitle}" (${quarterlyTitle || lessonTitle}), ${canonicalRef} illuminates how the inspired witness of Scripture reveals God's redemptive character and guides the believer into Christ-centered doctrinal understanding.`;
+  const cleanLesson = (dayTitle || lessonTitle || "today's study").trim();
+  const sentenceMatch = (surroundingParagraph || "").replace(/[#*`>]/g, "").match(/[^.!?]+[.!?]/);
+  const firstThought = sentenceMatch ? sentenceMatch[0].trim() : "";
+  if (firstThought && firstThought.length > 24 && !firstThought.toLowerCase().includes(canonicalRef.toLowerCase())) {
+    return `In "${cleanLesson}," ${canonicalRef} illuminates this biblical truth: ${firstThought.charAt(0).toLowerCase()}${firstThought.slice(1)}`;
+  }
+
+  return `Within "${cleanLesson}," ${canonicalRef} reveals how God's Word guides believers in faith, prophetic discernment, and obedience to Christ.`;
 }
 
 function extractDailyScriptureBreakdown(
@@ -8095,18 +8102,16 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
   >({});
 
   const cacheKey = `${quarterlyTitle || ""}::${lessonTitle || ""}::${safeDayIndex}::${activeDay?.title || ""}`;
+  const [isAiSyllabusLoading, setIsAiSyllabusLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    // If this lesson is already covered by our curated "Interpreting Prophetic Writings" synthesis or already cached, skip network call
-    const isCuratedLesson =
-      (lessonTitle || "").toLowerCase().includes("interpreting prophetic writings") ||
-      (quarterlyTitle || "").toLowerCase().includes("gift of prophecy");
-    if (isCuratedLesson || aiSyllabusCache[cacheKey]) {
+    if (aiSyllabusCache[cacheKey]) {
       return;
     }
 
     const fetchAiSyllabusSynthesis = async () => {
+      setIsAiSyllabusLoading(true);
       try {
         const response = await apiFetch("/api/sabbath/daily-syllabus-ai", {
           method: "POST",
@@ -8116,7 +8121,7 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
             dayTitle: activeDay?.title || `Day ${safeDayIndex + 1}`,
             lessonTitle: lessonTitle || "Sabbath School Study",
             quarterlyTitle: quarterlyTitle || "Sabbath School Quarterly",
-            paragraphs: mainParagraphs.slice(0, 6),
+            paragraphs: [...mainParagraphs, ...egwParagraphs].slice(0, 8),
             references: baseScriptureBreakdown.map((item) => item.reference)
           })
         });
@@ -8131,14 +8136,16 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
             [cacheKey]: data
           }));
         }
-      } catch {}
+      } catch {} finally {
+        if (!cancelled) setIsAiSyllabusLoading(false);
+      }
     };
 
     fetchAiSyllabusSynthesis();
     return () => {
       cancelled = true;
     };
-  }, [cacheKey, safeDayIndex, activeDay?.title, lessonTitle, quarterlyTitle, mainParagraphs, baseScriptureBreakdown]);
+  }, [cacheKey, safeDayIndex, activeDay?.title, lessonTitle, quarterlyTitle, mainParagraphs, egwParagraphs, baseScriptureBreakdown]);
 
   const dailyNarrativeParagraphs = React.useMemo(() => {
     const aiParagraphs = aiSyllabusCache[cacheKey]?.narrativeParagraphs;
