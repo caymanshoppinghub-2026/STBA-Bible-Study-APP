@@ -927,10 +927,11 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
     rect: { top: number; bottom: number; left: number; width: number };
   } | null>(null);
   const scriptureHoverTimerRef = useRef<any>(null);
+  const activeHoverTargetRef = useRef<HTMLElement | null>(null);
 
   const handleWorkspaceClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    const scripture = target.getAttribute('data-scripture');
+    const target = (e.target as HTMLElement)?.closest?.('[data-scripture]') as HTMLElement | null;
+    const scripture = target?.getAttribute('data-scripture');
     if (scripture && onScriptureClick) {
       onScriptureClick(scripture);
     }
@@ -939,22 +940,39 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
   const handleWorkspaceMouseOver = (e: React.MouseEvent) => {
     const target = (e.target as HTMLElement)?.closest?.('[data-scripture]') as HTMLElement | null;
     const scripture = target?.getAttribute('data-scripture');
-    if (target && scripture) {
-      const rect = target.getBoundingClientRect();
-      const snapshot = { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width };
-      if (scriptureHoverTimerRef.current) clearTimeout(scriptureHoverTimerRef.current);
-      scriptureHoverTimerRef.current = setTimeout(() => {
-        setHoveredNoteScripture({ ref: scripture, rect: snapshot });
-      }, 110);
+    if (!target || !scripture) return;
+
+    // If already hovering this exact element, keep the card completely still without resetting
+    if (activeHoverTargetRef.current === target) {
+      return;
     }
+
+    activeHoverTargetRef.current = target;
+    const rect = target.getBoundingClientRect();
+    const snapshot = { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width };
+    if (scriptureHoverTimerRef.current) clearTimeout(scriptureHoverTimerRef.current);
+    scriptureHoverTimerRef.current = setTimeout(() => {
+      setHoveredNoteScripture((prev) =>
+        prev?.ref === scripture &&
+        prev.rect.top === snapshot.top &&
+        prev.rect.left === snapshot.left
+          ? prev
+          : { ref: scripture, rect: snapshot }
+      );
+    }, 110);
   };
 
   const handleWorkspaceMouseOut = (e: React.MouseEvent) => {
-    const target = (e.target as HTMLElement)?.closest?.('[data-scripture]');
-    if (target) {
-      if (scriptureHoverTimerRef.current) clearTimeout(scriptureHoverTimerRef.current);
-      setHoveredNoteScripture(null);
+    const target = (e.target as HTMLElement)?.closest?.('[data-scripture]') as HTMLElement | null;
+    if (!target) return;
+    const related = e.relatedTarget as HTMLElement | null;
+    if (related && target.contains(related)) return;
+
+    if (activeHoverTargetRef.current === target) {
+      activeHoverTargetRef.current = null;
     }
+    if (scriptureHoverTimerRef.current) clearTimeout(scriptureHoverTimerRef.current);
+    setHoveredNoteScripture(null);
   };
 
   // Word count & reading metrics

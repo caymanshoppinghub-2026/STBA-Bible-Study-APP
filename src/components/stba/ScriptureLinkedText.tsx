@@ -296,7 +296,7 @@ export const LogosScriptureHoverCard: React.FC<{
         transform: showAbove ? "translateY(-100%)" : "translateY(0)",
         zIndex: 99999,
       }}
-      className="w-[340px] max-w-[92vw] pointer-events-none select-none animate-in fade-in zoom-in-95 duration-150"
+      className="w-[340px] max-w-[92vw] pointer-events-none select-none"
     >
       <div className="rounded-2xl bg-[#06162c]/70 backdrop-blur-xl text-[#EEF2FA] border border-[#E5B842]/45 shadow-[0_18px_50px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.2)] px-4 py-3.5 font-sans not-italic">
         {(lookupData?.pericope || fallbackPericope) && (
