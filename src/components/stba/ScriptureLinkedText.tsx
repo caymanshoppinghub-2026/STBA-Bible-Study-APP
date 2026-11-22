@@ -337,36 +337,36 @@ export const LogosScriptureHoverTrigger: React.FC<LogosScriptureHoverTriggerProp
             }}
             className="w-[340px] max-w-[92vw] pointer-events-none select-none animate-in fade-in zoom-in-95 duration-150"
           >
-            <div className="rounded-xl bg-[#252830] text-[#E6E8EC] border border-[#363B46] shadow-2xl shadow-black/75 px-4 py-3.5 font-sans not-italic">
+            <div className="rounded-xl bg-[#06162c]/95 backdrop-blur-md text-[#E6ECF8] border border-[#E5B842]/35 shadow-2xl shadow-black/75 px-4 py-3.5 font-sans not-italic">
               {/* Pericope Title at Top Left */}
               {(lookupData?.pericope || fallbackPericope) && (
-                <div className="text-[13px] font-bold text-[#F3F4F6] mb-1 leading-snug not-italic">
+                <div className="text-[13px] font-bold text-[#F3CF65] mb-1 leading-snug not-italic">
                   {lookupData?.pericope || fallbackPericope}
                 </div>
               )}
 
               {/* Verbatim Scripture Body — Uniform Font, Zero Italics */}
-              <div className="max-h-[220px] overflow-y-auto space-y-1.5 text-[14px] leading-relaxed text-[#E6E8EC] not-italic font-normal">
+              <div className="max-h-[220px] overflow-y-auto space-y-1.5 text-[14px] leading-relaxed text-[#E6ECF8] not-italic font-normal">
                 {lookupData && lookupData.verses.length > 0 ? (
                   lookupData.verses.slice(0, 6).map((v) => (
                     <p key={v.verseNumber} className="not-italic font-normal leading-relaxed">
-                      <sup className="text-[10.5px] font-bold text-[#D1D5DB] mr-1 select-none">
+                      <sup className="text-[10.5px] font-bold text-[#F3CF65]/90 mr-1 select-none">
                         {v.verseNumber}
                       </sup>
                       <span>{v.text}</span>
                     </p>
                   ))
                 ) : (
-                  <p className="text-[13px] text-[#D1D5DB] not-italic font-normal">
+                  <p className="text-[13px] text-[#C8D4EA] not-italic font-normal">
                     {parsed?.canonicalRef || reference}
                   </p>
                 )}
               </div>
 
               {/* Clean Bottom Row: Bible Version on Bottom-Left, Reference on Bottom-Right */}
-              <div className="mt-2.5 flex items-center justify-between text-[13px] font-normal text-[#D1D5DB] not-italic">
+              <div className="mt-2.5 pt-2 border-t border-[#0d3060] flex items-center justify-between text-[13px] font-normal text-[#B2C0D8] not-italic">
                 <span>KJV</span>
-                <span>{lookupData?.canonicalReference || parsed?.canonicalRef || reference}</span>
+                <span className="text-[#F3CF65]/90">{lookupData?.canonicalReference || parsed?.canonicalRef || reference}</span>
               </div>
             </div>
           </div>,
