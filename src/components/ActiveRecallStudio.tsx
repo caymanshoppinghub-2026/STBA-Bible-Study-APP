@@ -28,7 +28,7 @@ import { Scripture } from "../types";
 
 // Import modules
 import { RecallSession } from "./RecallSession";
-import { SpacedRepetition } from "./SpacedRepetition";
+import { SpacedRepetition, recordSpacedRepetitionReview } from "./SpacedRepetition";
 import { Interleaving } from "./Interleaving";
 import { WalkAndTalk } from "./WalkAndTalk";
 import { VoiceReflection } from "./VoiceReflection";
@@ -124,6 +124,7 @@ export const ActiveRecallStudio: React.FC = () => {
   // Handler when a queued review finishes in RecallSession
   const handleRecallComplete = (score: number, scriptureId: string) => {
     autoCompleteThirtyDayByScripture(scriptureId, activeScripture?.reference);
+    recordSpacedRepetitionReview(scriptureId, activeScripture?.reference, score);
     if (activeQueue && activeQueueIndex < activeQueue.length - 1) {
       const nextIdx = activeQueueIndex + 1;
       setActiveQueueIndex(nextIdx);

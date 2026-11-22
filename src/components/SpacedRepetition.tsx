@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Calendar,
@@ -107,10 +107,185 @@ const DEFAULT_DUE_ITEMS: DueItem[] = [
   }
 ];
 
+export const SPACED_REP_STORAGE_KEY = "stba_spaced_repetition_reviews";
+
+export interface SpacedReviewRecord {
+  id: string;
+  reference: string;
+  lastReviewedAt: number;
+  nextDueAt: number;
+  score: number;
+  intervalDays: number;
+}
+
+const normalizeRefKey = (ref?: string) =>
+  String(ref || "").toLowerCase().replace(/\s+/g, "").trim();
+
+export function getSpacedRepetitionReviews(): Record<string, SpacedReviewRecord> {
+  try {
+    const raw = localStorage.getItem(SPACED_REP_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function recordSpacedRepetitionReview(
+  scriptureId?: string,
+  reference?: string,
+  score: number = 100
+): SpacedReviewRecord {
+  const reviews = getSpacedRepetitionReviews();
+  const intervalDays = score >= 90 ? 7 : score >= 70 ? 3 : 1;
+  const now = Date.now();
+  const record: SpacedReviewRecord = {
+    id: scriptureId || normalizeRefKey(reference) || `sr-${now}`,
+    reference: reference || "",
+    lastReviewedAt: now,
+    nextDueAt: now + intervalDays * 24 * 60 * 60 * 1000,
+    score,
+    intervalDays
+  };
+
+  if (scriptureId) {
+    reviews[scriptureId] = record;
+  }
+  const refKey = normalizeRefKey(reference);
+  if (refKey) {
+    reviews[`ref:${refKey}`] = record;
+  }
+
+  try {
+    localStorage.setItem(SPACED_REP_STORAGE_KEY, JSON.stringify(reviews));
+    window.dispatchEvent(
+      new CustomEvent("stba-spaced-rep-updated", { detail: record })
+    );
+  } catch {}
+
+  return record;
+}
+
+const SPACED_REP_SEED_KEY = "stba_spaced_rep_seeded_at";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getOrCreateSeedTime(): number {
+  try {
+    const raw = localStorage.getItem(SPACED_REP_SEED_KEY);
+    const parsed = raw ? Number(raw) : NaN;
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    const now = Date.now();
+    localStorage.setItem(SPACED_REP_SEED_KEY, String(now));
+    return now;
+  } catch {
+    return Date.now();
+  }
+}
+
+const filterActiveDueItems = (reviews: Record<string, SpacedReviewRecord>): DueItem[] => {
+  const now = Date.now();
+  const seededAt = getOrCreateSeedTime();
+
+  return DEFAULT_DUE_ITEMS.reduce<DueItem[]>((acc, item) => {
+    const byId = reviews[item.scripture.id];
+    const byRef = reviews[`ref:${normalizeRefKey(item.scripture.reference)}`];
+    const matched = byId || byRef;
+
+    // If reviewed and not yet due again, remove from the active due queue until its spaced date arrives
+    if (matched && matched.nextDueAt > now) {
+      return acc;
+    }
+
+    // Compute real-time due timestamp (either from last review's nextDueAt or initial offset from seededAt)
+    const initialDueAt = seededAt - item.daysLate * DAY_MS;
+    const effectiveDueAt = matched ? matched.nextDueAt : initialDueAt;
+    const msUntilDue = effectiveDueAt - now;
+    const daysUntilDue = Math.ceil(msUntilDue / DAY_MS);
+
+    let urgency: "now" | "soon" | "later" = item.urgency;
+    let dueDateText = item.dueDateText;
+    let daysLate = item.daysLate;
+
+    if (msUntilDue <= 0) {
+      const overdueDays = Math.floor(Math.abs(msUntilDue) / DAY_MS);
+      urgency = "now";
+      daysLate = Math.max(1, overdueDays || (matched ? 1 : item.daysLate));
+      if (overdueDays >= 1) {
+        dueDateText = `Due now (Overdue ${overdueDays} ${overdueDays === 1 ? "day" : "days"})`;
+      } else if (!matched && item.daysLate === 1) {
+        dueDateText = "Due now (Overdue 4 hrs)";
+      } else {
+        dueDateText = "Ready to review";
+      }
+    } else if (daysUntilDue === 1) {
+      urgency = "soon";
+      daysLate = -1;
+      dueDateText = "Due tomorrow";
+    } else {
+      urgency = "later";
+      daysLate = -daysUntilDue;
+      dueDateText = `Due in ${daysUntilDue} days`;
+    }
+
+    acc.push({
+      ...item,
+      urgency,
+      dueDateText,
+      daysLate
+    });
+    return acc;
+  }, []);
+};
+
 export const SpacedRepetition: React.FC<SpacedRepetitionProps> = ({ onSelectReview }) => {
-  const [items, setItems] = useState<DueItem[]>(DEFAULT_DUE_ITEMS);
+  const [reviewsMap, setReviewsMap] = useState<Record<string, SpacedReviewRecord>>(() =>
+    getSpacedRepetitionReviews()
+  );
+  const [items, setItems] = useState<DueItem[]>(() =>
+    filterActiveDueItems(getSpacedRepetitionReviews())
+  );
   const [sortMethod, setSortMethod] = useState<"urgency" | "reference">("urgency");
   const [showCompletedToast, setShowCompletedToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const syncReviews = (evt?: Event) => {
+      const latest = getSpacedRepetitionReviews();
+      setReviewsMap(latest);
+      setItems(filterActiveDueItems(latest));
+
+      const detail = (evt as CustomEvent<SpacedReviewRecord> | undefined)?.detail;
+      if (detail?.reference) {
+        setShowCompletedToast(
+          `Reviewed ${detail.reference} — removed from due queue & scheduled for ${detail.intervalDays}d.`
+        );
+        setTimeout(() => setShowCompletedToast(null), 4000);
+      }
+    };
+
+    syncReviews();
+    window.addEventListener("stba-spaced-rep-updated", syncReviews);
+    return () => window.removeEventListener("stba-spaced-rep-updated", syncReviews);
+  }, []);
+
+  const reviewedTodayCount = React.useMemo(() => {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const seen = new Set<string>();
+    Object.values(reviewsMap).forEach((rec) => {
+      if (rec.lastReviewedAt >= startOfDay.getTime()) {
+        seen.add(normalizeRefKey(rec.reference) || rec.id);
+      }
+    });
+    return seen.size;
+  }, [reviewsMap]);
+
+  const handleResetQueue = () => {
+    try {
+      localStorage.removeItem(SPACED_REP_STORAGE_KEY);
+      localStorage.setItem(SPACED_REP_SEED_KEY, String(Date.now()));
+    } catch {}
+    setReviewsMap({});
+    setItems(filterActiveDueItems({}));
+  };
 
   // 7-Day Completion Log for Spaced Repetition Analytics
   const completionData = [
@@ -239,54 +414,76 @@ export const SpacedRepetition: React.FC<SpacedRepetitionProps> = ({ onSelectRevi
           </div>
 
           <div className="space-y-3" id="due-items-queue-list">
-            {sortedItems.map((item) => {
-              const pillColors = {
-                now: "bg-red-500/10 text-red-600 border border-red-500/15",
-                soon: "bg-[#C9973A]/10 text-[#A67D2E] border border-[#C9973A]/15",
-                later: "bg-[#2A9D8F]/10 text-[#2A9D8F] border border-[#2A9D8F]/15"
-              };
-
-              return (
-                <div
-                  key={item.scripture.id}
-                  className="bg-white p-4 rounded-xl border border-[#E8E4DA] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-xs transition-shadow text-left"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="font-serif font-bold text-base text-[#1A1A1A]">
-                        {item.scripture.reference}
-                      </span>
-                      <span className="text-[10px] font-mono uppercase bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-bold">
-                        {item.trackTitle}
-                      </span>
-                    </div>
-
-                    <p className="font-bible text-xs text-[#6B6B6B] line-clamp-1 leading-normal">
-                      "{item.scripture.text.split(" ").slice(0, 10).join(" ")}..."
-                    </p>
-
-                    <div className="flex items-center space-x-1.5 pt-0.5">
-                      <Clock className="w-3.5 h-3.5 text-stone-400" />
-                      <span className={`text-[11px] font-medium font-mono px-2 py-0.5 rounded ${pillColors[item.urgency]}`}>
-                        {item.dueDateText}
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleReviewSingle(item)}
-                    className={`px-4.5 py-2.5 rounded-xl text-xs uppercase tracking-wider font-bold transition-all shadow-xs cursor-pointer inline-flex items-center space-x-1 w-full sm:w-auto justify-center ${
-                      item.urgency === "now"
-                        ? "bg-[#C9973A] hover:bg-[#B0822F] text-white"
-                        : "bg-stone-100 hover:bg-stone-200 text-stone-800"
-                    }`}
-                  >
-                    <span>Review now</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+            {sortedItems.length === 0 ? (
+              <div className="bg-white p-8 rounded-2xl border border-[#E8E4DA] text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-[#2A9D8F]/10 text-[#2A9D8F] flex items-center justify-center mx-auto">
+                  <CheckCircle className="w-6 h-6" />
                 </div>
-              );
-            })}
+                <h4 className="font-serif text-lg font-bold text-[#1A1A1A]">
+                  All Caught Up!
+                </h4>
+                <p className="text-xs text-[#6B6B6B] max-w-sm mx-auto">
+                  Every scheduled verse in your Consolidation Queue has been reviewed and rescheduled into your spaced repetition cycle.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResetQueue}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset Sample Queue</span>
+                </button>
+              </div>
+            ) : (
+              sortedItems.map((item) => {
+                const pillColors = {
+                  now: "bg-red-500/10 text-red-600 border border-red-500/15",
+                  soon: "bg-[#C9973A]/10 text-[#A67D2E] border border-[#C9973A]/15",
+                  later: "bg-[#2A9D8F]/10 text-[#2A9D8F] border border-[#2A9D8F]/15"
+                };
+
+                return (
+                  <div
+                    key={item.scripture.id}
+                    className="bg-white p-4 rounded-xl border border-[#E8E4DA] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-xs transition-shadow text-left"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-serif font-bold text-base text-[#1A1A1A]">
+                          {item.scripture.reference}
+                        </span>
+                        <span className="text-[10px] font-mono uppercase bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-bold">
+                          {item.trackTitle}
+                        </span>
+                      </div>
+
+                      <p className="font-bible text-xs text-[#6B6B6B] line-clamp-1 leading-normal">
+                        "{item.scripture.text.split(" ").slice(0, 10).join(" ")}..."
+                      </p>
+
+                      <div className="flex items-center space-x-1.5 pt-0.5">
+                        <Clock className="w-3.5 h-3.5 text-stone-400" />
+                        <span className={`text-[11px] font-medium font-mono px-2 py-0.5 rounded ${pillColors[item.urgency]}`}>
+                          {item.dueDateText}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleReviewSingle(item)}
+                      className={`px-4.5 py-2.5 rounded-xl text-xs uppercase tracking-wider font-bold transition-all shadow-xs cursor-pointer inline-flex items-center space-x-1 w-full sm:w-auto justify-center ${
+                        item.urgency === "now"
+                          ? "bg-[#C9973A] hover:bg-[#B0822F] text-white"
+                          : "bg-stone-100 hover:bg-stone-200 text-stone-800"
+                      }`}
+                    >
+                      <span>Review now</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 

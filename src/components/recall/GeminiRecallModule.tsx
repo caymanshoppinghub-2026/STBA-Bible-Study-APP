@@ -1073,7 +1073,11 @@ MANDATORY 4-STEP MEMORIZATION FLOW (FOLLOW STRICTLY FOR EACH VERSE):
         }
       };
 
-      const openSocket = (targetUrl: string, allowLocalFallback: boolean) => {
+      const isLocalHost =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
+
+      const openSocket = (targetUrl: string, allowFallback: boolean) => {
         if (!isMountedRef.current || runId !== sessionRunIdRef.current) return;
         const isLocal = targetUrl === localLiveWsUrl;
         const ws = !isLocal && accessToken ? new WebSocket(targetUrl, [accessToken]) : new WebSocket(targetUrl);
@@ -1081,9 +1085,14 @@ MANDATORY 4-STEP MEMORIZATION FLOW (FOLLOW STRICTLY FOR EACH VERSE):
         let hasOpened = false;
         let isDisposed = false;
         let fallbackTriggered = false;
+        let heartbeatTimer: number | null = null;
 
         const disposeHandlers = () => {
           isDisposed = true;
+          if (heartbeatTimer !== null) {
+            window.clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+          }
           ws.onopen = null;
           ws.onmessage = null;
           ws.onerror = null;
@@ -1100,12 +1109,16 @@ MANDATORY 4-STEP MEMORIZATION FLOW (FOLLOW STRICTLY FOR EACH VERSE):
               ws.close();
             }
           } catch {}
-          if (!hasOpened && allowLocalFallback && !isLocal) {
-            openSocket(localLiveWsUrl, false);
-            return;
+          if (!hasOpened && allowFallback) {
+            const nextUrl = isLocal ? wsUrl : localLiveWsUrl;
+            if (nextUrl && /^wss?:\/\//i.test(nextUrl)) {
+              openSocket(nextUrl, false);
+              return;
+            }
           }
           setLiveError("Unable to connect to Elder Stephen's live voice stream. Please try again.");
           setLiveStatus("error");
+          setIsLiveSessionActive(false);
         };
 
         ws.onopen = () => {
@@ -1118,6 +1131,13 @@ MANDATORY 4-STEP MEMORIZATION FLOW (FOLLOW STRICTLY FOR EACH VERSE):
           try {
             ws.send(JSON.stringify(setupPayload));
           } catch {}
+          heartbeatTimer = window.setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(JSON.stringify({ type: "ping" }));
+              } catch {}
+            }
+          }, 20000);
         };
 
         ws.onmessage = (event) => {
@@ -1127,7 +1147,7 @@ MANDATORY 4-STEP MEMORIZATION FLOW (FOLLOW STRICTLY FOR EACH VERSE):
             if (msg.heartbeat || msg.setupAck) return;
 
             if (msg.error) {
-              if (!isLocal && allowLocalFallback) {
+              if (!hasOpened && allowFallback) {
                 triggerFallbackOnce();
                 return;
               }
@@ -1236,13 +1256,22 @@ MANDATORY 4-STEP MEMORIZATION FLOW (FOLLOW STRICTLY FOR EACH VERSE):
 
         ws.onclose = () => {
           if (isDisposed || !isMountedRef.current || runId !== sessionRunIdRef.current) return;
-          if (!hasOpened && allowLocalFallback && !isLocal) {
+          disposeHandlers();
+          if (!hasOpened && allowFallback) {
             triggerFallbackOnce();
+            return;
+          }
+          if (hasOpened) {
+            cleanupLiveSession();
+            setLiveError("Elder Stephen's live voice session timed out after inactivity. Click Start Live Session to reconnect.");
+            setLiveStatus("error");
           }
         };
       };
 
-      if (wsUrl && /^wss?:\/\//i.test(wsUrl)) {
+      if (isLocalHost) {
+        openSocket(localLiveWsUrl, Boolean(wsUrl && /^wss?:\/\//i.test(wsUrl)));
+      } else if (wsUrl && /^wss?:\/\//i.test(wsUrl)) {
         openSocket(wsUrl, true);
       } else {
         openSocket(localLiveWsUrl, false);
