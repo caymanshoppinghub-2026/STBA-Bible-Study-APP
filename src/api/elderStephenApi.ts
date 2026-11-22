@@ -1,4 +1,4 @@
-import { isSpecificScopedRequest } from "../utils/elderSpacing";
+import { isSpecificScopedRequest, extractFirstName } from "../utils/elderSpacing";
 import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
 /**
  * @license
@@ -60,7 +60,7 @@ export async function askElderStephen(params: ElderStephenParams): Promise<Elder
     console.warn("[Elder Stephen API] Network or server communication fallback active:", err);
   }
 
-  const name = params.userName || "Berean";
+  const name = extractFirstName(params.userName, "Berean");
   const title = params.noteTitle || "the sacred scripture";
   const userText = params.userMessage || params.userAction || "";
   const isSpecific = isSpecificScopedRequest(userText);

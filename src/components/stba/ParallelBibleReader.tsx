@@ -690,29 +690,15 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
   };
 
   const playLocalBrowserPronunciation = (nameText: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    
-    const utterance = new SpeechSynthesisUtterance(nameText);
-    utterance.rate = 0.8;
-    utterance.pitch = 0.95;
-    
-    const voice = getElderStephenVoice();
-    if (voice) {
-      utterance.voice = voice;
-    }
-    
-    utterance.onstart = () => {
-      setPronouncingPlaying(true);
-    };
-    utterance.onend = () => {
-      setPronouncingPlaying(false);
-    };
-    utterance.onerror = () => {
-      setPronouncingPlaying(false);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    if (typeof window === "undefined") return;
+    playGeminiSpeech(nameText, {
+      voice: "Andrew",
+      verbatimReadAloud: true,
+      rate: 0.85,
+      onStart: () => setPronouncingPlaying(true),
+      onEnd: () => setPronouncingPlaying(false),
+      onError: () => setPronouncingPlaying(false),
+    });
   };
 
   // Helper to render persistent user-created highlights for verses or words/phrases

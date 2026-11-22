@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
 import { decodeAndCleanGeminiPcm, encodeFloat32To16kHzPcmBase64 } from "../utils/cleanGeminiAudio";
+import { extractFirstName } from "../utils/elderSpacing";
 import {
   X,
   Mic,
@@ -472,14 +473,14 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   };
 
   const resolveUserName = (): string => {
-    if (user?.name) return user.name;
-    if ((user as any)?.displayName) return (user as any).displayName;
+    if (user?.name) return extractFirstName(user.name, "Berean");
+    if ((user as any)?.displayName) return extractFirstName((user as any).displayName, "Berean");
     try {
       const savedProfile = localStorage.getItem("stba_user_profile");
       if (savedProfile) {
         const parsed = JSON.parse(savedProfile);
-        if (parsed?.name) return parsed.name;
-        if (parsed?.displayName) return parsed.displayName;
+        if (parsed?.name) return extractFirstName(parsed.name, "Berean");
+        if (parsed?.displayName) return extractFirstName(parsed.displayName, "Berean");
       }
     } catch (e) {}
     return "Berean";

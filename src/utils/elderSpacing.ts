@@ -50,6 +50,24 @@ export function formatProperElderSpacing(raw: string): string {
 }
 
 /**
+ * Extracts only the user's first name for warm pastoral address across Elder Stephen modules
+ * (while preserving multi-word placeholder titles like "Noble Berean" or "Guest Scholar").
+ */
+export function extractFirstName(rawName?: string | null, fallback = "Berean"): string {
+  const cleaned = String(rawName || "").trim();
+  if (!cleaned) return fallback;
+  if (cleaned === "Noble Berean" || cleaned === "Guest Scholar" || cleaned === "New Member") {
+    return cleaned;
+  }
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return fallback;
+  if (/^(dr\.?|mr\.?|mrs\.?|ms\.?|elder|pastor|bro\.?|brother|sis\.?|sister)$/i.test(parts[0]) && parts.length > 1) {
+    return parts[1];
+  }
+  return parts[0];
+}
+
+/**
  * Extracts a Scripture reference (e.g. "2 Timothy 2:15", "Revelation 14:6", "Psalm 119:105") from a string if present.
  */
 export function extractScriptureReference(text: string): string | null {

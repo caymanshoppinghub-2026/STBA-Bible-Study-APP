@@ -73,6 +73,7 @@ import {
 import { SCRIPTURE_DATABASE } from "../data/scriptureDb";
 import { loadNotes, saveResponseAsNewNote } from "../data/notebookData";
 import { aggregateUserStats } from "../utils/userStatsAggregator";
+import { extractFirstName } from "../utils/elderSpacing";
 import { supabase } from "../lib/supabase";
 import { fetchNotesFromSupabase } from "../lib/notebookSync";
 import { resolveTrackName } from "../lib/trackSync";
@@ -188,7 +189,128 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onLogOut
 }) => {
   const navigate = useNavigate();
-  const userName = user?.name || "Noble Berean";
+  const userName = extractFirstName(user?.name, "Noble Berean");
+
+  // Dynamically derive Elder Stephen's Recommended Next Study from recent teachings & conversation history
+  const recommendedNextStudy = React.useMemo(() => {
+    const fallback = {
+      reference: "Hebrews 8:6",
+      title: "Hebrews 8 — The Better Covenant",
+      description: "Continue your study on God's New Covenant promise.",
+      minutes: 18
+    };
+
+    try {
+      let recentPassage = "";
+      let recentText = "";
+
+      const savedElderState = localStorage.getItem("stba_elder_stephen_persistent_state_v2");
+      if (savedElderState) {
+        const parsed = JSON.parse(savedElderState);
+        recentPassage = parsed?.studyFlow?.currentPassage || "";
+        const msgs = Array.isArray(parsed?.messages) ? parsed.messages : [];
+        recentText = msgs
+          .slice(-6)
+          .map((m: any) => `${m?.passage || ""} ${m?.topic || ""} ${m?.text || ""}`)
+          .join(" ")
+          .toLowerCase();
+      }
+
+      if (!recentPassage) {
+        recentPassage = localStorage.getItem("stba_last_studied_passage") || "";
+      }
+
+      // Also inspect the user's most recently updated Notebook note so Notebook studies flow into Recommended Next
+      let notebookContext = "";
+      try {
+        const notes = loadNotes();
+        if (Array.isArray(notes) && notes.length > 0) {
+          const sortedNotes = [...notes].sort(
+            (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+          );
+          const latestNote = sortedNotes[0];
+          if (latestNote) {
+            notebookContext = `${latestNote.title || ""} ${(latestNote.scriptureTags || []).join(" ")} ${(latestNote.content || "").slice(0, 240)}`;
+          }
+        }
+      } catch (e) {}
+
+      const combined = `${recentPassage} ${recentText} ${notebookContext}`.toLowerCase();
+
+      const nextStudyProgression: Array<{
+        match: RegExp;
+        reference: string;
+        title: string;
+        description: string;
+        minutes: number;
+      }> = [
+        {
+          match: /john 3:16|love of god|for god so loved/i,
+          reference: "1 John 3:4",
+          title: "1 John 3:4 — What Is Sin?",
+          description: "Following your study on God's love in John 3:16, examine how Scripture defines sin and God's law.",
+          minutes: 12
+        },
+        {
+          match: /1 john 3:4|transgression of the law|what is sin/i,
+          reference: "Romans 3:23-24",
+          title: "Romans 3:23-24 — Grace & Redemption",
+          description: "After studying the definition of sin, explore how Christ freely justifies believers by His grace.",
+          minutes: 14
+        },
+        {
+          match: /2 timothy 3:16|inspiration of god|sola scriptura/i,
+          reference: "2 Timothy 2:15",
+          title: "2 Timothy 2:15 — Rightly Dividing the Word",
+          description: "Build on Scripture's inspiration by mastering the principles of faithful biblical exegesis.",
+          minutes: 15
+        },
+        {
+          match: /2 timothy 2:15|rightly dividing/i,
+          reference: "Isaiah 28:9-10",
+          title: "Isaiah 28:9-10 — Line Upon Line",
+          description: "Continue from 2 Timothy 2:15 into how Scripture interprets Scripture across both Testaments.",
+          minutes: 12
+        },
+        {
+          match: /revelation 14:12|revelation 14:6|three angels/i,
+          reference: "Daniel 8:14",
+          title: "Daniel 8:14 — The Heavenly Sanctuary",
+          description: "Deepen your Three Angels' Messages study with Christ's high-priestly ministry in the sanctuary.",
+          minutes: 18
+        },
+        {
+          match: /daniel 8:14|sanctuary/i,
+          reference: "Hebrews 8:1-6",
+          title: "Hebrews 8 — Christ Our High Priest",
+          description: "Connect Daniel's sanctuary prophecy with Jesus ministering in the true heavenly tabernacle.",
+          minutes: 16
+        },
+        {
+          match: /exodus 20:8|sabbath/i,
+          reference: "Hebrews 4:9-10",
+          title: "Hebrews 4:9-10 — Entering God's Rest",
+          description: "Explore how the seventh-day Sabbath reveals the Gospel rest we have in Jesus Christ.",
+          minutes: 14
+        },
+        {
+          match: /john 1:1|in the beginning was the word/i,
+          reference: "Colossians 1:16-17",
+          title: "Colossians 1:16-17 — Creator & Sustainer",
+          description: "Trace the deity of Christ from John 1:1 to His eternal supremacy as Creator of all things.",
+          minutes: 15
+        }
+      ];
+
+      for (const item of nextStudyProgression) {
+        if (item.match.test(combined)) {
+          return item;
+        }
+      }
+    } catch (e) {}
+
+    return fallback;
+  }, []);
 
   const { completedVerseIds = [], favoriteScriptures = [], userTier, openUpgradeModal } = useApp();
   const [isExegesisDownloadOpen, setIsExegesisDownloadOpen] = useState(false);
@@ -1952,27 +2074,27 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
               <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-[#E5B842]/40">
                 <img
                   src={FEATURED_COVENANT_IMAGE_URL}
-                  alt="Hebrews 8 Covenant Study"
+                  alt={recommendedNextStudy.title}
                   className="w-full h-full object-cover"
                 />
               </div>
 
               <div className="space-y-1 min-w-0">
                 <h4 className="font-serif font-bold text-xs sm:text-sm text-white truncate leading-snug">
-                  Hebrews 8 — The Better Covenant
+                  {recommendedNextStudy.title}
                 </h4>
                 <p className="text-[11px] text-stone-300 font-sans line-clamp-2 leading-tight">
-                  Continue your study on God's New Covenant promise.
+                  {recommendedNextStudy.description}
                 </p>
                 <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#F3CF65]">
                   <Clock className="w-3 h-3" />
-                  <span>18 min</span>
+                  <span>{recommendedNextStudy.minutes} min</span>
                 </div>
               </div>
             </div>
 
             <button
-              onClick={() => navigate("/stba")}
+              onClick={() => navigate(`/stba?ref=${encodeURIComponent(recommendedNextStudy.reference)}`)}
               className="w-full py-2.5 px-3 rounded-xl gold-metallic-btn font-mono font-bold text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
             >
               <span>Continue Study</span>

@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
+import { extractFirstName } from "../utils/elderSpacing";
 import confetti from "canvas-confetti";
 import {
   ArrowLeft,
@@ -3088,7 +3089,7 @@ export const LessonDetailPage: React.FC = () => {
   const { id, lessonId } = useParams<{ id: string; lessonId: string }>();
   const navigate = useNavigate();
   const { user } = useApp();
-  const userName = user?.name || "Jeremy";
+  const userName = extractFirstName(user?.name, "Jeremy");
 
   const isFB = id === "fundamental-beliefs";
   const numId = parseInt(lessonId || "1", 10);

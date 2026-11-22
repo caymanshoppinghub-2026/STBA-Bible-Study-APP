@@ -1,7 +1,7 @@
 import { StudyNote } from '../types/notebook'
 import { ensureSupabaseAuth } from './notebookSync'
 import { supabase } from './supabase'
-import { formatProperElderSpacing, ensureElderStephenOutlineCompletion, isSpecificScopedRequest } from '../utils/elderSpacing'
+import { formatProperElderSpacing, ensureElderStephenOutlineCompletion, isSpecificScopedRequest, extractFirstName } from '../utils/elderSpacing'
 import { coalesceFragmentedChatHistory, recombineFragmentedTranscript } from '../utils/dictationBuffer'
 import { apiFetch, isAuthRedirectResponse, safeParseResponseJson } from './apiFetch'
 
@@ -75,7 +75,7 @@ export interface ElderStephenPayload {
 export function buildUnifiedPayload(partial: Partial<ElderStephenPayload>): ElderStephenPayload {
   // 1. Resolve user profile
   let userId = partial.userId || 'guest_berean'
-  let userName = partial.userName || 'Berean'
+  let userName = extractFirstName(partial.userName, 'Berean')
   
   try {
     const savedProfile = localStorage.getItem('stba_user_profile')
@@ -83,7 +83,7 @@ export function buildUnifiedPayload(partial: Partial<ElderStephenPayload>): Elde
       const parsed = JSON.parse(savedProfile)
       if (parsed) {
         if (parsed.uid || parsed.id) userId = parsed.uid || parsed.id
-        if (parsed.name || parsed.displayName) userName = parsed.name || parsed.displayName
+        if (parsed.name || parsed.displayName) userName = extractFirstName(parsed.name || parsed.displayName, 'Berean')
       }
     }
   } catch (e) {

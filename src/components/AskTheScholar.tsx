@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { apiFetch } from "../lib/apiFetch";
+import { extractFirstName } from "../utils/elderSpacing";
 import {
   MessageSquare,
   HelpCircle,
@@ -59,10 +60,11 @@ interface AskTheScholarProps {
 export const AskTheScholar: React.FC<AskTheScholarProps> = ({
   activeScripture,
   onActiveScriptureChange,
-  userName = "Berean",
+  userName: rawUserName = "Berean",
   activeTier = "Beginner",
   onSwitchMode
 }) => {
+  const userName = extractFirstName(rawUserName, "Berean");
   // Scripture Selection and Tracking
   const [selectedScripture, setSelectedScripture] = useState<Scripture>(() => {
     if (activeScripture) return activeScripture;

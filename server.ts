@@ -26,11 +26,12 @@ import {
   initSabbathSchoolCronScheduler, 
   type SabbathSchoolSyncPayload 
 } from "./src/server/sabbathSchoolSyncService.ts";
-import { ensureElderStephenOutlineCompletion } from "./src/utils/elderSpacing.ts";
+import { ensureElderStephenOutlineCompletion, extractFirstName } from "./src/utils/elderSpacing.ts";
 import { removeScriptureAbbreviationPeriods } from "./src/utils/sabbathUtils.ts";
 export function getSystemInstruction(req: any) {
-  const name = (req && req.body && (req.body.userName || req.body.user_name || (req.body.user && req.body.user.name))) || "Berean";
-  return `IMPORTANT DIRECTIVE: The user signed up with the name: "${name}". You MUST address the user as "${name}" (e.g. 'Brother ${name}', 'Sister ${name}', or simply '${name}') in all conversational replies, feedback, evaluations, chat responses, oral text-to-speech summaries, and headings. NEVER call them generic placeholders like "Berean", "Brother", "Sister", "Student", or "Teacher" unless prefixed by their actual name.\n\n` + CSMS_SYSTEM_INSTRUCTION;
+  const rawName = (req && req.body && (req.body.userName || req.body.user_name || (req.body.user && req.body.user.name))) || "Berean";
+  const name = extractFirstName(rawName, "Berean");
+  return `IMPORTANT DIRECTIVE: The user's first name is "${name}". You MUST address the user by their first name "${name}" (e.g. 'Brother ${name}', 'Sister ${name}', or simply '${name}') in all conversational replies, feedback, evaluations, chat responses, oral text-to-speech summaries, and headings—NEVER use their full name or last name. NEVER call them generic placeholders like "Berean", "Brother", "Sister", "Student", or "Teacher" unless prefixed by their first name.\n\n` + CSMS_SYSTEM_INSTRUCTION;
 }
 
 export const CSMS_SYSTEM_INSTRUCTION = `Google AI Studio system prompt for COGNITIVE SCRIPTURE MASTERY SYSTEM (CSMS)
@@ -2100,7 +2101,7 @@ app.post("/api/teach/chat", async (req, res) => {
     return res.status(400).json({ error: "Scripture context is required." });
   }
 
-  const studentName = String(rawUserName || "Noble Berean").trim();
+  const studentName = extractFirstName(rawUserName, "Noble Berean");
   const priorTopic = String(lastStudiedTopic || "").trim();
   const hasPriorHistory = Boolean(hasPriorSession && priorTopic);
   const currentStageNum = stage ? stage.replace("stage", "") : "1";
@@ -5283,6 +5284,7 @@ If no verses match, return "verses": [] list.`;
 // 2. Interactive AI Exegesis Teacher Chat endpoint
 app.post("/api/study/exegesis-chat", async (req, res) => {
   const { reference, topic, activeStep, stepName, messages, reportContext, userName } = req.body;
+  const firstName = extractFirstName(userName, "Scholar");
 
   if (!reference || !messages || activeStep === undefined) {
     return res.status(400).json({ error: "Missing required properties (reference, activeStep, or messages)." });
@@ -5292,7 +5294,7 @@ app.post("/api/study/exegesis-chat", async (req, res) => {
 
   const runFallback = () => {
     // Elegant fallback simulation
-    const nameToUse = userName || "Scholar";
+    const nameToUse = firstName;
     const lastUserMessage = messages[messages.length - 1]?.text || "";
     let reply = `That is an excellent question, ${nameToUse}, regarding Step ${activeStep + 1} (${stepName}) on **${reference}**. In SDA theology, we always let Scripture interpret Scripture, keeping the Great Controversy as our lens. To build upon your point, when we look at the original settings, the sanctuary structure acts as a double shield, proving that character vindication is God's ultimate desire. What are your thoughts on how Ellen White's writings align with this?`;
     
@@ -5312,7 +5314,7 @@ app.post("/api/study/exegesis-chat", async (req, res) => {
     }));
 
     const activeStepNum = activeStep + 1;
-    const nameToUse = userName || "Scholar";
+    const nameToUse = firstName;
     const systemInstruction = `You are the primary "Study To Be Approved (STBA)" Exegesis Bible Teacher.
 You are guiding the student through an intensive, face-to-face active learning loop.
 The student's name is "${nameToUse}". Refer to them by name naturally, but VERY sparsely (at most 1 or 2 times across your entire response). Do NOT repeat their name excessively or in every section.
@@ -5843,7 +5845,7 @@ Let us remain rooted in these precious lines, knowing that the Holy Spirit is ne
 
   try {
     const { reference, text, question, chatHistory, userName, firstQuery, secondQuery, isFreeTier } = req.body;
-    const actualName = userName || "Berean";
+    const actualName = extractFirstName(userName, "Berean");
 
     const historyClause = chatHistory && chatHistory.length > 0
       ? `Here is the conversation history so far for continuity: ${JSON.stringify(chatHistory)}`
@@ -6037,7 +6039,7 @@ app.post("/api/elder-stephen", async (req, res) => {
     lastPassage
   } = req.body;
 
-  const actualName = userName || "Berean";
+  const actualName = extractFirstName(userName, "Berean");
   const tier = userTier || "Noble Berean";
   const activeToolName = activeTool || "Bible Reader";
   const mode = currentMode || "Explain";

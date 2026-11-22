@@ -171,14 +171,18 @@ async function fetchGeminiChunkBase64(
       return w.__STBA_TTS_CACHE__[cacheKey];
     }
 
-    const requestNarrate = async (useVerbatimEdge: boolean): Promise<FetchedAudioChunk | null> => {
+    const requestNarrate = async (useVerbatimEdge: boolean, overrideVoice?: string): Promise<FetchedAudioChunk | null> => {
+      const controller = new AbortController();
+      const timeoutMs = useVerbatimEdge ? 12000 : 8000;
+      const timerId = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await apiFetch("/api/study/narrate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             text: chunkText,
-            voice,
+            voice: overrideVoice || voice,
             verbatimReadAloud: useVerbatimEdge,
             model: "gemini-3.8-live",
           }),
@@ -197,6 +201,8 @@ async function fetchGeminiChunkBase64(
         }
       } catch (err) {
         console.warn("[GeminiSpeechPlayer] Narrate fetch error:", err);
+      } finally {
+        clearTimeout(timerId);
       }
       return null;
     };
@@ -206,10 +212,10 @@ async function fetchGeminiChunkBase64(
       return primaryResult;
     }
 
-    // If primary Gemini TTS returned null or timed out, immediately retry with server-side
-    // Microsoft Edge Neural (Andrew US / Charon mapping) so it NEVER drops to robotic OS speechSynthesis
+    // If primary Gemini TTS returned null or timed out (>8s), immediately retry with server-side
+    // Microsoft Edge Neural (Andrew US) so it NEVER drops to robotic OS speechSynthesis
     if (!verbatimReadAloud) {
-      const neuralFallbackResult = await requestNarrate(true);
+      const neuralFallbackResult = await requestNarrate(true, "Andrew");
       if (neuralFallbackResult) {
         return neuralFallbackResult;
       }

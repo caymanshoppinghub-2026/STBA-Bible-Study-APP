@@ -6543,29 +6543,15 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
   };
 
   const playFallbackNameSpeech = (nameText: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    
-    const utterance = new SpeechSynthesisUtterance(nameText);
-    utterance.rate = 0.8;
-    utterance.pitch = 0.95;
-    
-    const voice = getBestLocalNeuralVoice();
-    if (voice) {
-      utterance.voice = voice;
-    }
-    
-    utterance.onstart = () => {
-      setPlayingName(nameText);
-    };
-    utterance.onend = () => {
-      setPlayingName(null);
-    };
-    utterance.onerror = () => {
-      setPlayingName(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    if (typeof window === "undefined") return;
+    playGeminiSpeech(nameText, {
+      voice: "Andrew",
+      verbatimReadAloud: true,
+      rate: 0.85,
+      onStart: () => setPlayingName(nameText),
+      onEnd: () => setPlayingName(null),
+      onError: () => setPlayingName(null),
+    });
   };
 
   useEffect(() => {
