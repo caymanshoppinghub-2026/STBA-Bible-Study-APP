@@ -1232,6 +1232,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
   ];
 
   const [showFullNoteContent, setShowFullNoteContent] = useState<boolean>(false);
+  const [noteModalTextSize, setNoteModalTextSize] = useState<"sm" | "md" | "lg">("sm");
 
   const stripHtmlToPlainText = (raw?: string | null): string => {
     if (!raw || typeof raw !== "string") return "";
@@ -1260,6 +1261,19 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
   const mapStudyNoteToEntry = (n: any) => {
     const plainTitle = stripHtmlToPlainText(n.title || "Untitled Note") || "Untitled Note";
     const plainContent = stripHtmlToPlainText(n.content || "");
+    // Preserve clean markdown structure (without raw HTML tags) for Read Mode rendering in View Full Note
+    const readContent = String(n.content || "")
+      .replace(/<\s*br\s*\/?>/gi, "\n")
+      .replace(/<\/\s*(?:p|div|li|h[1-6]|blockquote|tr)\s*>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .trim();
+
     const contentScriptures = extractScripturesFromText(plainContent + " " + plainTitle);
     const combinedVerses = Array.from(
       new Set([...(n.scriptureTags || []), ...contentScriptures])
@@ -1277,6 +1291,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
       summary,
       preview: summary,
       content: plainContent,
+      readContent,
       verses: combinedVerses
     };
   };
@@ -3061,7 +3076,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className={`w-full transition-all duration-300 glass-card border border-[#E5B842]/50 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 text-left max-h-[90vh] overflow-y-auto sheen-overlay ${
+              className={`w-full transition-all duration-300 glass-card border border-[#E5B842]/50 rounded-3xl px-5 pt-5 pb-7 sm:px-6 sm:pt-6 sm:pb-8 shadow-2xl space-y-4 text-left max-h-[90vh] overflow-y-auto sheen-overlay ${
                 showFullNoteContent ? "max-w-2xl lg:max-w-3xl" : "max-w-lg"
               }`}
             >
@@ -3118,28 +3133,65 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                     <div className="space-y-4 pt-1">
                       {/* Summary / Full Note Section */}
                       <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <span className="text-[10px] font-mono text-[#F3CF65] font-bold uppercase tracking-wider flex items-center gap-1.5">
                             <Sparkles className="w-3.5 h-3.5 text-[#F3CF65]" />
                             {showFullNoteContent ? "Full Study Note" : "Note Summary"}
                           </span>
-                          {hasExtendedContent && (
+                          <div className="flex items-center gap-2.5">
                             <button
                               type="button"
-                              onClick={() => setShowFullNoteContent(!showFullNoteContent)}
-                              className="text-[11px] font-mono font-bold text-[#F3CF65] hover:underline cursor-pointer flex items-center gap-1"
+                              onClick={() =>
+                                setNoteModalTextSize((prev) =>
+                                  prev === "sm" ? "md" : prev === "md" ? "lg" : "sm"
+                                )
+                              }
+                              title="Increase text size"
+                              className="px-2 py-0.5 rounded-lg border border-[#0d3060] hover:border-[#E5B842]/60 bg-[#06162c] text-[11px] font-mono font-bold text-stone-200 hover:text-[#F3CF65] transition-colors cursor-pointer"
                             >
-                              {showFullNoteContent ? "Show Summary Only" : "View Full Note"}
+                              A+ {noteModalTextSize === "sm" ? "1x" : noteModalTextSize === "md" ? "1.2x" : "1.4x"}
                             </button>
-                          )}
+                            {hasExtendedContent && (
+                              <button
+                                type="button"
+                                onClick={() => setShowFullNoteContent(!showFullNoteContent)}
+                                className="text-[11px] font-mono font-bold text-[#F3CF65] hover:underline cursor-pointer flex items-center gap-1"
+                              >
+                                {showFullNoteContent ? "Show Summary Only" : "View Full Note"}
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {showFullNoteContent ? (
-                          <div className="text-xs sm:text-sm text-stone-100 font-sans leading-relaxed p-4 sm:p-5 bg-[#06162c] rounded-2xl border border-[#0d3060] max-h-[48vh] overflow-y-auto notebook-card-scroll whitespace-pre-line shadow-inner">
-                            {note.content}
+                          <div
+                            className={`p-4 sm:p-5 bg-[#06162c] rounded-2xl border border-[#0d3060] max-h-[46vh] overflow-y-auto notebook-card-scroll shadow-inner ${
+                              noteModalTextSize === "lg"
+                                ? "text-base sm:text-lg leading-relaxed"
+                                : noteModalTextSize === "md"
+                                ? "text-sm sm:text-base leading-relaxed"
+                                : "text-xs sm:text-sm leading-relaxed"
+                            }`}
+                          >
+                            <ExegesisRenderer
+                              content={note.readContent || note.content}
+                              onVerseClick={(v) => {
+                                setShowNoteModal(null);
+                                setShowFullNoteContent(false);
+                                handleStartBibleStudyLesson(v, note.title);
+                              }}
+                            />
                           </div>
                         ) : (
-                          <p className="text-xs sm:text-sm text-stone-200 font-sans leading-relaxed p-4 bg-[#06162c] rounded-2xl border border-[#0d3060] whitespace-pre-line shadow-inner">
+                          <p
+                            className={`text-stone-200 font-sans leading-relaxed p-4 bg-[#06162c] rounded-2xl border border-[#0d3060] whitespace-pre-line shadow-inner ${
+                              noteModalTextSize === "lg"
+                                ? "text-base sm:text-lg"
+                                : noteModalTextSize === "md"
+                                ? "text-sm sm:text-base"
+                                : "text-xs sm:text-sm"
+                            }`}
+                          >
                             {note.summary || note.preview}
                           </p>
                         )}
@@ -3200,7 +3252,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                     </div>
 
                     {/* Footer */}
-                    <div className="flex justify-between items-center pt-3 border-t border-[#0d3060]">
+                    <div className="flex justify-between items-center pt-4 pb-2 border-t border-[#0d3060]">
                       <button
                         onClick={() => {
                           setShowNoteModal(null);
