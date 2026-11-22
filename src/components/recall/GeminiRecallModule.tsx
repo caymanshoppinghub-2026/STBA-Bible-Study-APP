@@ -50,6 +50,12 @@ import {
   getUntruncatedSessionToken
 } from "../../lib/supabase";
 import elderStephenAvatar from "../../assets/images/elder_steven_portrait_1788201900752.jpg";
+import {
+  checkVoiceAccessOrPromptUpgrade,
+  consumeVoiceSeconds,
+  getVoiceQuotaStatus,
+  VoiceQuotaStatus,
+} from "../../lib/voiceQuotaManager";
 
 interface GeminiRecallModuleProps {
   initialScripture?: Scripture;
@@ -976,7 +982,30 @@ export const GeminiRecallModule: React.FC<GeminiRecallModuleProps> = ({
   // ========================================================
   // START REAL-TIME GEMINI LIVE WEBSOCKET SESSION (HANDS-FREE)
   // ========================================================
+  useEffect(() => {
+    if (!isLiveSessionActive || isLivePaused) return;
+    const intervalId = window.setInterval(() => {
+      const updated = consumeVoiceSeconds(5, userTier);
+      if (updated.isExhausted) {
+        cleanupLiveSession();
+        setLiveError(
+          `Your ${updated.tier} monthly Elder Stephen Live Voice allowance (${updated.limitMinutes} mins) has been reached. Upgrade to continue!`
+        );
+        checkVoiceAccessOrPromptUpgrade(openUpgradeModal, userTier);
+      }
+    }, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [isLiveSessionActive, isLivePaused, userTier, openUpgradeModal]);
+
   const handleStartLiveSession = async () => {
+    const gate = checkVoiceAccessOrPromptUpgrade(openUpgradeModal, userTier);
+    if (!gate.allowed) {
+      setLiveError(
+        `Your ${gate.status.tier} monthly Elder Stephen Live Voice allowance (${gate.status.limitMinutes} mins) is used up. Please upgrade to continue.`
+      );
+      return;
+    }
+
     setLiveError(null);
     cleanupLiveSession();
     const runId = ++sessionRunIdRef.current;

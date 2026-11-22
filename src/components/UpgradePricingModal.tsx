@@ -280,6 +280,10 @@ export const UpgradePricingModal: React.FC = () => {
                         <Check className="w-5 h-5 text-[#F3CF65] shrink-0 mt-0.5" />
                         <span>Hebrew & Greek Original Language Root Analysis</span>
                       </li>
+                      <li className="flex items-start gap-3">
+                        <Check className="w-5 h-5 text-[#F3CF65] shrink-0 mt-0.5" />
+                        <span>90 mins/month Elder Stephen Live Two-Way Voice</span>
+                      </li>
                     </ul>
                   </div>
 
@@ -348,6 +352,10 @@ export const UpgradePricingModal: React.FC = () => {
                       <li className="flex items-start gap-3">
                         <Check className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
                         <span>Priority Gemini Prestige Theological Synthesis & Export</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <Check className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
+                        <span>240 mins/month Elder Stephen Live Two-Way Voice</span>
                       </li>
                     </ul>
                   </div>
