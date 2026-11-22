@@ -39,7 +39,7 @@ export function STBAStudyMode() {
   }));
   const [selectedWord, setSelectedWord] = useState<string>("");
   const [bibleFontSize, setBibleFontSize] = useState<number>(() => {
-    const saved = localStorage.getItem(`stba_bibleFontSize_${user?.email || "guest"}`);
+    const saved = localStorage.getItem(`stba_bibleFontSize_v2_${user?.email || "guest"}`);
     return saved !== null ? Number(saved) : 16;
   });
   const [notebookFontSize, setNotebookFontSize] = useState<number>(() => {
@@ -908,7 +908,7 @@ export function STBAStudyMode() {
     localStorage.setItem(`stba_chatInputs_${userKey}`, JSON.stringify(chatInputs));
     localStorage.setItem(`stba_stepChats_${userKey}`, JSON.stringify(stepChats));
     localStorage.setItem(`stba_theme_${userKey}`, theme);
-    localStorage.setItem(`stba_bibleFontSize_${userKey}`, String(bibleFontSize));
+    localStorage.setItem(`stba_bibleFontSize_v2_${userKey}`, String(bibleFontSize));
     localStorage.setItem(`stba_notebookFontSize_${userKey}`, String(notebookFontSize));
     localStorage.setItem(`stba_leftPaneWidth_${userKey}`, String(leftPaneWidth));
 

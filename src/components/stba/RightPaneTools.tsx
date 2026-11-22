@@ -12,7 +12,7 @@ import { BIBLICAL_NAMES_DICTIONARY, BiblicalName } from "./biblicalNames";
 import { StudyNote, NoteCategory } from "../../types/notebook";
 import { loadNotes, saveNotes, saveResponseAsNewNote, CATEGORY_META, loadCategories, saveCategories } from "../../data/notebookData";
 import { callElderStephen } from "../../lib/callElderStephen";
-import { formatProperElderSpacing, ensureElderStephenOutlineCompletion } from "../../utils/elderSpacing";
+import { formatProperElderSpacing, ensureElderStephenOutlineCompletion, extractFirstName } from "../../utils/elderSpacing";
 import { getParallelVerses, getFullChapterVerses, fetchChapterVersesAsync, ParallelVerse } from "./bibleData";
 import { BIBLE_METADATA, parseScriptureLookup } from "./bibleMetadata";
 import {
@@ -1051,11 +1051,21 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
   };
 
   const startContinuousSpeechLoop = () => {
+    if (!isDynamicLiveActiveRef.current || isElderSpeakingRef.current || isMicMutedRef.current) return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-    
+    if (!SpeechRecognition) {
+      setLiveError("Speech recognition is unavailable in this browser. Please use Chrome or Edge for two-way voice.");
+      return;
+    }
+
     if (fallbackSpeechRecRef.current) {
-      try { fallbackSpeechRecRef.current.abort(); } catch (e) {}
+      const prevRec = fallbackSpeechRecRef.current;
+      fallbackSpeechRecRef.current = null;
+      prevRec.onstart = null;
+      prevRec.onresult = null;
+      prevRec.onerror = null;
+      prevRec.onend = null;
+      try { prevRec.abort(); } catch (e) {}
     }
 
     const rec = new SpeechRecognition();
@@ -1063,36 +1073,77 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     rec.interimResults = true;
     rec.lang = "en-US";
 
+    let pendingInterim = "";
+    let interimSilenceTimer: any = null;
+    let hasCommittedTurn = false;
+
+    const commitSpokenTurn = (rawText: string) => {
+      if (hasCommittedTurn) return;
+      const text = (rawText || "").trim();
+      if (!text) return;
+      if (isEchoOfElderStephen(text)) {
+        console.log("[STBA Echo Suppressed in continuous loop]:", text);
+        return;
+      }
+      hasCommittedTurn = true;
+      if (interimSilenceTimer) clearTimeout(interimSilenceTimer);
+      try { rec.stop(); } catch {}
+      handleUserSpeechInDynamicMode(text);
+    };
+
     rec.onstart = () => {
       if (fallbackSpeechRecRef.current !== rec || !isDynamicLiveActiveRef.current) return;
+      setLiveError(null);
       setLiveState("recording");
       setIsListening(true);
     };
 
     rec.onresult = (event: any) => {
-      if (fallbackSpeechRecRef.current !== rec || !isDynamicLiveActiveRef.current || isElderSpeakingRef.current) return;
+      if (fallbackSpeechRecRef.current !== rec || !isDynamicLiveActiveRef.current || isElderSpeakingRef.current || hasCommittedTurn) return;
       let finalTranscript = "";
+      let interimTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcript = event.results[i][0]?.transcript || "";
         if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
         }
       }
-      // Only process when final transcript is ready; never write to prompt text box
+
       if (finalTranscript && finalTranscript.trim()) {
-        const text = finalTranscript.trim();
-        if (isEchoOfElderStephen(text)) {
-          console.log("[STBA Echo Suppressed in continuous loop]:", text);
-          return;
-        }
-        handleUserSpeechInDynamicMode(text);
+        commitSpokenTurn(finalTranscript);
+        return;
+      }
+
+      if (interimTranscript && interimTranscript.trim()) {
+        pendingInterim = interimTranscript.trim();
+        if (interimSilenceTimer) clearTimeout(interimSilenceTimer);
+        // Commit natural speech pauses after 1.3s even if browser delays isFinal
+        interimSilenceTimer = setTimeout(() => {
+          if (
+            fallbackSpeechRecRef.current === rec &&
+            isDynamicLiveActiveRef.current &&
+            !isElderSpeakingRef.current &&
+            pendingInterim
+          ) {
+            commitSpokenTurn(pendingInterim);
+          }
+        }, 1300);
       }
     };
 
     rec.onerror = (err: any) => {
       if (fallbackSpeechRecRef.current !== rec) return;
-      // If error is no-speech, network or transient silence, maintain active conversation and keep listening
-      if (err.error === "no-speech" || err.error === "network" || err.error === "audio-capture") {
-        if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
+      if (interimSilenceTimer) clearTimeout(interimSilenceTimer);
+      if (err.error === "not-allowed" || err.error === "service-not-allowed") {
+        setLiveError("Microphone access was blocked. Please allow microphone permission in your browser.");
+        setLiveState("error");
+        setIsListening(false);
+        return;
+      }
+      if (err.error === "no-speech" || err.error === "network" || err.error === "audio-capture" || err.error === "aborted") {
+        if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current && !isMicMutedRef.current) {
           setTimeout(() => {
             if (fallbackSpeechRecRef.current === rec && isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
               startContinuousSpeechLoop();
@@ -1106,15 +1157,17 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     };
 
     rec.onend = () => {
+      if (interimSilenceTimer) clearTimeout(interimSilenceTimer);
       if (fallbackSpeechRecRef.current !== rec) return;
+      setIsListening(false);
       // Maintain Active Conversation: keep listening continuously for as long as user is engaged
-      if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
+      if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current && !isMicMutedRef.current && !hasCommittedTurn) {
         setTimeout(() => {
           if (fallbackSpeechRecRef.current === rec && isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
             startContinuousSpeechLoop();
           }
         }, 200);
-      } else if (isDynamicLiveActiveRef.current) {
+      } else if (isDynamicLiveActiveRef.current && !isElderSpeakingRef.current) {
         setLiveState("ready");
       }
     };
@@ -1189,7 +1242,11 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
       .catch(e => {
         console.warn("Dynamic discussion speech reply failed:", e);
         setLoading(false);
+        isElderSpeakingRef.current = false;
         setLiveState("ready");
+        if (isDynamicLiveActiveRef.current) {
+          setTimeout(() => startContinuousSpeechLoop(), 300);
+        }
       });
   };
 
@@ -1199,7 +1256,17 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
     setLiveState("playing");
     isElderSpeakingRef.current = true;
     
-    const userName = userProfile?.name || "Berean";
+    // Unlock microphone permission immediately while transitioning into voice simulation
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+          stream.getTracks().forEach((t) => t.stop());
+        })
+        .catch(() => {});
+    }
+
+    const userName = extractFirstName(userProfile?.name, "Berean");
     const greetingText = `Grace and peace, ${userName}! It is a blessing to open ${activeRef} together. Follow along with me as we dissect the Word of God using the workspace tools—try Word Study to examine the original Greek or Hebrew roots, Cross-References to see how Scripture links with Scripture, and the SDA Commentary for deeper insight.`;
 
     recentElderSpeechRef.current = [greetingText, ...recentElderSpeechRef.current.filter(t => t !== greetingText).slice(0, 5)];
