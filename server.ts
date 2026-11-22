@@ -6571,14 +6571,55 @@ app.post("/api/sabbath/daily-syllabus-ai", async (req, res) => {
     ? references.map((r: any) => removeScriptureAbbreviationPeriods(String(r || "").trim())).filter(Boolean)
     : [];
 
+  const rawParagraphs: string[] = Array.isArray(paragraphs)
+    ? paragraphs.map((p: any) => String(p || "").trim()).filter(Boolean)
+    : String(paragraphs || "").trim()
+    ? [String(paragraphs).trim()]
+    : [];
+
   const buildFallbackResponse = () => {
-    const refClause = refList.length > 0 ? ` (${refList.join("; ")})` : "";
-    const narrativeParagraphs = [
-      `In "${dayTitle}" from Lesson ${safeIdx + 1} (${lessonTitle}), today's study walks through ${refList.length > 0 ? `key passages including ${refList.join(", ")}` : "Scripture"} to uncover what God reveals about His prophetic Word. Comparing these verses in their biblical context helps us grasp the central truth of the day's lesson and apply it faithfully.`
-    ];
+    const extractedSentences: string[] = [];
+    for (const block of rawParagraphs) {
+      const cleaned = block
+        .replace(/^#+\s*/gm, "")
+        .replace(/\*\*/g, "")
+        .replace(/^>\s*/gm, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const sentences = cleaned.match(/[^.!?]+[.!?]+/g) || [];
+      for (const s of sentences) {
+        const trimmed = s.trim();
+        if (
+          trimmed.length >= 35 &&
+          !trimmed.endsWith("?") &&
+          !/^Read\s+[1-3]?\s*[A-Za-z]+\s+\d+/i.test(trimmed)
+        ) {
+          extractedSentences.push(trimmed);
+          if (extractedSentences.length >= 6) break;
+        }
+      }
+      if (extractedSentences.length >= 6) break;
+    }
+
+    const refClause = refList.length > 0 ? ` (${refList.join(", ")})` : "";
+    const narrativeParagraphs =
+      extractedSentences.length >= 2
+        ? [
+            `${extractedSentences.slice(0, 3).join(" ")}${refClause && !extractedSentences.slice(0, 3).join(" ").includes(refList[0] || "") ? ` Key passages studied include ${refList.join(", ")}.` : ""}`,
+            ...(extractedSentences.length > 3 ? [extractedSentences.slice(3, 6).join(" ")] : [])
+          ]
+        : [
+            `In "${dayTitle}" (${lessonTitle}), today's study examines ${refList.length > 0 ? refList.join(", ") : "Scripture"} to understand what God's Word teaches and how it applies to faithful discipleship.`
+          ];
+
     const scriptureInsights: Record<string, string> = {};
     for (const ref of refList) {
-      scriptureInsights[ref] = `Selected for "${dayTitle}" in "${lessonTitle}" to show how ${ref} establishes today's core biblical truth and guides faithful interpretation.`;
+      const matchingSentence = extractedSentences.find((s) =>
+        s.toLowerCase().includes(ref.toLowerCase())
+      );
+      scriptureInsights[ref] = matchingSentence
+        ? matchingSentence
+        : `Selected in "${dayTitle}" (${lessonTitle}) to illuminate how ${ref} supports today's biblical teaching.`;
     }
     return { narrativeParagraphs, scriptureInsights };
   };
@@ -6589,27 +6630,28 @@ app.post("/api/sabbath/daily-syllabus-ai", async (req, res) => {
   }
 
   try {
-    const prompt = `You are the theological synthesizer for the Sabbath School Daily Syllabus in "Study To Be Approved" (STBA).
-Synthesize the following daily Sabbath School lesson into:
-1. "narrativeParagraphs": An array of 1 or 2 cohesive, multi-sentence narrative paragraphs (NO bullet points) that provide an actual summary of today's specific lesson ("${dayTitle}" in "${lessonTitle}").
-   CRITICAL: Explicitly weave in ALL of today's exact Scripture references [${refList.map((r) => `"${r}"`).join(", ")}] naturally within the summary so the reader sees how each passage drives today's study.
-2. "scriptureInsights": A JSON object mapping each scripture reference in [${refList.map((r) => `"${r}"`).join(", ")}] to a crisp 1-sentence dynamic explanation of WHY that specific scripture was selected to be part of "${dayTitle}" ("${lessonTitle}") and WHAT the lesson expects the student to understand from it.
-   CRITICAL: Jump directly into the passage and its purpose in the lesson. Do NOT repeat any boilerplate prefix like "In the theological framework of...", do NOT mention the quarterly title or quarter code (e.g. "The Gift of Prophecy", "2026 Q4"), do NOT include verbatim scripture quotes, and do NOT use generic filler or reuse the same template across multiple verses. Explain specifically why each verse was chosen for today's lesson.
+    const prompt = `You are a Seventh-day Adventist Bible scholar summarizing today's Sabbath School lesson for "Study To Be Approved" (STBA).
+Synthesize the following daily lesson ("${dayTitle}" in "${lessonTitle}") into:
+1. "narrativeParagraphs": An array of 2 rich, substantive narrative paragraphs (3-5 sentences each, NO bullet points) that give the student a clear, plain-spoken understanding of what today's actual lesson ("${dayTitle}") is teaching.
+   CRITICAL:
+   - Do NOT write meta-commentary like "today's study walks through..." or "we should summarize these texts." Actually summarize and explain the lesson's core teaching, biblical message, and practical spiritual truth so the reader clearly understands what the day's lesson is saying!
+   - Explicitly weave in ALL of today's exact Scripture references [${refList.map((r) => `"${r}"`).join(", ")}] naturally as you explain what each passage teaches in the lesson.
+2. "scriptureInsights": A JSON object mapping each scripture reference in [${refList.map((r) => `"${r}"`).join(", ")}] to a crisp 1-sentence explanation of WHY that specific scripture was selected for "${dayTitle}" ("${lessonTitle}") and WHAT the lesson expects the student to understand from it.
+   CRITICAL: Jump directly into the passage and its purpose in the lesson. Do NOT repeat any boilerplate prefix like "In the theological framework of...", do NOT mention the quarterly title or quarter code (e.g. "The Gift of Prophecy", "2026 Q4"), do NOT include verbatim scripture quotes, and do NOT reuse the same template across verses.
 
 Lesson Context:
 - Lesson Number: Lesson ${safeIdx + 1}
-- Quarterly Title: "${cleanQuarter}"
 - Weekly Lesson Title: "${lessonTitle}"
 - Day Title: "${dayTitle}"
 - Referenced Scriptures: ${refList.join(", ") || "None"}
 - Lesson Paragraphs:
-${Array.isArray(paragraphs) ? paragraphs.join("\n\n") : String(paragraphs || "")}
+${rawParagraphs.join("\n\n")}
 
 Return ONLY valid JSON matching:
 {
   "narrativeParagraphs": ["Paragraph 1...", "Paragraph 2..."],
   "scriptureInsights": {
-    "Reference 1": "Specific theological insight..."
+    "Reference 1": "Specific 1-sentence explanation of why this verse was selected..."
   }
 }`;
 
@@ -6617,24 +6659,31 @@ Return ONLY valid JSON matching:
       model: "gemini-3.8-flash",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
-        systemInstruction: CSMS_SYSTEM_INSTRUCTION,
+        systemInstruction:
+          "You are a concise, doctrinally sound Seventh-day Adventist biblical scholar. Return ONLY valid JSON matching the requested schema.",
         responseMimeType: "application/json",
         thinkingConfig: {
           thinkingLevel: ThinkingLevel.LOW
         }
       },
-      timeoutMs: 15000
+      timeoutMs: 25000
     });
 
-    const rawText = (response?.text || "").replace(/```json/g, "").replace(/```/g, "").trim();
-    const parsed = JSON.parse(rawText);
+    const rawText = (response?.text || "").replace(/```json/gi, "").replace(/```/g, "").trim();
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
     return res.json({
-      narrativeParagraphs: Array.isArray(parsed?.narrativeParagraphs)
-        ? parsed.narrativeParagraphs.map((p: string) => removeScriptureAbbreviationPeriods(String(p)))
-        : buildFallbackResponse().narrativeParagraphs,
-      scriptureInsights: parsed?.scriptureInsights || buildFallbackResponse().scriptureInsights
+      narrativeParagraphs:
+        Array.isArray(parsed?.narrativeParagraphs) && parsed.narrativeParagraphs.length > 0
+          ? parsed.narrativeParagraphs.map((p: string) => removeScriptureAbbreviationPeriods(String(p)))
+          : buildFallbackResponse().narrativeParagraphs,
+      scriptureInsights:
+        parsed?.scriptureInsights && Object.keys(parsed.scriptureInsights).length > 0
+          ? parsed.scriptureInsights
+          : buildFallbackResponse().scriptureInsights
     });
   } catch (err) {
+    console.error("[daily-syllabus-ai] Synthesis failed, using paragraph fallback:", err);
     return res.json(buildFallbackResponse());
   }
 });
