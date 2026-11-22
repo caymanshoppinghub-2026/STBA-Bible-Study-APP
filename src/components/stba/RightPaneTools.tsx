@@ -8182,18 +8182,6 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
     }
   };
 
-  const handleOpenDiscipleshipVault = () => {
-    window.dispatchEvent(
-      new CustomEvent("open-discipleship-vault", {
-        detail: {
-          title: `${activeDay?.label || `Day ${safeDayIndex + 1}`}: ${activeDay?.title || lessonTitle}`,
-          category: "theology",
-          tags: scriptureBreakdown.map((s) => s.reference).slice(0, 5)
-        }
-      })
-    );
-  };
-
   const isDayCompleted =
     (activeDay?.status || "").toLowerCase() === "complete" ||
     (activeDay?.status || "").toLowerCase() === "completed";
@@ -8206,7 +8194,7 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
         isLight ? "bg-[#FAF7F2] text-stone-900" : "bg-[#0D1117] text-[#E6EDF2]"
       }`}
     >
-      {/* 1. TOP BAR: BACK TO SABBATH SCHOOL BUTTON & DISCIPLESHIP VAULT TRIGGER */}
+      {/* 1. TOP BAR: BACK TO SABBATH SCHOOL BUTTON & MARK DAY COMPLETE */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 pb-4 border-b border-[#C9973A]/30">
         <button
           id="btn-back-to-sabbath-school"
@@ -8225,15 +8213,25 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
 
         <div className="flex items-center gap-2">
           <button
-            id="btn-daily-syllabus-vault"
+            id="btn-daily-syllabus-complete"
             type="button"
-            onClick={handleOpenDiscipleshipVault}
+            onClick={() =>
+              updateDailyLessonStatus(
+                safeDayIndex,
+                isDayCompleted ? "In Progress" : "Complete"
+              )
+            }
             style={{ fontFamily: "'Lato', sans-serif" }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#C9973A]/50 bg-[#0B111E] hover:bg-[#141E33] text-[#F3CF65] text-xs sm:text-sm font-bold not-italic transition-all cursor-pointer shadow-xs"
-            title="Open slide-out Discipleship Vault side panel"
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-bold not-italic cursor-pointer transition-all shadow-xs ${
+              isDayCompleted
+                ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
+                : isLight
+                ? "bg-amber-100/80 border-amber-400 text-amber-950 hover:bg-amber-200/80"
+                : "bg-amber-500/15 border-amber-500/35 text-amber-300 hover:bg-amber-500/25"
+            }`}
           >
-            <PenLine className="w-3.5 h-3.5 text-[#C9973A] shrink-0" />
-            <span>Discipleship Vault</span>
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            <span>{isDayCompleted ? "Day Completed" : "Mark Day Complete"}</span>
           </button>
         </div>
       </div>
@@ -8249,26 +8247,6 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
           >
             {quarterlyTitle || "Sabbath School Daily Syllabus"} • {lessonTitle || "Current Lesson"}
           </span>
-          <button
-            type="button"
-            onClick={() =>
-              updateDailyLessonStatus(
-                safeDayIndex,
-                isDayCompleted ? "In Progress" : "Complete"
-              )
-            }
-            style={{ fontFamily: "'Lato', sans-serif" }}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold not-italic cursor-pointer transition-all ${
-              isDayCompleted
-                ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
-                : isLight
-                ? "bg-amber-100/80 border-amber-400 text-amber-950 hover:bg-amber-200/80"
-                : "bg-amber-500/15 border-amber-500/35 text-amber-300 hover:bg-amber-500/25"
-            }`}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-            <span>{isDayCompleted ? "Day Completed" : "Mark Day Complete"}</span>
-          </button>
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scroll">
@@ -8425,7 +8403,7 @@ export const SyllabusModeView: React.FC<ToolProps> = ({
               }}
               className="text-[16px] not-italic leading-relaxed"
             >
-              {paragraph}
+              <ScriptureLinkedText text={paragraph} onNavigateRef={handleLocateVerseInBible} />
             </p>
           ))}
         </div>
