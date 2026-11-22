@@ -1980,10 +1980,10 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
           {/* CARD A: WEEKLY STUDY RECAP */}
           <div
             id="dashboard-weekly-study-recap-card"
-            className="flex-1 flex flex-col justify-between p-4 sm:p-5 rounded-3xl glass-card border border-[#0d3060] shadow-xl sheen-overlay space-y-3.5 font-lato font-['Lato',sans-serif]"
+            className="flex-1 flex flex-col justify-between p-4 sm:p-5 rounded-3xl glass-card border border-[#0d3060] shadow-xl sheen-overlay space-y-2.5 font-lato font-['Lato',sans-serif]"
           >
             {/* Card Header */}
-            <div className="flex items-center justify-between border-b border-[#0d3060] pb-3 shrink-0">
+            <div className="flex items-center justify-between border-b border-[#0d3060] pb-2 shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#F3CF65] shrink-0" />
                 <h3 className="font-lato font-bold text-base sm:text-lg text-white">Weekly Study Recap</h3>
@@ -1994,23 +1994,23 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
             </div>
 
             {/* AI Recap Action Button & Active Recap Pill */}
-            <div className="space-y-2 shrink-0">
+            <div className="space-y-1.5 shrink-0">
               <button
                 id="generate-weekly-recap-btn"
                 type="button"
                 onClick={handleGenerateWeeklyRecap}
                 disabled={isGeneratingRecap}
-                className="w-full py-2.5 sm:py-3 px-3.5 gold-metallic-btn rounded-xl font-lato font-bold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.98] disabled:opacity-60"
+                className="w-full py-2 px-3 gold-metallic-btn rounded-xl font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.98] disabled:opacity-60"
                 title="Generate an AI-powered Weekly Study Recap analyzing Tracks and Memory Vault progress"
               >
                 {isGeneratingRecap ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-stone-950" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-950" />
                     <span>Analyzing Tracks & Memory Vault...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4 text-stone-950 fill-stone-950" />
+                    <Sparkles className="w-3.5 h-3.5 text-stone-950 fill-stone-950" />
                     <span>Generate Weekly Study Recap</span>
                   </>
                 )}
@@ -2018,9 +2018,9 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
 
               {weeklyRecap && (
                 <div
-                  className="p-3 sm:p-3.5 rounded-2xl bg-[#06162c] border border-[#E5B842]/40 flex flex-col shadow-sm font-lato font-['Lato',sans-serif]"
+                  className="p-2 sm:p-2.5 rounded-xl bg-[#06162c] border border-[#E5B842]/40 flex flex-col shadow-sm font-lato font-['Lato',sans-serif]"
                 >
-                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-lato text-stone-300">
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-lato text-stone-300">
                     <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-medium">
                       {weeklyRecap.masteredConcepts?.length ?? 0} Mastered
                     </span>
@@ -2036,13 +2036,13 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
             </div>
 
             {/* Recent Studies Section with Continuous Vertical Scroll Container */}
-            <div className="space-y-2 min-h-0 flex-1 flex flex-col justify-start">
+            <div className="space-y-1.5 min-h-0 flex-1 flex flex-col justify-start">
               <div className="flex items-center justify-between shrink-0">
-                <span className="text-xs sm:text-sm font-lato uppercase tracking-wider text-[#F3CF65] font-bold flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-[#F3CF65] shrink-0" />
+                <span className="text-[11px] font-lato uppercase tracking-wider text-[#F3CF65] font-bold flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-[#F3CF65] shrink-0" />
                   Recent Studies:
                 </span>
-                <span className="text-xs sm:text-sm font-lato text-stone-300">
+                <span className="text-[11px] font-lato text-stone-300">
                   Resume
                 </span>
               </div>
@@ -2052,7 +2052,7 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                 tabIndex={0}
                 role="region"
                 aria-label="Recent Studies list"
-                className="space-y-2 overflow-y-auto overscroll-contain max-h-[175px] sm:max-h-[200px] notebook-card-scroll pr-1 focus:outline-none"
+                className="space-y-1.5 overflow-y-auto overscroll-contain max-h-[175px] sm:max-h-[200px] notebook-card-scroll pr-1 focus:outline-none"
               >
                 {recentStudiesList.length === 0 ? (
                   <div className="p-3 text-center rounded-xl bg-[#06162c]/50 border border-[#0d3060] text-stone-400 text-xs font-sans">
@@ -2070,18 +2070,18 @@ Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy
                     <div
                       key={idx}
                       onClick={() => handleStartBibleStudyLesson(study.reference, study.topic)}
-                      className="p-2.5 sm:p-3 rounded-xl bg-[#06162c] hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/40 transition-all cursor-pointer flex items-center justify-between gap-2.5 group shrink-0"
+                      className="p-2 sm:p-2.5 rounded-xl bg-[#06162c] hover:bg-[#0d3060] border border-[#0d3060] hover:border-[#E5B842]/40 transition-all cursor-pointer flex items-center justify-between gap-2 group shrink-0"
                     >
-                      <div className="min-w-0 flex-1 space-y-1">
+                      <div className="min-w-0 flex-1 space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <span className="font-lato font-bold text-sm sm:text-base text-[#F3CF65] group-hover:underline truncate">
+                          <span className="font-lato font-bold text-xs sm:text-sm text-[#F3CF65] group-hover:underline truncate">
                             {study.reference}
                           </span>
-                          <span className="text-[10px] sm:text-xs font-lato px-2 py-0.5 rounded-full bg-[#0d3060] text-stone-200 border border-[#1b3a6b] font-medium shrink-0">
+                          <span className="text-[10px] font-lato px-1.5 py-0.5 rounded-full bg-[#0d3060] text-stone-200 border border-[#1b3a6b] font-medium shrink-0">
                             {study.tag}
                           </span>
                         </div>
-                        <p className="text-xs sm:text-sm text-stone-300 truncate font-lato">
+                        <p className="text-[11px] sm:text-xs text-stone-300 truncate font-lato">
                           {study.topic}
                         </p>
                       </div>
