@@ -337,7 +337,7 @@ export const LogosScriptureHoverTrigger: React.FC<LogosScriptureHoverTriggerProp
             }}
             className="w-[340px] max-w-[92vw] pointer-events-none select-none animate-in fade-in zoom-in-95 duration-150"
           >
-            <div className="rounded-xl bg-[#06162c]/95 backdrop-blur-md text-[#E6ECF8] border border-[#E5B842]/35 shadow-2xl shadow-black/75 px-4 py-3.5 font-sans not-italic">
+            <div className="rounded-2xl bg-[#06162c]/70 backdrop-blur-xl text-[#EEF2FA] border border-[#E5B842]/45 shadow-[0_18px_50px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.2)] px-4 py-3.5 font-sans not-italic">
               {/* Pericope Title at Top Left */}
               {(lookupData?.pericope || fallbackPericope) && (
                 <div className="text-[13px] font-bold text-[#F3CF65] mb-1 leading-snug not-italic">
