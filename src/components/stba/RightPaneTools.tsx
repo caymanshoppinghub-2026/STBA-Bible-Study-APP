@@ -5109,8 +5109,12 @@ export const WordStudy: React.FC<ToolProps> = ({
       targetTrans = COMMON_TRANSLITERATIONS[cleanSearch] || cleanSearch || "logos";
     }
 
-    // Clean text to say: Speak ONLY the transliteration word! No language prefixes, no English translations, no Greek script.
-    const textToSay = targetTrans.replace(/[^a-zA-Z\s'-]/g, "").trim();
+    // Clean text to say: Normalize diacritics (e.g. agapē -> agape, tôrāh -> torah) before stripping symbols!
+    const textToSay = targetTrans
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z\s'-]/g, "")
+      .trim();
     if (!textToSay) return;
 
     const utterance = new SpeechSynthesisUtterance(textToSay);
