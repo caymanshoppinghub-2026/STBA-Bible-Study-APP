@@ -6269,7 +6269,7 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
   const [nameSearch, setNameSearch] = useState("");
   const [playingName, setPlayingName] = useState<string | null>(null);
   const [loadingName, setLoadingName] = useState<string | null>(null);
-  const [nameVoice, setNameVoice] = useState<string>("Puck");
+  const [nameVoice, setNameVoice] = useState<string>("Charon");
   const activeAudioRef = useRef<AudioBufferSourceNode | null>(null);
   const activeAudioCtxRef = useRef<AudioContext | null>(null);
 
@@ -6316,12 +6316,12 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
   }, [activeCharIndex, isPlaying, isPaused, isCustom, verses, selectedVersion]);
 
   // Handle Verse Click:
-  // - 1st click: Starts narration from that verse onward.
+  // - 1st click: Starts narration from that verse onward using the selected AI Voice (Charon / Andrew US / etc.)
   // - 2nd click (same verse while actively playing): Pauses narration stream.
   // - 3rd click (same verse while paused): Resumes narration from where it paused.
   // - Clicking another verse: Switches reading immediately to new verse and starts narration from that verse onward.
   const handleVerseClick = (verseNum: number) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (typeof window === "undefined") return;
 
     // Case 1 & 4: If clicking a different verse or starting from stopped state -> start reading from this verse
     if (verseNum !== activeVerseNumber || !isPlaying) {
@@ -6331,27 +6331,32 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
 
     // Case 2: 2nd click on currently playing verse -> pause narration
     if (isPlaying && !isPaused) {
-      window.speechSynthesis.pause();
+      pauseActiveGeminiSpeech();
+      if (window.speechSynthesis && window.speechSynthesis.speaking) {
+        try { window.speechSynthesis.pause(); } catch {}
+      }
       setIsPaused(true);
       return;
     }
 
     // Case 3: 3rd click on paused verse -> resume narration
     if (isPlaying && isPaused) {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-        setIsPaused(false);
-      } else {
-        startReadingFromVerse(verseNum);
+      const resumed = resumeActiveGeminiSpeech();
+      if (!resumed && window.speechSynthesis && window.speechSynthesis.paused) {
+        try { window.speechSynthesis.resume(); } catch {}
       }
+      setIsPaused(false);
       return;
     }
   };
 
   const startReadingFromVerse = (verseNum: number) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (typeof window === "undefined") return;
 
-    window.speechSynthesis.cancel();
+    stopActiveGeminiSpeech();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     setIsPaused(false);
 
     const filteredVerses = verses.filter((v) => v.verseNumber >= verseNum);
@@ -6361,61 +6366,52 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
 
     setActiveVerseNumber(verseNum);
     currentUtteranceStartVerseRef.current = verseNum;
+    setIsPlaying(true);
+    setActiveCharIndex(null);
 
-    const utterance = new SpeechSynthesisUtterance(textForSpeech);
-    utterance.rate = speed;
-    utterance.volume = volume / 100;
-    utterance.pitch = 0.95;
+    const selectedVoiceToUse = nameVoice === "Puck" ? "Charon" : (nameVoice || "Charon");
+    const forceEdgeAndrew = nameVoice === "Andrew";
 
-    const naturalVoice = getBestLocalNeuralVoice();
-    if (naturalVoice) {
-      utterance.voice = naturalVoice;
-    }
-
-    utterance.onstart = () => {
-      setIsPlaying(true);
-      setIsPaused(false);
-      setActiveCharIndex(0);
-    };
-
-    utterance.onboundary = (e) => {
-      if (e.name === "word") {
-        setActiveCharIndex(e.charIndex);
-      }
-    };
-
-    utterance.onend = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-      setActiveCharIndex(null);
-    };
-
-    utterance.onerror = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-      setActiveCharIndex(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    playGeminiSpeech(textForSpeech, {
+      voice: forceEdgeAndrew ? "Andrew" : selectedVoiceToUse,
+      verbatimReadAloud: forceEdgeAndrew,
+      rate: speed,
+      onStart: () => {
+        setIsPlaying(true);
+        setIsPaused(false);
+      },
+      onEnd: () => {
+        setIsPlaying(false);
+        setIsPaused(false);
+        setActiveCharIndex(null);
+      },
+      onError: () => {
+        setIsPlaying(false);
+        setIsPaused(false);
+        setActiveCharIndex(null);
+      },
+    });
   };
 
   // Handle Custom Text click to read / pause / resume
   const handleCustomTextClick = () => {
-    if (typeof window === "undefined" || !window.speechSynthesis || !customText.trim()) return;
+    if (typeof window === "undefined" || !customText.trim()) return;
 
     if (isPlaying && !isPaused) {
-      window.speechSynthesis.pause();
+      pauseActiveGeminiSpeech();
+      if (window.speechSynthesis && window.speechSynthesis.speaking) {
+        try { window.speechSynthesis.pause(); } catch {}
+      }
       setIsPaused(true);
       return;
     }
 
     if (isPlaying && isPaused) {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-        setIsPaused(false);
-      } else {
-        startReadingCustomText();
+      resumeActiveGeminiSpeech();
+      if (window.speechSynthesis && window.speechSynthesis.paused) {
+        try { window.speechSynthesis.resume(); } catch {}
       }
+      setIsPaused(false);
       return;
     }
 
@@ -6423,49 +6419,42 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
   };
 
   const startReadingCustomText = () => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (typeof window === "undefined" || !customText.trim()) return;
 
-    window.speechSynthesis.cancel();
-    setIsPaused(false);
-
-    const utterance = new SpeechSynthesisUtterance(customText.trim());
-    utterance.rate = speed;
-    utterance.volume = volume / 100;
-    utterance.pitch = 0.95;
-
-    const naturalVoice = getBestLocalNeuralVoice();
-    if (naturalVoice) {
-      utterance.voice = naturalVoice;
+    stopActiveGeminiSpeech();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
+    setIsPaused(false);
+    setIsPlaying(true);
+    setActiveCharIndex(null);
 
-    utterance.onstart = () => {
-      setIsPlaying(true);
-      setIsPaused(false);
-      setActiveCharIndex(0);
-    };
+    const selectedVoiceToUse = nameVoice === "Puck" ? "Charon" : (nameVoice || "Charon");
+    const forceEdgeAndrew = nameVoice === "Andrew";
 
-    utterance.onboundary = (e) => {
-      if (e.name === "word") {
-        setActiveCharIndex(e.charIndex);
-      }
-    };
-
-    utterance.onend = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-      setActiveCharIndex(null);
-    };
-
-    utterance.onerror = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-      setActiveCharIndex(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    playGeminiSpeech(customText.trim(), {
+      voice: forceEdgeAndrew ? "Andrew" : selectedVoiceToUse,
+      verbatimReadAloud: forceEdgeAndrew,
+      rate: speed,
+      onStart: () => {
+        setIsPlaying(true);
+        setIsPaused(false);
+      },
+      onEnd: () => {
+        setIsPlaying(false);
+        setIsPaused(false);
+        setActiveCharIndex(null);
+      },
+      onError: () => {
+        setIsPlaying(false);
+        setIsPaused(false);
+        setActiveCharIndex(null);
+      },
+    });
   };
 
   const handleChapterChange = (chapterKey: string) => {
+    stopActiveGeminiSpeech();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
@@ -6480,6 +6469,7 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
     const query = verseInput.trim();
     if (!query) return;
 
+    stopActiveGeminiSpeech();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
@@ -6646,11 +6636,11 @@ export const VisualReaderTools: React.FC<ToolProps> = ({
             }`}
             title="Select AI Voice Reader"
           >
-            <option value="Puck">Elder Stephen</option>
-            <option value="Zephyr">Zephyr (Soft)</option>
-            <option value="Kore">Kore (Clear)</option>
+            <option value="Charon">Charon (Gemini Live / Elder Stephen)</option>
+            <option value="Andrew">Andrew US (Microsoft Neural)</option>
             <option value="Fenrir">Fenrir (Deep)</option>
-            <option value="Charon">Charon (Reverent)</option>
+            <option value="Kore">Kore (Clear)</option>
+            <option value="Zephyr">Zephyr (Soft)</option>
           </select>
 
           <button

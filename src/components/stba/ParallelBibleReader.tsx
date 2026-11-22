@@ -13,6 +13,7 @@ import { stbaStorage } from "../../lib/storage/indexedDbClient";
 import { TieredHighlightDropdown, getHighlightInlineStyle } from "./HighlightDropdownMenu";
 import { apiFetch, safeParseResponseJson } from "../../lib/apiFetch";
 import { decodeAndCleanGeminiPcm, sanitizeVerbatimSpeechText } from "../../utils/cleanGeminiAudio";
+import { playGeminiSpeech, stopActiveGeminiSpeech } from "../../utils/geminiSpeechPlayer";
 
 interface ParallelBibleReaderProps {
   reference: string;
@@ -273,50 +274,47 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
     return getElderStephenVoice();
   };
 
-  // Speak verse aloud with natural pacing and word tracking sync
+  // Speak verse aloud using Google Gemini TTS (Charon) primary -> Microsoft Edge Neural (Andrew US) fallback
   const speakVerseAloud = (verseNumber: string | number, textToSpeak: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (typeof window === "undefined") return;
 
     if (speakingVerse === verseNumber) {
-      window.speechSynthesis.cancel();
+      stopActiveGeminiSpeech();
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
       setSpeakingVerse(null);
       setSpeakingCharIndex(null);
       return;
     }
 
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.rate = 0.95; // deliberate pastoral speed
-    utterance.pitch = 0.95; // warmer and richer resonance
-
-    const voice = getBestLocalNeuralVoice();
-    if (voice) {
-      utterance.voice = voice;
+    stopActiveGeminiSpeech();
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
     }
 
-    utterance.onstart = () => {
-      setSpeakingVerse(verseNumber);
-      setSpeakingCharIndex(0);
-    };
+    const cleanVerseText = (textToSpeak || "").trim();
+    if (!cleanVerseText) return;
 
-    utterance.onboundary = (e) => {
-      if (e.name === "word") {
-        setSpeakingCharIndex(e.charIndex);
-      }
-    };
+    setSpeakingVerse(verseNumber);
+    setSpeakingCharIndex(null);
 
-    utterance.onend = () => {
-      setSpeakingVerse(null);
-      setSpeakingCharIndex(null);
-    };
-
-    utterance.onerror = () => {
-      setSpeakingVerse(null);
-      setSpeakingCharIndex(null);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    playGeminiSpeech(cleanVerseText, {
+      voice: "Charon",
+      verbatimReadAloud: false,
+      rate: 0.96,
+      onStart: () => {
+        setSpeakingVerse(verseNumber);
+      },
+      onEnd: () => {
+        setSpeakingVerse(null);
+        setSpeakingCharIndex(null);
+      },
+      onError: () => {
+        setSpeakingVerse(null);
+        setSpeakingCharIndex(null);
+      },
+    });
   };
 
   // Safe voices refresh on mount
@@ -325,6 +323,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
       window.speechSynthesis.getVoices();
     }
     return () => {
+      stopActiveGeminiSpeech();
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
