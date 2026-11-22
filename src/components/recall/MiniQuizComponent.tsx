@@ -486,27 +486,36 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
     null
   ]);
 
+  const [wrongOptionIndices, setWrongOptionIndices] = useState<Record<number, number[]>>({});
+
   const handleSelectContextOption = (optionIdx: number) => {
-    if (contextAnswers[contextQIndex] !== null) return; // Already answered this question
+    // If already answered correctly for this question, ignore duplicate clicks while auto-advancing
+    if (contextAnswers[contextQIndex]?.isCorrect) return;
 
     const isCorrect = quizData.contextQuestions[contextQIndex].options[optionIdx].isCorrect;
 
-    // Play celebration sound if correct
     if (isCorrect) {
       playCorrectAnswerSound();
-    }
+      const updated = [...contextAnswers];
+      updated[contextQIndex] = { selectedIdx: optionIdx, isCorrect: true };
+      setContextAnswers(updated);
 
-    const updated = [...contextAnswers];
-    updated[contextQIndex] = { selectedIdx: optionIdx, isCorrect };
-    setContextAnswers(updated);
-  };
-
-  const handleNextContextQ = () => {
-    if (contextQIndex < 2) {
-      setContextQIndex((prev) => prev + 1);
+      // Automatically move forward to the next question (or Step 2 after Question 3)
+      const currentQ = contextQIndex;
+      setTimeout(() => {
+        if (currentQ < 2) {
+          setContextQIndex(currentQ + 1);
+        } else {
+          changeStep(2);
+        }
+      }, 750);
     } else {
-      // Finished all 3 context questions -> Advance to Step 2
-      changeStep(2);
+      // Mark this option as tried/wrong in red so the user can immediately click the correct option to advance
+      setWrongOptionIndices((prev) => {
+        const existing = prev[contextQIndex] || [];
+        if (existing.includes(optionIdx)) return prev;
+        return { ...prev, [contextQIndex]: [...existing, optionIdx] };
+      });
     }
   };
 
@@ -628,6 +637,9 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
         // Play hooray sound & trigger fun confetti celebration!
         playHooraySound();
         showConfetti("recall", `Superb! All ${blankTokens.length} key words accurately recalled!`);
+        setTimeout(() => {
+          changeStep(3);
+        }, 900);
       } else {
         // Move to next unfilled blank
         const nextIdx = blankTokens.findIndex((b, idx) => idx !== activeBlankIndex && !updated[b.id]?.isCorrect);
@@ -675,9 +687,9 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
   const currentContextAnswer = contextAnswers[contextQIndex];
 
   return (
-    <div className="space-y-4 text-left" id="mini-recall-quiz-container">
+    <div className="space-y-3 text-left" id="mini-recall-quiz-container">
       {/* STEP INDICATOR TABS */}
-      <div className="grid grid-cols-4 items-center border-y border-[#1E325C]/80 py-2.5 text-center">
+      <div className="grid grid-cols-4 items-center border-y border-[#1E325C]/80 py-2 text-center">
         {[
           { step: 1 as const, num: "1.", labelTop: "Passage", labelBottom: "Context" },
           { step: 2 as const, num: "2.", labelTop: "Key", labelBottom: "Phrases" },
@@ -692,7 +704,7 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
               onClick={() => {
                 if (isDone || isCurrent) changeStep(s.step);
               }}
-              className={`relative px-2 py-1 text-xs sm:text-[13px] font-serif transition-all flex flex-col items-center justify-center border-r border-[#1E325C]/80 cursor-pointer ${
+              className={`relative px-2 py-0.5 text-xs sm:text-[13px] font-serif transition-all flex flex-col items-center justify-center border-r border-[#1E325C]/80 cursor-pointer ${
                 isCurrent
                   ? "text-[#F2C65E] font-bold"
                   : isDone
@@ -705,7 +717,7 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
               </span>
               <span className="leading-tight">{s.labelBottom}</span>
               {isCurrent && (
-                <span className="absolute -bottom-2.5 left-2 right-2 h-[2px] bg-gradient-to-r from-transparent via-[#F2C65E] to-transparent shadow-[0_0_12px_#F2C65E]" />
+                <span className="absolute -bottom-2 left-2 right-2 h-[2px] bg-gradient-to-r from-transparent via-[#F2C65E] to-transparent shadow-[0_0_12px_#F2C65E]" />
               )}
             </button>
           );
@@ -728,13 +740,13 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 10 }}
-            className="space-y-3"
+            className="space-y-2.5"
           >
             {/* Header with question counter badge */}
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2 text-[#E5B34B]">
-                <HelpCircle className="w-5 h-5 text-[#E5B34B] shrink-0" />
-                <span className="text-xs font-serif uppercase tracking-[0.14em] font-bold text-[#E5B34B]">
+                <HelpCircle className="w-4 h-4 text-[#E5B34B] shrink-0" />
+                <span className="text-[11px] font-serif uppercase tracking-[0.14em] font-bold text-[#E5B34B]">
                   Context Question {contextQIndex + 1} of 3
                 </span>
               </div>
@@ -759,81 +771,54 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
               </div>
             </div>
 
-            <h4 className="text-base sm:text-lg font-serif font-bold text-white leading-snug pl-7">
+            <h4 className="text-sm sm:text-base font-serif font-bold text-white leading-snug pl-6">
               {currentContextData.question}
             </h4>
 
             {/* Context Question Options */}
-            <div className="space-y-2.5 pt-1">
+            <div className="space-y-2 pt-0.5">
               {currentContextData.options.map((opt, idx) => {
-                const isSelected = currentContextAnswer?.selectedIdx === idx;
-                const isAnswered = currentContextAnswer !== null;
+                const isCorrectlyAnswered = currentContextAnswer?.isCorrect && currentContextAnswer.selectedIdx === idx;
+                const isWrongTry = (wrongOptionIndices[contextQIndex] || []).includes(idx);
+
                 let btnStyle =
                   "border-[#1C305C]/80 hover:border-[#E5B34B]/60 bg-[#08152F]/75 text-[#D8E2F2] hover:bg-[#0D1E42]/80";
+                let letterStyle = "text-[#E8BC57]";
 
-                if (isAnswered) {
-                  if (opt.isCorrect) {
-                    btnStyle =
-                      "border-[#E5B34B]/85 bg-gradient-to-r from-[#2D2414]/90 via-[#16223B]/95 to-[#2D2414]/90 text-white shadow-[0_0_24px_rgba(229,179,75,0.28)]";
-                  } else if (isSelected) {
-                    btnStyle = "border-rose-400/70 bg-rose-950/60 text-rose-100";
-                  } else {
-                    btnStyle = "border-[#16274C]/60 opacity-50 bg-[#061024]/50 text-[#8EA2C4]";
-                  }
+                if (isCorrectlyAnswered) {
+                  btnStyle =
+                    "border-emerald-400/90 bg-gradient-to-r from-emerald-950/90 via-emerald-900/80 to-emerald-950/90 text-white shadow-[0_0_24px_rgba(16,185,129,0.35)]";
+                  letterStyle = "text-emerald-400";
+                } else if (isWrongTry) {
+                  btnStyle = "border-rose-400/75 bg-rose-950/65 text-rose-100";
+                  letterStyle = "text-rose-400";
+                } else if (currentContextAnswer?.isCorrect) {
+                  btnStyle = "border-[#16274C]/60 opacity-45 bg-[#061024]/50 text-[#8EA2C4]";
                 }
 
                 return (
                   <button
                     key={idx}
                     onClick={() => handleSelectContextOption(idx)}
-                    disabled={isAnswered}
-                    className={`w-full text-left p-3 sm:p-3.5 rounded-2xl border text-xs sm:text-[13px] leading-relaxed transition-all cursor-pointer flex items-center space-x-3.5 ${btnStyle}`}
+                    disabled={Boolean(currentContextAnswer?.isCorrect)}
+                    className={`w-full text-left py-2.5 px-3 rounded-2xl border text-xs sm:text-[13px] leading-snug transition-all cursor-pointer flex items-center space-x-3 ${btnStyle}`}
                   >
-                    <span className="font-serif font-bold text-lg sm:text-xl text-[#E8BC57] shrink-0 w-5 text-center">
+                    <span className={`font-serif font-bold text-base sm:text-lg shrink-0 w-5 text-center ${letterStyle}`}>
                       {String.fromCharCode(65 + idx)}
                     </span>
-                    <div className="flex-1 space-y-1">
+                    <div className="flex-1">
                       <p className="font-sans text-[#E6ECF8]">{opt.text}</p>
-                      {isAnswered && (isSelected || opt.isCorrect) && (
-                        <p className="text-[11px] font-sans font-normal text-[#F2C65E]/90 italic pt-0.5">
-                          {opt.explanation}
-                        </p>
-                      )}
                     </div>
-                    {isAnswered && opt.isCorrect && (
-                      <Check className="w-5 h-5 text-[#F2C65E] shrink-0" />
+                    {isCorrectlyAnswered && (
+                      <Check className="w-5 h-5 text-emerald-400 shrink-0" />
                     )}
-                    {isAnswered && isSelected && !opt.isCorrect && (
+                    {isWrongTry && (
                       <X className="w-5 h-5 text-rose-400 shrink-0" />
                     )}
                   </button>
                 );
               })}
             </div>
-
-            {/* Navigation button for context questions */}
-            {currentContextAnswer !== null && (
-              <div className="flex items-center justify-between pt-2">
-                {contextQIndex > 0 ? (
-                  <button
-                    onClick={() => setContextQIndex((prev) => prev - 1)}
-                    className="text-xs text-[#B2C0D8] hover:text-white font-mono font-bold cursor-pointer"
-                  >
-                    ← Previous Question
-                  </button>
-                ) : (
-                  <div />
-                )}
-
-                <button
-                  onClick={handleNextContextQ}
-                  className="px-4 py-2 bg-gradient-to-b from-[#132852] via-[#0B1936] to-[#071024] border border-[#E5B34B]/70 text-white text-xs font-bold font-mono rounded-xl shadow-[0_0_15px_rgba(229,179,75,0.22)] hover:shadow-[0_0_20px_rgba(229,179,75,0.38)] transition-all flex items-center space-x-1.5 cursor-pointer ml-auto"
-                >
-                  <span>{contextQIndex < 2 ? `Next Question (${contextQIndex + 2}/3)` : "Continue to Key Phrases →"}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-[#E8BC57]" />
-                </button>
-              </div>
-            )}
           </motion.div>
         )}
 
@@ -957,34 +942,17 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="p-4 bg-emerald-500/15 border border-emerald-400/50 rounded-xl text-center space-y-2"
+                className="p-3 bg-emerald-500/15 border border-emerald-400/50 rounded-xl text-center space-y-1"
               >
                 <div className="flex items-center justify-center space-x-2 text-emerald-300 font-bold text-sm font-serif">
                   <Sparkles className="w-4 h-4 text-emerald-400" />
                   <span>Passage Key Words Successfully Mastered!</span>
                 </div>
                 <p className="text-xs text-emerald-200/90 font-sans max-w-sm mx-auto">
-                  All {blankTokens.length} missing doctrinal keywords retrieved accurately with full retention.
+                  All {blankTokens.length} missing doctrinal keywords retrieved accurately. Advancing...
                 </p>
               </motion.div>
             )}
-
-            {/* STEP 2 ACTIONS */}
-            <div className="flex justify-between items-center pt-2">
-              <button
-                onClick={() => changeStep(1)}
-                className="text-xs text-[#B2C0D8] hover:text-white font-mono flex items-center space-x-1 cursor-pointer"
-              >
-                <span>← Back to Context</span>
-              </button>
-              <button
-                onClick={() => changeStep(3)}
-                className="px-4 py-2 bg-gradient-to-b from-[#132852] via-[#0B1936] to-[#071024] border border-[#E5B34B]/70 text-white text-xs font-bold font-mono rounded-xl shadow-[0_0_15px_rgba(229,179,75,0.22)] transition-all flex items-center space-x-1.5 cursor-pointer"
-              >
-                <span>Continue to Personal Anchor</span>
-                <ArrowRight className="w-3.5 h-3.5 text-[#E8BC57]" />
-              </button>
-            </div>
           </motion.div>
         )}
 

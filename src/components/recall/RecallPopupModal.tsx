@@ -441,7 +441,9 @@ export const RecallPopupModal: React.FC = () => {
                   <>
                     {/* SECTION A: HERO SCRIPTURE BANNER WITH ILLUMINATED OPEN BIBLE */}
                     <div
-                      className="relative overflow-hidden min-h-[175px] sm:min-h-[195px] bg-[#050E22] border-b border-[#1E315C]/70 text-left"
+                      className={`relative overflow-hidden bg-[#050E22] border-b border-[#1E315C]/70 text-left transition-all ${
+                        currentQuizStep === 2 ? "min-h-[68px]" : "min-h-[140px] sm:min-h-[155px]"
+                      }`}
                       id="popup-verse-preview"
                     >
                       {/* Right-side Open Bible Sunbeam Artwork */}
@@ -454,101 +456,45 @@ export const RecallPopupModal: React.FC = () => {
                       <div className="absolute inset-0 bg-gradient-to-r from-[#050E22] via-[#050E22]/90 via-48% to-transparent pointer-events-none" />
                       <div className="absolute inset-0 bg-gradient-to-t from-[#050E22] via-transparent to-[#050E22]/30 pointer-events-none" />
 
-                      <div className="relative z-10 p-4 sm:p-5 pr-[34%] sm:pr-[38%] space-y-2.5">
-                        <div className="space-y-1.5">
+                      <div className="relative z-10 px-4 py-3 sm:px-5 sm:py-3.5 pr-[34%] sm:pr-[38%] space-y-2">
+                        <div className="space-y-1">
                           <div className="flex items-center space-x-2.5">
-                            <BookOpen className="w-6 h-6 sm:w-7 sm:h-7 text-[#E5B34B] shrink-0" />
-                            <h4 className="font-serif font-bold text-lg sm:text-2xl text-[#E8BC57] tracking-tight">
+                            <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-[#E5B34B] shrink-0" />
+                            <h4 className="font-serif font-bold text-lg sm:text-xl text-[#E8BC57] tracking-tight">
                               {activeVerse.reference}
                             </h4>
                           </div>
-                          <div className="h-[1px] w-48 sm:w-56 bg-gradient-to-r from-[#E5B34B]/70 via-[#E5B34B]/30 to-transparent" />
+                          <div className="h-[1px] w-44 sm:w-52 bg-gradient-to-r from-[#E5B34B]/70 via-[#E5B34B]/30 to-transparent" />
                         </div>
 
-                        {currentQuizStep === 2 ? (
-                          <div className="flex items-center space-x-2.5 py-2.5 px-3.5 bg-[#121D38]/90 border border-[#E5B34B]/45 rounded-xl text-[#E8BC57] text-xs font-mono mt-1 backdrop-blur-xs">
-                            <EyeOff className="w-4 h-4 shrink-0 text-[#E8BC57]" />
-                            <div>
-                              <span className="font-bold block">Text Hidden for Active Recall</span>
-                              <span className="text-[11px] text-[#C8D4EA]">
-                                Retrieve and fill the missing keywords in Step 2 below.
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="font-serif italic text-sm sm:text-[15.5px] text-[#E6ECF8] leading-relaxed drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
-                            <span className="text-[#E5B34B] font-bold not-italic text-lg mr-1">“</span>
+                        {currentQuizStep !== 2 && (
+                          <p className="font-serif italic text-xs sm:text-[14.5px] text-[#E6ECF8] leading-snug drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+                            <span className="text-[#E5B34B] font-bold not-italic text-base mr-1">“</span>
                             {activeVerse.text}
-                            <span className="text-[#E5B34B] font-bold not-italic text-lg ml-1">”</span>
+                            <span className="text-[#E5B34B] font-bold not-italic text-base ml-1">”</span>
                           </p>
                         )}
                       </div>
                     </div>
 
-                    {/* SECTION B: INTERACTIVE MINI-RECALL QUIZ (COLLAPSIBLE / ACCORDION) */}
-                    <div className="px-4 sm:px-5 pt-3 pb-4 space-y-3">
-                      <button
-                        onClick={() => setIsQuizExpanded(!isQuizExpanded)}
-                        className="w-full py-1.5 flex items-center justify-between text-left transition-colors cursor-pointer"
-                        id="toggle-mini-quiz-accordion"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <Star className="w-4 h-4 text-[#E5B34B]" />
-                          <span className="text-xs sm:text-[13px] font-serif font-bold text-[#E5B34B] uppercase tracking-[0.14em]">
-                            Interactive Memorization Steps
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-1 text-[#D5DFEE] hover:text-white">
-                          <span className="text-xs font-sans font-medium">
-                            {isQuizExpanded ? "Collapse" : "Expand 3 Steps"}
-                          </span>
-                          {isQuizExpanded ? (
-                            <ChevronUp className="w-3.5 h-3.5 text-[#E5B34B]" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5 text-[#E5B34B]" />
-                          )}
-                        </div>
-                      </button>
+                    {/* SECTION B: INTERACTIVE MINI-RECALL QUIZ */}
+                    <div className="px-4 sm:px-5 pt-2.5 pb-4 space-y-2">
+                      <div className="w-full py-1 flex items-center space-x-2 text-left">
+                        <Star className="w-4 h-4 text-[#E5B34B]" />
+                        <span className="text-xs sm:text-[13px] font-serif font-bold text-[#E5B34B] uppercase tracking-[0.14em]">
+                          Interactive Memorization Steps
+                        </span>
+                      </div>
 
-                      {isQuizExpanded && (
-                        <div>
-                          <MiniQuizComponent
-                            verse={activeVerse}
-                            sabbathMode={sabbathMode}
-                            activeStep={currentQuizStep}
-                            onStepChange={(step) => setCurrentQuizStep(step)}
-                            onComplete={handleMiniQuizComplete}
-                            onOpenFullRecall={handleNavigateToFullRecall}
-                          />
-                        </div>
-                      )}
-
-                      {/* SECTION C & D: SNOOZE / SAVE LESSON FOOTER ACTIONS */}
-                      <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#1D315C]/80 text-xs gap-3">
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => handleSnooze(15)}
-                            className="text-xs sm:text-sm text-[#D5DFEE] hover:text-[#E8BC57] font-serif flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-                            title="Remind in 15 minutes"
-                            id="popup-snooze-15m-btn"
-                          >
-                            <div className="w-7 h-7 rounded-full border border-[#E5B34B]/70 bg-[#1B170E] flex items-center justify-center text-[#E5B34B]">
-                              <Timer className="w-4 h-4 shrink-0" />
-                            </div>
-                            <span>Snooze</span>
-                            <span className="font-bold text-white">15m</span>
-                          </button>
-                          <div className="h-6 w-[1px] bg-[#E5B34B]/30 hidden sm:block" />
-                        </div>
-
-                        <button
-                          onClick={handleSaveLesson}
-                          className="px-6 py-2.5 rounded-2xl border border-[#E5B34B]/75 bg-gradient-to-b from-[#132852] via-[#0B1936] to-[#071024] text-white font-sans font-semibold text-xs sm:text-sm shadow-[0_0_20px_rgba(229,179,75,0.28),inset_0_1px_1px_rgba(255,255,255,0.2)] hover:shadow-[0_0_26px_rgba(229,179,75,0.45)] transition-all flex items-center gap-2 cursor-pointer shrink-0"
-                          id="popup-save-lesson-btn"
-                        >
-                          <Bookmark className="w-4 h-4 text-[#E5B34B]" />
-                          <span>{lessonSavedNotice ? "Lesson Saved ✓" : "Save Lesson"}</span>
-                        </button>
+                      <div>
+                        <MiniQuizComponent
+                          verse={activeVerse}
+                          sabbathMode={sabbathMode}
+                          activeStep={currentQuizStep}
+                          onStepChange={(step) => setCurrentQuizStep(step)}
+                          onComplete={handleMiniQuizComplete}
+                          onOpenFullRecall={handleNavigateToFullRecall}
+                        />
                       </div>
                     </div>
                   </>
