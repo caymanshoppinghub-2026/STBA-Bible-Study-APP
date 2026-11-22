@@ -298,7 +298,7 @@ export const LogosScriptureHoverCard: React.FC<{
       }}
       className="w-[340px] max-w-[92vw] pointer-events-none select-none"
     >
-      <div className="rounded-2xl bg-gradient-to-br from-[#08214A]/92 via-[#061836]/92 to-[#041126]/92 backdrop-blur-xl text-[#EEF2FA] border border-[#E5B842]/50 shadow-[0_18px_50px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.22)] px-4 py-3.5 font-sans not-italic">
+      <div className="rounded-2xl bg-gradient-to-br from-[#08214A] via-[#061836] to-[#041126] text-[#EEF2FA] border border-[#E5B842]/80 ring-1 ring-[#3B82F6]/35 shadow-[0_18px_50px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.28)] px-4 py-3.5 font-sans not-italic">
         {(lookupData?.pericope || fallbackPericope) && (
           <div className="text-[13px] font-bold text-[#F3CF65] mb-1 leading-snug not-italic">
             {lookupData?.pericope || fallbackPericope}
