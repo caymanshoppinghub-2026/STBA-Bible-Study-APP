@@ -192,7 +192,7 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
   }, []);
 
   // Local font size fallback if parent doesn't provide
-  const [localFontSize, setLocalFontSize] = useState(14);
+  const [localFontSize, setLocalFontSize] = useState(16);
   const currentFontSize = bibleFontSize !== undefined ? bibleFontSize : localFontSize;
   const setCurrentFontSize = setBibleFontSize !== undefined ? setBibleFontSize : setLocalFontSize;
 

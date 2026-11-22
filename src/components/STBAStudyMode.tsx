@@ -40,7 +40,7 @@ export function STBAStudyMode() {
   const [selectedWord, setSelectedWord] = useState<string>("");
   const [bibleFontSize, setBibleFontSize] = useState<number>(() => {
     const saved = localStorage.getItem(`stba_bibleFontSize_${user?.email || "guest"}`);
-    return saved !== null ? Number(saved) : 14;
+    return saved !== null ? Number(saved) : 16;
   });
   const [notebookFontSize, setNotebookFontSize] = useState<number>(() => {
     const saved = localStorage.getItem(`stba_notebookFontSize_${user?.email || "guest"}`);

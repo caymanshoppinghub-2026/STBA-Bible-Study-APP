@@ -675,15 +675,17 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
   const [clozeCompleted, setClozeCompleted] = useState<boolean>(false);
   const [penaltyMessage, setPenaltyMessage] = useState<string | null>(null);
 
-  // Parse and identify key words from the verse
+  // Parse and identify distinct key words from the verse (never duplicate case-insensitive words like "Here"/"here")
   const { tokens, blankTokens, wordBankOptions } = useMemo(() => {
     const rawWords = verse.text.split(/\s+/);
     const tokenList: VerseToken[] = [];
-    let eligibleIndices: number[] = [];
+    const seenLower = new Set<string>();
+    const eligibleIndices: number[] = [];
 
     rawWords.forEach((wordWithPunc, idx) => {
       const clean = wordWithPunc.replace(/[^a-zA-Z0-9]/g, "");
-      const isKey = clean.length >= 4 && !COMMON_STOP_WORDS.has(clean.toLowerCase());
+      const lower = clean.toLowerCase();
+      const isKey = clean.length >= 4 && !COMMON_STOP_WORDS.has(lower);
       tokenList.push({
         id: idx,
         originalText: wordWithPunc,
@@ -694,25 +696,35 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
         isCorrect: null
       });
 
-      if (isKey) {
+      if (isKey && !seenLower.has(lower)) {
+        seenLower.add(lower);
         eligibleIndices.push(idx);
       }
     });
 
-    // If not enough long words, allow shorter ones
+    // If not enough long distinct words, allow shorter distinct ones
     if (eligibleIndices.length < hiddenWordCount) {
       rawWords.forEach((w, idx) => {
         const clean = w.replace(/[^a-zA-Z0-9]/g, "");
-        if (clean.length >= 3 && !eligibleIndices.includes(idx)) {
+        const lower = clean.toLowerCase();
+        if (clean.length >= 3 && !eligibleIndices.includes(idx) && !seenLower.has(lower)) {
+          seenLower.add(lower);
           eligibleIndices.push(idx);
         }
       });
     }
 
-    // Select the first `hiddenWordCount` eligible words to hide (spaced through the verse)
-    const selectedIndices = eligibleIndices.slice(0, Math.min(hiddenWordCount, eligibleIndices.length));
-    const blanks: VerseToken[] = [];
+    // Randomly pick `hiddenWordCount` distinct eligible words across the verse, keeping reading order
+    const shuffledPool = [...eligibleIndices];
+    for (let i = shuffledPool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledPool[i], shuffledPool[j]] = [shuffledPool[j], shuffledPool[i]];
+    }
+    const selectedIndices = shuffledPool
+      .slice(0, Math.min(hiddenWordCount, shuffledPool.length))
+      .sort((a, b) => a - b);
 
+    const blanks: VerseToken[] = [];
     tokenList.forEach((token) => {
       if (selectedIndices.includes(token.id)) {
         token.isBlank = true;
@@ -720,14 +732,31 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
       }
     });
 
-    // Create word bank containing target clean words plus smart distractors
+    // Create word bank containing distinct target words plus smart shuffled distractors
     const targetWords = blanks.map((b) => b.cleanWord);
-    const distractors = ["righteousness", "covenant", "commandments", "faith", "sanctuary", "testimony", "grace", "patience", "glory", "truth"]
-      .filter((d) => !targetWords.some((t) => t.toLowerCase() === d.toLowerCase()))
-      .slice(0, Math.max(2, 6 - targetWords.length));
+    const distractorPool = [
+      "righteousness", "covenant", "commandments", "faith", "sanctuary",
+      "testimony", "grace", "patience", "glory", "truth", "redemption", "mercy"
+    ].filter((d) => !targetWords.some((t) => t.toLowerCase() === d.toLowerCase()));
 
-    // Combine and shuffle
-    const allBank = Array.from(new Set([...targetWords, ...distractors])).sort(() => 0.5 - Math.random());
+    for (let i = distractorPool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [distractorPool[i], distractorPool[j]] = [distractorPool[j], distractorPool[i]];
+    }
+
+    const distractors = distractorPool.slice(0, Math.max(2, 6 - targetWords.length));
+
+    // Combine with case-insensitive deduplication and Fisher-Yates shuffle
+    const bankMap = new Map<string, string>();
+    [...targetWords, ...distractors].forEach((w) => {
+      const key = w.toLowerCase();
+      if (!bankMap.has(key)) bankMap.set(key, w);
+    });
+    const allBank = Array.from(bankMap.values());
+    for (let i = allBank.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allBank[i], allBank[j]] = [allBank[j], allBank[i]];
+    }
 
     return {
       tokens: tokenList,
@@ -1057,9 +1086,15 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {wordBankOptions.map((word, idx) => {
-                    const isAlreadyUsed = Object.values(filledAnswers).some(
-                      (a: { word: string; isCorrect: boolean }) => a && a.word.toLowerCase() === word.toLowerCase() && a.isCorrect
-                    );
+                    const lowerWord = word.toLowerCase();
+                    const requiredCount = blankTokens.filter(
+                      (b) => b.cleanWord.toLowerCase() === lowerWord
+                    ).length;
+                    const filledCount = Object.values(filledAnswers).filter(
+                      (a: { word: string; isCorrect: boolean }) =>
+                        a && a.word.toLowerCase() === lowerWord && a.isCorrect
+                    ).length;
+                    const isAlreadyUsed = requiredCount > 0 ? filledCount >= requiredCount : filledCount > 0;
 
                     return (
                       <button
