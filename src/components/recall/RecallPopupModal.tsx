@@ -313,24 +313,6 @@ export const RecallPopupModal: React.FC = () => {
                   <span>{activeVerse.decayStatus}</span>
                 </span>
                 <button
-                  onClick={() => setIsMinimized(!isMinimized)}
-                  className="p-1.5 rounded-lg text-[#B2C0D8] hover:text-white hover:bg-white/10 transition-all cursor-pointer hidden sm:inline-flex"
-                  title={isMinimized ? "Expand prompt" : "Minimize"}
-                  aria-label="Toggle Minimize"
-                  id="popup-minimize-toggle"
-                >
-                  {isMinimized ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
-                </button>
-                <button
-                  onClick={() => handleSnooze(15)}
-                  className="p-1.5 rounded-lg text-[#B2C0D8] hover:text-white hover:bg-white/10 transition-all cursor-pointer"
-                  title="Snooze 15 minutes"
-                  aria-label="Snooze Recall"
-                  id="popup-snooze-header-btn"
-                >
-                  <Clock className="w-4 h-4" />
-                </button>
-                <button
                   onClick={() => handleSnooze(15)}
                   className="p-1.5 rounded-lg text-[#B2C0D8] hover:text-white hover:bg-white/10 transition-all cursor-pointer"
                   title="Dismiss"
@@ -479,11 +461,24 @@ export const RecallPopupModal: React.FC = () => {
 
                     {/* SECTION B: INTERACTIVE MINI-RECALL QUIZ */}
                     <div className="px-4 sm:px-5 pt-2.5 pb-4 space-y-2">
-                      <div className="w-full py-1 flex items-center space-x-2 text-left">
-                        <Star className="w-4 h-4 text-[#E5B34B]" />
-                        <span className="text-xs sm:text-[13px] font-serif font-bold text-[#E5B34B] uppercase tracking-[0.14em]">
-                          Interactive Memorization Steps
-                        </span>
+                      <div className="w-full py-1 flex items-center justify-between text-left gap-2">
+                        <div className="flex items-center space-x-2">
+                          <Star className="w-4 h-4 text-[#E5B34B] shrink-0" />
+                          <span className="text-xs sm:text-[13px] font-serif font-bold text-[#E5B34B] uppercase tracking-[0.14em]">
+                            Interactive Memorization Steps
+                          </span>
+                        </div>
+
+                        <button
+                          onClick={() => handleSnooze(15)}
+                          className="text-xs text-[#D5DFEE] hover:text-[#F2C65E] font-serif flex items-center gap-1.5 py-1 px-2.5 rounded-lg border border-[#E5B34B]/45 bg-[#121D38]/80 hover:bg-[#19284C] transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                          title="Snooze 15 minutes"
+                          id="popup-snooze-15m-btn"
+                        >
+                          <Timer className="w-3.5 h-3.5 text-[#E5B34B] shrink-0" />
+                          <span>Snooze</span>
+                          <span className="font-bold text-white">15m</span>
+                        </button>
                       </div>
 
                       <div>
