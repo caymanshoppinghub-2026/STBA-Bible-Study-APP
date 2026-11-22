@@ -677,40 +677,45 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
   return (
     <div className="space-y-4 text-left" id="mini-recall-quiz-container">
       {/* STEP INDICATOR TABS */}
-      <div className="flex items-center justify-between border-b border-stone-200/80 pb-2.5">
-        <div className="flex items-center space-x-1 sm:space-x-2">
-          {[
-            { step: 1 as const, title: "1. Passage Context" },
-            { step: 2 as const, title: "2. Key Phrases" },
-            { step: 3 as const, title: "3. Personal Anchor" }
-          ].map((s) => {
-            const isDone = s.step < activeStep;
-            const isCurrent = s.step === activeStep;
+      <div className="grid grid-cols-4 items-center border-y border-[#1E325C]/80 py-2.5 text-center">
+        {[
+          { step: 1 as const, num: "1.", labelTop: "Passage", labelBottom: "Context" },
+          { step: 2 as const, num: "2.", labelTop: "Key", labelBottom: "Phrases" },
+          { step: 3 as const, num: "3.", labelTop: "Personal", labelBottom: "Anchor" }
+        ].map((s) => {
+          const isDone = s.step < activeStep;
+          const isCurrent = s.step === activeStep;
 
-            return (
-              <button
-                key={s.step}
-                onClick={() => {
-                  if (isDone || isCurrent) changeStep(s.step);
-                }}
-                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all flex items-center space-x-1 cursor-pointer ${
-                  isCurrent
-                    ? "bg-[#1C2333] text-white shadow-2xs"
-                    : isDone
-                    ? "bg-[#C9973A]/15 text-[#8F6516]"
-                    : "text-stone-400 opacity-60"
-                }`}
-              >
-                {isDone ? <CheckCircle2 className="w-3 h-3 text-[#C9973A]" /> : null}
-                <span>{s.title}</span>
-              </button>
-            );
-          })}
+          return (
+            <button
+              key={s.step}
+              onClick={() => {
+                if (isDone || isCurrent) changeStep(s.step);
+              }}
+              className={`relative px-2 py-1 text-xs sm:text-[13px] font-serif transition-all flex flex-col items-center justify-center border-r border-[#1E325C]/80 cursor-pointer ${
+                isCurrent
+                  ? "text-[#F2C65E] font-bold"
+                  : isDone
+                  ? "text-[#D5DFEE] hover:text-[#F2C65E]"
+                  : "text-[#B2C0D8]/75"
+              }`}
+            >
+              <span className="leading-tight">
+                {s.num} {s.labelTop}
+              </span>
+              <span className="leading-tight">{s.labelBottom}</span>
+              {isCurrent && (
+                <span className="absolute -bottom-2.5 left-2 right-2 h-[2px] bg-gradient-to-r from-transparent via-[#F2C65E] to-transparent shadow-[0_0_12px_#F2C65E]" />
+              )}
+            </button>
+          );
+        })}
+
+        <div className="flex items-center justify-center px-2">
+          <span className="text-xs sm:text-[13px] font-serif text-[#F2C65E] font-bold">
+            Step {activeStep} of 3
+          </span>
         </div>
-
-        <span className="text-[11px] font-mono text-[#C9973A] font-bold">
-          Step {activeStep} of 3
-        </span>
       </div>
 
       <AnimatePresence mode="wait">
@@ -727,13 +732,13 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
           >
             {/* Header with question counter badge */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-1.5 text-[#C9973A]">
-                <BookOpen className="w-4 h-4" />
-                <span className="text-xs font-mono uppercase tracking-widest font-extrabold">
+              <div className="flex items-center space-x-2 text-[#E5B34B]">
+                <HelpCircle className="w-5 h-5 text-[#E5B34B] shrink-0" />
+                <span className="text-xs font-serif uppercase tracking-[0.14em] font-bold text-[#E5B34B]">
                   Context Question {contextQIndex + 1} of 3
                 </span>
               </div>
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center space-x-1.5">
                 {[0, 1, 2].map((idx) => {
                   const ans = contextAnswers[idx];
                   return (
@@ -741,12 +746,12 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
                       key={idx}
                       className={`w-2 h-2 rounded-full transition-all ${
                         idx === contextQIndex
-                          ? "bg-[#C9973A] scale-125"
+                          ? "bg-[#F2C65E] scale-125 shadow-[0_0_8px_#F2C65E]"
                           : ans?.isCorrect
-                          ? "bg-emerald-500"
+                          ? "bg-emerald-400"
                           : ans !== null
                           ? "bg-rose-400"
-                          : "bg-stone-300"
+                          : "bg-[#263C6A]"
                       }`}
                     />
                   );
@@ -754,24 +759,26 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
               </div>
             </div>
 
-            <h4 className="text-sm font-serif font-bold text-navy leading-snug">
+            <h4 className="text-base sm:text-lg font-serif font-bold text-white leading-snug pl-7">
               {currentContextData.question}
             </h4>
 
             {/* Context Question Options */}
-            <div className="space-y-2 pt-1">
+            <div className="space-y-2.5 pt-1">
               {currentContextData.options.map((opt, idx) => {
                 const isSelected = currentContextAnswer?.selectedIdx === idx;
                 const isAnswered = currentContextAnswer !== null;
-                let btnStyle = "border-stone-200 hover:border-[#C9973A]/50 bg-stone-50/70 text-stone-800";
+                let btnStyle =
+                  "border-[#1C305C]/80 hover:border-[#E5B34B]/60 bg-[#08152F]/75 text-[#D8E2F2] hover:bg-[#0D1E42]/80";
 
                 if (isAnswered) {
                   if (opt.isCorrect) {
-                    btnStyle = "border-emerald-500 bg-emerald-50/90 text-emerald-950 ring-1 ring-emerald-400 font-medium";
+                    btnStyle =
+                      "border-[#E5B34B]/85 bg-gradient-to-r from-[#2D2414]/90 via-[#16223B]/95 to-[#2D2414]/90 text-white shadow-[0_0_24px_rgba(229,179,75,0.28)]";
                   } else if (isSelected) {
-                    btnStyle = "border-rose-400 bg-rose-50/90 text-rose-950";
+                    btnStyle = "border-rose-400/70 bg-rose-950/60 text-rose-100";
                   } else {
-                    btnStyle = "border-stone-200 opacity-40 bg-stone-50 text-stone-400";
+                    btnStyle = "border-[#16274C]/60 opacity-50 bg-[#061024]/50 text-[#8EA2C4]";
                   }
                 }
 
@@ -780,24 +787,24 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
                     key={idx}
                     onClick={() => handleSelectContextOption(idx)}
                     disabled={isAnswered}
-                    className={`w-full text-left p-3 rounded-xl border text-xs leading-relaxed transition-all cursor-pointer flex items-start space-x-2.5 ${btnStyle}`}
+                    className={`w-full text-left p-3 sm:p-3.5 rounded-2xl border text-xs sm:text-[13px] leading-relaxed transition-all cursor-pointer flex items-center space-x-3.5 ${btnStyle}`}
                   >
-                    <span className="font-mono font-bold text-[11px] mt-0.5 shrink-0 opacity-70">
-                      {String.fromCharCode(65 + idx)}.
+                    <span className="font-serif font-bold text-lg sm:text-xl text-[#E8BC57] shrink-0 w-5 text-center">
+                      {String.fromCharCode(65 + idx)}
                     </span>
                     <div className="flex-1 space-y-1">
-                      <p className="font-sans">{opt.text}</p>
+                      <p className="font-sans text-[#E6ECF8]">{opt.text}</p>
                       {isAnswered && (isSelected || opt.isCorrect) && (
-                        <p className="text-[11px] font-sans font-normal opacity-90 italic pt-0.5">
+                        <p className="text-[11px] font-sans font-normal text-[#F2C65E]/90 italic pt-0.5">
                           {opt.explanation}
                         </p>
                       )}
                     </div>
                     {isAnswered && opt.isCorrect && (
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <Check className="w-5 h-5 text-[#F2C65E] shrink-0" />
                     )}
                     {isAnswered && isSelected && !opt.isCorrect && (
-                      <X className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                      <X className="w-5 h-5 text-rose-400 shrink-0" />
                     )}
                   </button>
                 );
@@ -810,7 +817,7 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
                 {contextQIndex > 0 ? (
                   <button
                     onClick={() => setContextQIndex((prev) => prev - 1)}
-                    className="text-xs text-stone-500 hover:text-stone-800 font-mono font-bold cursor-pointer"
+                    className="text-xs text-[#B2C0D8] hover:text-white font-mono font-bold cursor-pointer"
                   >
                     ← Previous Question
                   </button>
@@ -820,10 +827,10 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
 
                 <button
                   onClick={handleNextContextQ}
-                  className="px-4 py-2 bg-[#1C2333] hover:bg-navy text-white text-xs font-bold font-mono rounded-xl shadow-sm hover:shadow transition-all flex items-center space-x-1.5 cursor-pointer ml-auto"
+                  className="px-4 py-2 bg-gradient-to-b from-[#132852] via-[#0B1936] to-[#071024] border border-[#E5B34B]/70 text-white text-xs font-bold font-mono rounded-xl shadow-[0_0_15px_rgba(229,179,75,0.22)] hover:shadow-[0_0_20px_rgba(229,179,75,0.38)] transition-all flex items-center space-x-1.5 cursor-pointer ml-auto"
                 >
                   <span>{contextQIndex < 2 ? `Next Question (${contextQIndex + 2}/3)` : "Continue to Key Phrases →"}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-[#C9973A]" />
+                  <ArrowRight className="w-3.5 h-3.5 text-[#E8BC57]" />
                 </button>
               </div>
             )}
@@ -843,17 +850,17 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
           >
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-1.5 text-[#C9973A]">
+                <div className="flex items-center space-x-1.5 text-[#E8BC57]">
                   <Brain className="w-4 h-4" />
-                  <span className="text-xs font-mono uppercase tracking-widest font-extrabold">
+                  <span className="text-xs font-serif uppercase tracking-widest font-extrabold">
                     Key Phrase Recall Challenge
                   </span>
                 </div>
-                <span className="text-[11px] font-mono font-bold text-stone-500">
+                <span className="text-[11px] font-mono font-bold text-[#B2C0D8]">
                   {blankTokens.filter((b) => filledAnswers[b.id]?.isCorrect).length}/{blankTokens.length} Words Recalled
                 </span>
               </div>
-              <p className="text-xs text-stone-600">
+              <p className="text-xs text-[#B2C0D8]">
                 Recall the missing words. Tap a blank slot, then choose the matching word from the bank below:
               </p>
             </div>
@@ -863,15 +870,15 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
               <motion.div
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center space-x-2 text-rose-800 text-xs font-sans"
+                className="p-2.5 bg-rose-950/70 border border-rose-400/50 rounded-xl flex items-center space-x-2 text-rose-200 text-xs font-sans"
               >
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                 <span className="font-medium">{penaltyMessage}</span>
               </motion.div>
             )}
 
             {/* Interactive Passage View with Blank Slots */}
-            <div className="p-4 rounded-xl bg-amber-50/40 border border-[#C9973A]/30 text-stone-900 leading-relaxed font-bible text-sm sm:text-base">
+            <div className="p-4 rounded-2xl bg-[#08152F]/90 border border-[#E5B34B]/35 text-[#E6ECF8] leading-relaxed font-serif text-sm sm:text-base">
               <span className="inline">
                 {tokens.map((token) => {
                   if (!token.isBlank) {
@@ -886,9 +893,9 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
                     return (
                       <span
                         key={token.id}
-                        className="inline-flex items-center px-2 py-0.5 mx-1 rounded-lg bg-emerald-100/90 text-emerald-950 font-bold border border-emerald-400 text-xs sm:text-sm animate-pulse"
+                        className="inline-flex items-center px-2 py-0.5 mx-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-400/60 text-xs sm:text-sm"
                       >
-                        <Check className="w-3 h-3 mr-1 text-emerald-700" />
+                        <Check className="w-3 h-3 mr-1 text-emerald-400" />
                         {answer.word}
                       </span>
                     );
@@ -900,8 +907,8 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
                       onClick={() => setActiveBlankIndex(blankIndex)}
                       className={`inline-flex items-center px-2.5 py-0.5 mx-1 rounded-lg border font-mono text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                         isCurrentBlank
-                          ? "bg-[#1C2333] text-[#C9973A] border-[#C9973A] ring-2 ring-[#C9973A]/40 shadow-sm"
-                          : "bg-amber-100/80 text-[#8F6516] border-[#C9973A]/50 hover:bg-amber-200/80"
+                          ? "bg-gradient-to-r from-[#2D2414] to-[#1A243B] text-[#F2C65E] border-[#F2C65E] ring-2 ring-[#F2C65E]/40 shadow-[0_0_12px_rgba(242,198,94,0.3)]"
+                          : "bg-[#102042] text-[#E8BC57] border-[#E5B34B]/45 hover:bg-[#172C59]"
                       }`}
                     >
                       <span>Slot #{blankIndex + 1}</span>
@@ -915,10 +922,10 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
             {!clozeCompleted ? (
               <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono uppercase text-stone-500 font-bold">
+                  <span className="text-[11px] font-mono uppercase text-[#B2C0D8] font-bold">
                     Select word for Slot #{activeBlankIndex + 1}:
                   </span>
-                  <span className="text-[10px] font-mono text-[#C9973A] font-extrabold uppercase">
+                  <span className="text-[10px] font-mono text-[#E8BC57] font-extrabold uppercase">
                     Active Target: Blank #{activeBlankIndex + 1}
                   </span>
                 </div>
@@ -936,8 +943,8 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
                         disabled={isAlreadyUsed}
                         className={`p-2.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
                           isAlreadyUsed
-                            ? "bg-stone-100 border-stone-200 text-stone-400 opacity-40 line-through cursor-not-allowed"
-                            : "bg-white border-stone-200 text-stone-800 hover:border-[#C9973A] hover:bg-amber-50/50 shadow-2xs active:scale-95"
+                            ? "bg-[#061024] border-[#15254A] text-[#5B7099] opacity-40 line-through cursor-not-allowed"
+                            : "bg-[#0B1A3A] border-[#243B6E] text-white hover:border-[#E5B34B] hover:bg-[#132652] shadow-2xs active:scale-95"
                         }`}
                       >
                         <span>{word}</span>
@@ -950,13 +957,13 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-center space-y-2"
+                className="p-4 bg-emerald-500/15 border border-emerald-400/50 rounded-xl text-center space-y-2"
               >
-                <div className="flex items-center justify-center space-x-2 text-emerald-800 font-bold text-sm font-serif">
-                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                <div className="flex items-center justify-center space-x-2 text-emerald-300 font-bold text-sm font-serif">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
                   <span>Passage Key Words Successfully Mastered!</span>
                 </div>
-                <p className="text-xs text-emerald-700 font-sans max-w-sm mx-auto">
+                <p className="text-xs text-emerald-200/90 font-sans max-w-sm mx-auto">
                   All {blankTokens.length} missing doctrinal keywords retrieved accurately with full retention.
                 </p>
               </motion.div>
@@ -966,16 +973,16 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
             <div className="flex justify-between items-center pt-2">
               <button
                 onClick={() => changeStep(1)}
-                className="text-xs text-stone-500 hover:text-stone-800 font-mono flex items-center space-x-1 cursor-pointer"
+                className="text-xs text-[#B2C0D8] hover:text-white font-mono flex items-center space-x-1 cursor-pointer"
               >
                 <span>← Back to Context</span>
               </button>
               <button
                 onClick={() => changeStep(3)}
-                className="px-4 py-2 bg-[#1C2333] hover:bg-navy text-white text-xs font-bold font-mono rounded-xl shadow-sm hover:shadow transition-all flex items-center space-x-1.5 cursor-pointer"
+                className="px-4 py-2 bg-gradient-to-b from-[#132852] via-[#0B1936] to-[#071024] border border-[#E5B34B]/70 text-white text-xs font-bold font-mono rounded-xl shadow-[0_0_15px_rgba(229,179,75,0.22)] transition-all flex items-center space-x-1.5 cursor-pointer"
               >
                 <span>Continue to Personal Anchor</span>
-                <ArrowRight className="w-3.5 h-3.5 text-[#C9973A]" />
+                <ArrowRight className="w-3.5 h-3.5 text-[#E8BC57]" />
               </button>
             </div>
           </motion.div>
@@ -993,20 +1000,20 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
             className="space-y-3"
           >
             <div className="space-y-1">
-              <div className="flex items-center space-x-1.5 text-[#C9973A]">
+              <div className="flex items-center space-x-1.5 text-[#E8BC57]">
                 <Feather className="w-4 h-4" />
-                <span className="text-xs font-mono uppercase tracking-widest font-extrabold">
+                <span className="text-xs font-serif uppercase tracking-widest font-extrabold">
                   Personal Reflection Anchor
                 </span>
               </div>
-              <h4 className="text-xs sm:text-sm font-serif font-bold text-navy leading-snug">
+              <h4 className="text-xs sm:text-sm font-serif font-bold text-white leading-snug">
                 {quizData.reflectionQ?.prompt || "How does this truth transform your walk with Christ today?"}
               </h4>
             </div>
 
             {/* Quick Reflection Anchors */}
             <div className="space-y-1.5 pt-1">
-              <span className="text-[11px] font-mono text-stone-500 block font-semibold">
+              <span className="text-[11px] font-mono text-[#B2C0D8] block font-semibold">
                 Quick Devotional Anchors (Tap to choose):
               </span>
               <div className="space-y-1.5">
@@ -1021,11 +1028,11 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
                       }}
                       className={`w-full text-left p-2.5 rounded-xl border text-xs font-sans transition-all cursor-pointer flex items-start space-x-2 ${
                         isSelected
-                          ? "bg-amber-50/80 border-[#C9973A] text-stone-900 ring-1 ring-[#C9973A]/50 font-medium"
-                          : "bg-stone-50/60 border-stone-200 text-stone-700 hover:border-stone-300"
+                          ? "bg-gradient-to-r from-[#2D2414]/90 via-[#16223B]/95 to-[#2D2414]/90 border-[#E5B34B]/80 text-white shadow-[0_0_16px_rgba(229,179,75,0.22)] font-medium"
+                          : "bg-[#08152F]/75 border-[#1C305C]/80 text-[#D8E2F2] hover:border-[#E5B34B]/50"
                       }`}
                     >
-                      <Sparkles className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isSelected ? "text-[#C9973A]" : "text-stone-400"}`} />
+                      <Sparkles className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isSelected ? "text-[#F2C65E]" : "text-[#8EA2C4]"}`} />
                       <span>{anchor}</span>
                     </button>
                   );
@@ -1035,7 +1042,7 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
 
             {/* Optional Personal Note */}
             <div className="space-y-1 pt-1">
-              <label className="text-[11px] font-mono text-stone-500 block font-semibold">
+              <label className="text-[11px] font-mono text-[#B2C0D8] block font-semibold">
                 Personalize & edit in your own words:
               </label>
               <textarea
@@ -1043,7 +1050,7 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
                 onChange={(e) => setReflectionText(e.target.value)}
                 placeholder="Write a brief personal prayer, conviction, or practical application..."
                 rows={2}
-                className="w-full text-xs p-2.5 rounded-xl border border-stone-200 bg-white text-stone-800 outline-none focus:ring-1 focus:ring-[#C9973A] transition-all resize-none font-sans"
+                className="w-full text-xs p-2.5 rounded-xl border border-[#243B6E] bg-[#061024] text-white placeholder-[#7A8FB5] outline-none focus:ring-1 focus:ring-[#E5B34B] transition-all resize-none font-sans"
               />
             </div>
 
@@ -1051,7 +1058,7 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2">
               <button
                 onClick={onOpenFullRecall}
-                className="text-xs text-[#C9973A] hover:text-[#8F6516] font-mono font-bold underline flex items-center space-x-1 cursor-pointer order-2 sm:order-1"
+                className="text-xs text-[#E8BC57] hover:text-[#F2C65E] font-mono font-bold underline flex items-center space-x-1 cursor-pointer order-2 sm:order-1"
               >
                 <span>Go to Full Recall Session</span>
                 <ArrowRight className="w-3 h-3" />
@@ -1059,10 +1066,10 @@ export const MiniQuizComponent: React.FC<MiniQuizComponentProps> = ({
 
               <button
                 onClick={handleSubmitAll}
-                className="w-full sm:w-auto px-5 py-2.5 bg-[#1C2333] hover:bg-navy text-white text-xs font-bold font-mono rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center space-x-2 cursor-pointer order-1 sm:order-2"
+                className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-b from-[#132852] via-[#0B1936] to-[#071024] border border-[#E5B34B]/75 text-white text-xs font-bold font-mono rounded-xl shadow-[0_0_18px_rgba(229,179,75,0.28)] hover:shadow-[0_0_24px_rgba(229,179,75,0.45)] transition-all flex items-center justify-center space-x-2 cursor-pointer order-1 sm:order-2"
                 id="submit-mini-recall-btn"
               >
-                <ShieldCheck className="w-4 h-4 text-[#C9973A]" />
+                <ShieldCheck className="w-4 h-4 text-[#E8BC57]" />
                 <span>Submit Recall (+1 Day Streak)</span>
               </button>
             </div>

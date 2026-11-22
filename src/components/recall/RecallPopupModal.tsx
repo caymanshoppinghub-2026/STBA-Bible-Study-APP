@@ -21,7 +21,11 @@ import {
   Maximize2,
   Bell,
   CheckCircle2,
-  EyeOff
+  EyeOff,
+  Menu,
+  Star,
+  Bookmark,
+  Timer
 } from "lucide-react";
 import {
   RecallQueueItem,
@@ -51,7 +55,13 @@ export const RecallPopupModal: React.FC = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [activeVerse, setActiveVerse] = useState<RecallQueueItem | null>(null);
   const [progress, setProgress] = useState<DailyRecallProgress>(getDailyRecallProgress());
+  const [lessonSavedNotice, setLessonSavedNotice] = useState(false);
   const [isQuizExpanded, setIsQuizExpanded] = useState(true);
+
+  const handleSaveLesson = () => {
+    setLessonSavedNotice(true);
+    setTimeout(() => setLessonSavedNotice(false), 2500);
+  };
   const [currentQuizStep, setCurrentQuizStep] = useState<1 | 2 | 3>(1);
   const [completedState, setCompletedState] = useState<{
     score: number;
@@ -274,59 +284,55 @@ export const RecallPopupModal: React.FC = () => {
             transition={{ type: "spring", stiffness: 320, damping: 28 }}
             className={`pointer-events-auto w-full transition-all duration-300 overflow-hidden flex flex-col ${
               isMinimized
-                ? "rounded-2xl border shadow-2xl bg-white border-stone-200"
-                : `max-w-xl max-h-[92vh] sm:max-h-[86vh] rounded-2xl border shadow-2xl my-auto ${
-                    sabbathMode
-                      ? "bg-[#FAF7F0] border-[#C9973A]/40 text-[#2C2314] shadow-[#C9973A]/20"
-                      : "bg-white border-stone-200 text-stone-900 shadow-stone-900/30"
-                  }`
+                ? "rounded-2xl border shadow-2xl bg-[#07142D] border-[#D4A346]/45 text-white"
+                : "max-w-xl max-h-[92vh] sm:max-h-[88vh] rounded-3xl border border-[#D4A346]/40 shadow-[0_24px_80px_rgba(0,0,0,0.88),0_0_40px_rgba(212,163,70,0.14)] my-auto bg-gradient-to-b from-[#040B1A] via-[#07142E] to-[#040A18] text-white"
             }`}
             id="stba-recall-popup-card"
           >
             {/* HEADER STRIP */}
-            <div className="bg-[#1C2333] text-white p-3.5 px-4 flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#C9973A]/20 border border-[#C9973A]/40 flex items-center justify-center text-[#C9973A] shrink-0">
-                  <Brain className="w-4 h-4" />
+            <div className="bg-gradient-to-r from-[#060F24] via-[#0B1938] to-[#060F24] text-white py-3.5 px-4 sm:px-5 flex items-center justify-between shrink-0 border-b border-[#253B6E]/80 shadow-[0_1px_14px_rgba(56,116,255,0.22)]">
+              <div className="flex items-center space-x-3">
+                <Menu className="w-5 h-5 text-[#D4A346]/80 shrink-0 hidden sm:block" />
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#2A1F0D] to-[#140E05] border-2 border-[#E5B34B] flex items-center justify-center text-[#E5B34B] shrink-0 shadow-[0_0_12px_rgba(229,179,75,0.28)]">
+                  <Brain className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="flex items-center space-x-2">
-                    <h3 className="font-serif font-bold text-sm sm:text-base tracking-tight text-white">
-                      Scripture Memorization Challenge
-                    </h3>
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#C9973A] text-navy font-extrabold uppercase">
-                      {activeVerse.decayStatus}
-                    </span>
-                  </div>
-                  <p className="text-[11px] font-mono text-stone-300">
+                  <h3 className="font-serif font-bold text-base sm:text-lg tracking-tight text-white leading-tight">
+                    Scripture Memorization Challenge
+                  </h3>
+                  <p className="text-[11px] sm:text-xs font-sans text-[#B2C0D8] mt-0.5">
                     Daily Goal: {progress.completedToday}/{progress.goal} Verses ({progress.remaining} remaining)
                   </p>
                 </div>
               </div>
 
               {/* ACTION CONTROLS */}
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center space-x-1.5 sm:space-x-2">
+                <span className="text-[10px] font-sans font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full bg-gradient-to-b from-[#F2C65E] to-[#C8922A] text-[#081226] shadow-[0_2px_10px_rgba(229,179,75,0.35)] flex items-center gap-1 shrink-0">
+                  <Calendar className="w-3 h-3 text-[#081226]" />
+                  <span>{activeVerse.decayStatus}</span>
+                </span>
                 <button
                   onClick={() => setIsMinimized(!isMinimized)}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer hidden sm:inline-flex"
+                  className="p-1.5 rounded-lg text-[#B2C0D8] hover:text-white hover:bg-white/10 transition-all cursor-pointer hidden sm:inline-flex"
                   title={isMinimized ? "Expand prompt" : "Minimize"}
                   aria-label="Toggle Minimize"
                   id="popup-minimize-toggle"
                 >
-                  {isMinimized ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+                  {isMinimized ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
                 </button>
                 <button
                   onClick={() => handleSnooze(15)}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                  className="p-1.5 rounded-lg text-[#B2C0D8] hover:text-white hover:bg-white/10 transition-all cursor-pointer"
                   title="Snooze 15 minutes"
                   aria-label="Snooze Recall"
                   id="popup-snooze-header-btn"
                 >
-                  <Clock className="w-3.5 h-3.5" />
+                  <Clock className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleSnooze(15)}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                  className="p-1.5 rounded-lg text-[#B2C0D8] hover:text-white hover:bg-white/10 transition-all cursor-pointer"
                   title="Dismiss"
                   aria-label="Close"
                   id="popup-dismiss-header-btn"
@@ -338,60 +344,60 @@ export const RecallPopupModal: React.FC = () => {
 
             {/* COMPACT MINIMIZED VIEW */}
             {isMinimized ? (
-              <div className="p-3 bg-stone-50 flex items-center justify-between text-xs">
+              <div className="p-3.5 bg-[#07142D] flex items-center justify-between text-xs">
                 <div className="flex items-center space-x-2">
-                  <span className="font-serif font-bold text-navy">{activeVerse.reference}</span>
-                  <span className="text-stone-500 font-mono text-[11px]">awaiting retrieval</span>
+                  <span className="font-serif font-bold text-[#E8BC57]">{activeVerse.reference}</span>
+                  <span className="text-[#9DB0CE] font-mono text-[11px]">awaiting retrieval</span>
                 </div>
                 <button
                   onClick={() => setIsMinimized(false)}
-                  className="px-2.5 py-1 bg-[#1C2333] text-white rounded-lg text-xs font-mono font-bold hover:bg-navy cursor-pointer"
+                  className="px-3 py-1 bg-gradient-to-b from-[#F2C65E] to-[#C8922A] text-[#081226] rounded-lg text-xs font-mono font-extrabold hover:brightness-110 cursor-pointer"
                 >
                   Review Now
                 </button>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+              <div className="flex-1 overflow-y-auto">
                 {/* SUCCESS / COMPLETION CONFIRMATION STATE */}
                 {completedState ? (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="space-y-4 text-center py-2"
+                    className="space-y-4 text-center p-5 sm:p-6"
                     id="recall-completion-celebration-view"
                   >
-                    <div className="w-14 h-14 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-700 mx-auto flex items-center justify-center shadow-xs">
+                    <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 mx-auto flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.25)]">
                       <ShieldCheck className="w-7 h-7" />
                     </div>
 
                     <div className="space-y-1">
-                      <div className="inline-flex items-center space-x-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-full text-xs font-mono font-bold">
-                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      <div className="inline-flex items-center space-x-1.5 bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 px-3 py-1 rounded-full text-xs font-mono font-bold">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                         <span>Memory Reinforced!</span>
                       </div>
-                      <h4 className="font-serif font-bold text-xl text-navy pt-1">
+                      <h4 className="font-serif font-bold text-xl text-white pt-1">
                         Active Recall Verified!
                       </h4>
-                      <p className="text-xs text-stone-600 max-w-sm mx-auto">
-                        You successfully reinforced <strong>{activeVerse.reference}</strong>. Your retention curve has been updated.
+                      <p className="text-xs text-[#B2C0D8] max-w-sm mx-auto">
+                        You successfully reinforced <strong className="text-[#E8BC57]">{activeVerse.reference}</strong>. Your retention curve has been updated.
                       </p>
                     </div>
 
                     {/* METRIC BADGES */}
-                    <div className="grid grid-cols-2 gap-2 p-3.5 bg-stone-50 rounded-2xl border border-stone-200/80 text-left">
+                    <div className="grid grid-cols-2 gap-2.5 p-3.5 bg-[#0A1836]/90 rounded-2xl border border-[#243B6B] text-left">
                       <div>
-                        <span className="text-[10px] font-mono uppercase text-stone-400 block font-bold">
+                        <span className="text-[10px] font-mono uppercase text-[#8EA2C4] block font-bold">
                           Retrieval Accuracy
                         </span>
-                        <span className="text-base font-mono font-extrabold text-emerald-600">
+                        <span className="text-base font-mono font-extrabold text-emerald-400">
                           {completedState.score}%
                         </span>
                       </div>
                       <div>
-                        <span className="text-[10px] font-mono uppercase text-stone-400 block font-bold">
+                        <span className="text-[10px] font-mono uppercase text-[#8EA2C4] block font-bold">
                           Next Due Date
                         </span>
-                        <span className="text-xs font-mono font-bold text-stone-800">
+                        <span className="text-xs font-mono font-bold text-white">
                           {new Date(completedState.nextDue).toLocaleDateString(undefined, {
                             month: "short",
                             day: "numeric"
@@ -401,15 +407,15 @@ export const RecallPopupModal: React.FC = () => {
                     </div>
 
                     {/* NEXT REMINDER BANNER */}
-                    <div className="p-3 bg-amber-50/70 border border-[#C9973A]/40 rounded-xl flex items-center space-x-2.5 text-left">
-                      <div className="p-2 rounded-lg bg-[#C9973A]/15 text-[#8F6516] shrink-0">
+                    <div className="p-3.5 bg-[#1B1810]/80 border border-[#E5B34B]/40 rounded-xl flex items-center space-x-3 text-left">
+                      <div className="p-2 rounded-lg bg-[#E5B34B]/20 text-[#E8BC57] shrink-0">
                         <Bell className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="text-[10px] font-mono uppercase text-[#8F6516] font-bold block">
+                        <span className="text-[10px] font-mono uppercase text-[#E8BC57] font-bold block">
                           Schedule Update
                         </span>
-                        <p className="text-xs font-serif font-bold text-stone-800">
+                        <p className="text-xs font-serif font-bold text-white">
                           {completedState.reminderNotice}
                         </p>
                       </div>
@@ -418,13 +424,13 @@ export const RecallPopupModal: React.FC = () => {
                     <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2.5">
                       <button
                         onClick={handleNavigateToFullRecall}
-                        className="text-xs text-[#C9973A] hover:text-[#8F6516] font-mono font-bold underline cursor-pointer w-full sm:w-auto py-1"
+                        className="text-xs text-[#E8BC57] hover:text-[#F5D27A] font-mono font-bold underline cursor-pointer w-full sm:w-auto py-1"
                       >
                         Practice in Full Studio
                       </button>
                       <button
                         onClick={() => setIsOpen(false)}
-                        className="w-full sm:w-auto px-5 py-2.5 bg-[#1C2333] hover:bg-navy text-white text-xs font-mono font-bold rounded-xl shadow-md cursor-pointer transition-all active:scale-95"
+                        className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-b from-[#132852] via-[#0B1936] to-[#071024] border border-[#E5B34B]/75 text-white text-xs font-mono font-bold rounded-2xl shadow-[0_0_18px_rgba(229,179,75,0.3)] cursor-pointer transition-all active:scale-95"
                         id="close-popup-after-complete-btn"
                       >
                         Done & Return to Study
@@ -433,68 +439,79 @@ export const RecallPopupModal: React.FC = () => {
                   </motion.div>
                 ) : (
                   <>
-                    {/* SECTION A: VERSE PREVIEW */}
-                    <div className="space-y-2 text-left" id="popup-verse-preview">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-1.5 text-[#C9973A]">
-                          <BookOpen className="w-3.5 h-3.5" />
-                          <span className="text-[11px] font-mono uppercase tracking-wider font-extrabold">
-                            {activeVerse.trackTitle}
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-mono text-stone-400">
-                          Stage {activeVerse.stage} • {activeVerse.intervalDays}d Spacing
-                        </span>
-                      </div>
+                    {/* SECTION A: HERO SCRIPTURE BANNER WITH ILLUMINATED OPEN BIBLE */}
+                    <div
+                      className="relative overflow-hidden min-h-[175px] sm:min-h-[195px] bg-[#050E22] border-b border-[#1E315C]/70 text-left"
+                      id="popup-verse-preview"
+                    >
+                      {/* Right-side Open Bible Sunbeam Artwork */}
+                      <img
+                        src="/assets/recall_bible_sunbeam.jpg"
+                        alt=""
+                        className="absolute right-0 top-0 h-full w-[56%] sm:w-[52%] object-cover object-center pointer-events-none select-none opacity-95"
+                      />
+                      {/* Smooth Horizontal & Vertical Blending Masks */}
+                      <div className="absolute inset-0 bg-gradient-to-r from-[#050E22] via-[#050E22]/90 via-48% to-transparent pointer-events-none" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#050E22] via-transparent to-[#050E22]/30 pointer-events-none" />
 
-                      <div className="p-3.5 rounded-xl bg-amber-50/40 border border-[#C9973A]/30">
-                        <div className="flex items-center justify-between pb-1">
-                          <h4 className="font-serif font-bold text-base text-navy">
-                            {activeVerse.reference}
-                          </h4>
-                          <span className="text-[10px] font-mono font-extrabold text-[#C9973A] bg-amber-100/80 px-2 py-0.5 rounded">
-                            {currentQuizStep === 2 ? "Key Phrase Challenge" : "Target Passage"}
-                          </span>
+                      <div className="relative z-10 p-4 sm:p-5 pr-[34%] sm:pr-[38%] space-y-2.5">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center space-x-2.5">
+                            <BookOpen className="w-6 h-6 sm:w-7 sm:h-7 text-[#E5B34B] shrink-0" />
+                            <h4 className="font-serif font-bold text-lg sm:text-2xl text-[#E8BC57] tracking-tight">
+                              {activeVerse.reference}
+                            </h4>
+                          </div>
+                          <div className="h-[1px] w-48 sm:w-56 bg-gradient-to-r from-[#E5B34B]/70 via-[#E5B34B]/30 to-transparent" />
                         </div>
+
                         {currentQuizStep === 2 ? (
-                          <div className="flex items-center space-x-2 py-2 px-3 bg-amber-100/70 border border-[#C9973A]/40 rounded-xl text-[#8F6516] text-xs font-mono mt-1">
-                            <EyeOff className="w-4 h-4 shrink-0 text-[#8F6516]" />
+                          <div className="flex items-center space-x-2.5 py-2.5 px-3.5 bg-[#121D38]/90 border border-[#E5B34B]/45 rounded-xl text-[#E8BC57] text-xs font-mono mt-1 backdrop-blur-xs">
+                            <EyeOff className="w-4 h-4 shrink-0 text-[#E8BC57]" />
                             <div>
                               <span className="font-bold block">Text Hidden for Active Recall</span>
-                              <span className="text-[11px] text-stone-700">Retrieve and fill the missing keywords in Step 2 below.</span>
+                              <span className="text-[11px] text-[#C8D4EA]">
+                                Retrieve and fill the missing keywords in Step 2 below.
+                              </span>
                             </div>
                           </div>
                         ) : (
-                          <p className="font-bible italic text-xs sm:text-sm text-stone-800 leading-relaxed pt-1">
-                            “{activeVerse.text}”
+                          <p className="font-serif italic text-sm sm:text-[15.5px] text-[#E6ECF8] leading-relaxed drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+                            <span className="text-[#E5B34B] font-bold not-italic text-lg mr-1">“</span>
+                            {activeVerse.text}
+                            <span className="text-[#E5B34B] font-bold not-italic text-lg ml-1">”</span>
                           </p>
                         )}
                       </div>
                     </div>
 
                     {/* SECTION B: INTERACTIVE MINI-RECALL QUIZ (COLLAPSIBLE / ACCORDION) */}
-                    <div className="border border-stone-200/80 rounded-xl overflow-hidden bg-white">
+                    <div className="px-4 sm:px-5 pt-3 pb-4 space-y-3">
                       <button
                         onClick={() => setIsQuizExpanded(!isQuizExpanded)}
-                        className="w-full p-3 bg-stone-50 hover:bg-stone-100/80 flex items-center justify-between text-left transition-colors cursor-pointer border-b border-stone-200/60"
+                        className="w-full py-1.5 flex items-center justify-between text-left transition-colors cursor-pointer"
                         id="toggle-mini-quiz-accordion"
                       >
                         <div className="flex items-center space-x-2">
-                          <Sparkles className="w-3.5 h-3.5 text-[#C9973A]" />
-                          <span className="text-xs font-mono font-bold text-navy uppercase tracking-wider">
+                          <Star className="w-4 h-4 text-[#E5B34B]" />
+                          <span className="text-xs sm:text-[13px] font-serif font-bold text-[#E5B34B] uppercase tracking-[0.14em]">
                             Interactive Memorization Steps
                           </span>
                         </div>
-                        <div className="flex items-center space-x-1 text-stone-400">
-                          <span className="text-[11px] font-mono text-stone-500 font-medium">
+                        <div className="flex items-center space-x-1 text-[#D5DFEE] hover:text-white">
+                          <span className="text-xs font-sans font-medium">
                             {isQuizExpanded ? "Collapse" : "Expand 3 Steps"}
                           </span>
-                          {isQuizExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          {isQuizExpanded ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-[#E5B34B]" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-[#E5B34B]" />
+                          )}
                         </div>
                       </button>
 
                       {isQuizExpanded && (
-                        <div className="p-3.5 sm:p-4">
+                        <div>
                           <MiniQuizComponent
                             verse={activeVerse}
                             sabbathMode={sabbathMode}
@@ -505,28 +522,34 @@ export const RecallPopupModal: React.FC = () => {
                           />
                         </div>
                       )}
-                    </div>
 
-                    {/* SECTION C & D: SNOOZE / FULL RECALL FOOTER ACTIONS */}
-                    <div className="flex items-center justify-between pt-2 pb-0.5 border-t border-stone-100 text-xs gap-3">
-                      <button
-                        onClick={() => handleSnooze(15)}
-                        className="text-[11px] sm:text-xs text-stone-500 hover:text-stone-800 font-mono flex items-center gap-1.5 py-1 px-1.5 -ml-1.5 rounded-md hover:bg-stone-100/80 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-                        title="Remind in 15 minutes"
-                        id="popup-snooze-15m-btn"
-                      >
-                        <Clock className="w-3 h-3 text-[#C9973A] shrink-0" />
-                        <span className="leading-none">Snooze 15m</span>
-                      </button>
+                      {/* SECTION C & D: SNOOZE / SAVE LESSON FOOTER ACTIONS */}
+                      <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#1D315C]/80 text-xs gap-3">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => handleSnooze(15)}
+                            className="text-xs sm:text-sm text-[#D5DFEE] hover:text-[#E8BC57] font-serif flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                            title="Remind in 15 minutes"
+                            id="popup-snooze-15m-btn"
+                          >
+                            <div className="w-7 h-7 rounded-full border border-[#E5B34B]/70 bg-[#1B170E] flex items-center justify-center text-[#E5B34B]">
+                              <Timer className="w-4 h-4 shrink-0" />
+                            </div>
+                            <span>Snooze</span>
+                            <span className="font-bold text-white">15m</span>
+                          </button>
+                          <div className="h-6 w-[1px] bg-[#E5B34B]/30 hidden sm:block" />
+                        </div>
 
-                      <button
-                        onClick={handleNavigateToFullRecall}
-                        className="text-xs font-mono font-bold text-[#C9973A] hover:text-[#8F6516] flex items-center gap-1 py-1 px-1.5 -mr-1.5 rounded-md hover:bg-[#C9973A]/10 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-                        id="popup-full-recall-studio-btn"
-                      >
-                        <span className="leading-none">Full Recall Studio</span>
-                        <ArrowRight className="w-3 h-3 shrink-0" />
-                      </button>
+                        <button
+                          onClick={handleSaveLesson}
+                          className="px-6 py-2.5 rounded-2xl border border-[#E5B34B]/75 bg-gradient-to-b from-[#132852] via-[#0B1936] to-[#071024] text-white font-sans font-semibold text-xs sm:text-sm shadow-[0_0_20px_rgba(229,179,75,0.28),inset_0_1px_1px_rgba(255,255,255,0.2)] hover:shadow-[0_0_26px_rgba(229,179,75,0.45)] transition-all flex items-center gap-2 cursor-pointer shrink-0"
+                          id="popup-save-lesson-btn"
+                        >
+                          <Bookmark className="w-4 h-4 text-[#E5B34B]" />
+                          <span>{lessonSavedNotice ? "Lesson Saved ✓" : "Save Lesson"}</span>
+                        </button>
+                      </div>
                     </div>
                   </>
                 )}
