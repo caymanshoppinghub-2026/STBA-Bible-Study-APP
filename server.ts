@@ -994,7 +994,7 @@ async function sendWelcomeEmail(email: string, name: string, tier?: string): Pro
   }
 }
 
-async function sendSupportTicketEmail(ticket: SupportTicket): Promise<{ success: boolean; emailSent: boolean; message: string }> {
+async function sendSupportTicketEmail(ticket: SupportTicket): Promise<{ success: boolean; emailSent: boolean; adminRecipient: string; deliveryError?: string; message: string }> {
   const config = parseSmtpConfig();
   const isValidEmail = (val?: string) => Boolean(val && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim()));
   const envAdminSupport = cleanEnvValue(process.env.ADMIN_SUPPORT_EMAIL);
@@ -1087,7 +1087,9 @@ ${ticket.message}
     return {
       success: true,
       emailSent: false,
-      message: "Your ticket has been submitted successfully."
+      adminRecipient,
+      deliveryError: config.error || "SMTP credentials not configured on server.",
+      message: "Your ticket has been logged, but SMTP email credentials are not configured on the server."
     };
   }
 
@@ -1117,14 +1119,18 @@ ${ticket.message}
     return {
       success: true,
       emailSent: true,
-      message: "Your ticket has been submitted successfully."
+      adminRecipient,
+      message: "Your ticket has been submitted and emailed to support."
     };
   } catch (error: any) {
-    console.log(`[STBA Support Ticket] Email delivery deferred (${error?.message || error}); logged ticket #${ticket.id}.`);
+    const errMsg = error?.message || String(error);
+    console.log(`[STBA Support Ticket] Email delivery deferred (${errMsg}); logged ticket #${ticket.id}.`);
     return {
       success: true,
       emailSent: false,
-      message: "Your ticket has been submitted successfully."
+      adminRecipient,
+      deliveryError: errMsg,
+      message: "Your ticket was logged, but email delivery failed on the mail relay."
     };
   }
 }
@@ -1151,6 +1157,9 @@ app.post("/api/support/ticket", async (req, res) => {
   const result = await sendSupportTicketEmail(ticket);
   return res.json({
     success: true,
+    emailSent: result.emailSent,
+    adminRecipient: result.adminRecipient,
+    deliveryError: result.deliveryError,
     ticketId: ticket.id,
     message: result.message
   });
@@ -1164,9 +1173,28 @@ app.post("/api/support/chat", async (req, res) => {
     return res.status(400).json({ error: "Message is required." });
   }
 
+  const buildSmartSupportFallback = (reason: string) => {
+    const lower = userText.toLowerCase();
+    let reply = "";
+    if (lower.includes("syllabus") || lower.includes("sabbath") || lower.includes("lesson") || lower.includes("summary")) {
+      reply = "In Sabbath School & Daily Syllabus, each day's study is dynamically synthesized with your day's Scriptures highlighted for instant frosted-card preview. Click 'Mark Day Complete' at the top to save your progress until the next lesson syncs, or click 'Discuss Day with Elder Stephen' for a quick takeaway.";
+    } else if (lower.includes("elder") || lower.includes("voice") || lower.includes("mic") || lower.includes("connect")) {
+      reply = "Elder Stephen's live voice stream includes a 20-second keepalive heartbeat to prevent idle disconnects. If a session times out after inactivity, click 'Start Live Session' to reconnect cleanly.";
+    } else if (lower.includes("audio") || lower.includes("narrat") || lower.includes("skip")) {
+      reply = "In Sabbath School mode, the Audio Narrator reads the expository lesson paragraphs and pauses around quoted verses so you can reflect or recite directly. Ensure your browser audio/mic permissions are enabled if playback doesn't start.";
+    } else if (lower.includes("recall") || lower.includes("memory") || lower.includes("vault") || lower.includes("spaced") || lower.includes("review")) {
+      reply = "Active Recall & Spaced Repetition automatically schedule your verses based on your recall score. Completing a 'Review now' session removes the verse from the urgent queue and schedules its next review date.";
+    } else if (lower.includes("ticket") || lower.includes("email") || lower.includes("support") || lower.includes("bug")) {
+      reply = "You can submit a Support Ticket right next to this chat (or click 'Escalate to Administrator' above) and it will route directly to the configured administrator email.";
+    } else {
+      reply = `Hi ${userName}! Live AI quota is temporarily at its daily limit (${reason}), so I'm answering in quick-help mode. Feel free to ask about Sabbath School, Daily Syllabus, Active Recall, Elder Stephen Voice, or submit a Support Ticket right next to this chat for direct email follow-up.`;
+    }
+    return res.json({ reply, fallbackUsed: true });
+  };
+
   const aiClient = getGeminiClient();
   if (!aiClient) {
-    return res.status(503).json({ error: "Live assistant unavailable" });
+    return buildSmartSupportFallback("API key unavailable");
   }
 
   try {
@@ -1194,11 +1222,11 @@ App knowledge:
 
     const reply = String(response?.text || "").trim();
     if (!reply) {
-      return res.status(502).json({ error: "Empty assistant reply" });
+      return buildSmartSupportFallback("empty response");
     }
-    return res.json({ reply });
+    return res.json({ reply, fallbackUsed: false });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || "Live assistant error" });
+    return buildSmartSupportFallback(err?.status === 429 || String(err?.message || "").includes("429") ? "daily Gemini quota reached" : "temporary connection issue");
   }
 });
 
