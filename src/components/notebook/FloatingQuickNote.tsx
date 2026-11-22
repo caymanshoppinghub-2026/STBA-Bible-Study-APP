@@ -418,7 +418,7 @@ export const FloatingQuickNote: React.FC = () => {
         <div
           id="floating-quick-note-trigger-wrapper"
           style={{ top: `${triggerTopPct}%`, fontFamily: "'Lato', sans-serif" }}
-          className="fixed -translate-y-1/2 right-0 z-40 select-none touch-none font-['Lato',sans-serif] not-italic"
+          className="fixed -translate-y-1/2 right-0 z-40 select-none touch-none font-['Lato',sans-serif] not-italic overflow-hidden"
           onMouseEnter={() => {
             if (!isHovered) {
               setIsHovered(true);
@@ -430,18 +430,18 @@ export const FloatingQuickNote: React.FC = () => {
           <motion.div
             animate={
               !isHovered && !isDraggingState
-                ? { x: [0, -6, 0, -4, 0] }
+                ? { x: [0, -10, 0] }
                 : { x: 0 }
             }
             transition={
               !isHovered && !isDraggingState
                 ? {
-                    duration: 2.4,
+                    duration: 2.2,
                     repeat: Infinity,
-                    repeatDelay: 3.2,
+                    repeatDelay: 7.8,
                     ease: "easeInOut"
                   }
-                : { duration: 0.2 }
+                : { duration: 0.2, ease: "easeOut" }
             }
           >
             <button
@@ -459,35 +459,18 @@ export const FloatingQuickNote: React.FC = () => {
                 }
               }}
               style={{ fontFamily: "'Lato', sans-serif" }}
-              className="flex items-center pl-3.5 pr-3 py-3 rounded-l-2xl rounded-r-none bg-[#0B111E] hover:bg-[#131D31] text-[#F3CF65] font-['Lato',sans-serif] font-bold not-italic text-xs shadow-2xl border border-r-0 border-[#C9973A]/75 hover:border-[#F3CF65] cursor-grab active:cursor-grabbing whitespace-nowrap touch-none transition-colors overflow-hidden"
+              className="flex items-center pl-3.5 pr-8 -mr-5 py-3 rounded-l-2xl rounded-r-none bg-[#0F172A] hover:bg-[#16223B] text-[#F3CF65] font-['Lato',sans-serif] font-bold not-italic text-xs shadow-2xl border border-r-0 border-[#C9973A]/75 hover:border-[#F3CF65] cursor-grab active:cursor-grabbing whitespace-nowrap touch-none transition-colors overflow-hidden"
               title="Hover to expand • Click to slide out Discipleship Vault • Drag vertically to reposition (Alt+N)"
               aria-label="Open Discipleship Vault side panel"
             >
-              <motion.div
-                animate={
-                  !isHovered && !isDraggingState
-                    ? { rotate: [0, -10, 8, -4, 0] }
-                    : { rotate: 0 }
-                }
-                transition={
-                  !isHovered && !isDraggingState
-                    ? {
-                        duration: 2.4,
-                        repeat: Infinity,
-                        repeatDelay: 3.2,
-                        ease: "easeInOut"
-                      }
-                    : { duration: 0.2 }
-                }
-                className="w-5 h-5 flex items-center justify-center shrink-0 relative"
-              >
+              <div className="w-5 h-5 flex items-center justify-center shrink-0 relative">
                 <PenLine className="w-4 h-4 text-[#C9973A] stroke-[2.2]" />
                 {recentSessionNotes.length > 0 && (
                   <span className="absolute -top-2 -left-2 w-4 h-4 rounded-full bg-[#C9973A] text-stone-950 text-[9px] font-bold flex items-center justify-center">
                     {recentSessionNotes.length}
                   </span>
                 )}
-              </motion.div>
+              </div>
 
               <AnimatePresence initial={false}>
                 {isHovered && (
