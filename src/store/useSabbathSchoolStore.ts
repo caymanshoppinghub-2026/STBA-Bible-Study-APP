@@ -249,6 +249,42 @@ Reflect on how your spiritual gifts can be used this week to encourage your Sabb
 
 // LocalStorage key helper
 const STORAGE_KEY = "stba_sabbath_school_state";
+const DAY_STATUS_STORAGE_KEY = "stba_sabbath_day_statuses_v1";
+
+const normalizeLessonKey = (title?: string, id?: string) => {
+  const cleanTitle = String(title || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (cleanTitle) return cleanTitle;
+  return String(id || "").replace(/^0+/, "").trim() || "default";
+};
+
+const loadSavedDayStatuses = (lessonTitle?: string, lessonId?: string): Record<number, string> => {
+  try {
+    const raw = localStorage.getItem(DAY_STATUS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    const targetKey = normalizeLessonKey(lessonTitle, lessonId);
+    if (parsed?.lessonKey === targetKey && parsed?.statuses && typeof parsed.statuses === "object") {
+      return parsed.statuses;
+    }
+  } catch {}
+  return {};
+};
+
+const saveLessonDayStatuses = (lessonTitle: string | undefined, lessonId: string | undefined, lessons: DailyLesson[]) => {
+  try {
+    const statuses: Record<number, string> = {};
+    lessons.forEach((d, idx) => {
+      if (d?.status) statuses[idx] = d.status;
+    });
+    localStorage.setItem(
+      DAY_STATUS_STORAGE_KEY,
+      JSON.stringify({
+        lessonKey: normalizeLessonKey(lessonTitle, lessonId),
+        statuses
+      })
+    );
+  } catch {}
+};
 
 // Retrieve state from localStorage or use default
 const loadPersistedState = (): SabbathSchoolState => {
@@ -456,6 +492,7 @@ export const useSabbathSchoolStore = () => {
     if (updatedLessons[index]) {
       updatedLessons[index] = { ...updatedLessons[index], status };
     }
+    saveLessonDayStatuses(globalStateStore.lessonTitle, globalStateStore.lessonId, updatedLessons);
     // Calculate student activity metrics
     const completedCount = updatedLessons.filter((d) => {
       const s = d.status?.toLowerCase();
@@ -579,13 +616,12 @@ export const useSabbathSchoolStore = () => {
     try {
       const payload = await getSabbathSchoolSyncData(forceRefresh);
       if (payload && (payload.dailyLessons || payload.quarterlyTitle)) {
-        const incomingLessonId = String(payload.lessonId || "").trim();
-        const currentLessonId = String(globalStateStore.lessonId || "").trim();
-        const incomingLessonTitle = String(payload.lessonTitle || "").trim().toLowerCase();
-        const currentLessonTitle = String(globalStateStore.lessonTitle || "").trim().toLowerCase();
+        const incomingKey = normalizeLessonKey(payload.lessonTitle, payload.lessonId);
+        const currentKey = normalizeLessonKey(globalStateStore.lessonTitle, globalStateStore.lessonId);
+        const savedStatuses = loadSavedDayStatuses(payload.lessonTitle, payload.lessonId);
         const isSameLesson =
-          (incomingLessonId && currentLessonId && incomingLessonId === currentLessonId) ||
-          (incomingLessonTitle && currentLessonTitle && incomingLessonTitle === currentLessonTitle);
+          incomingKey === currentKey ||
+          Object.keys(savedStatuses).length > 0;
 
         let mappedDailyLessons: DailyLesson[] = globalStateStore.dailyLessons;
         if (Array.isArray(payload.dailyLessons) && payload.dailyLessons.length > 0) {
@@ -596,9 +632,8 @@ export const useSabbathSchoolStore = () => {
             const { mainParagraphs, egwParagraphs } = separateLessonAndEgwNotes(rawContent, d.egwNotes);
             const existingDay = globalStateStore.dailyLessons[idx];
             const preservedStatus =
-              isSameLesson && existingDay?.status
-                ? existingDay.status
-                : "Not Started";
+              savedStatuses[idx] ||
+              (isSameLesson && existingDay?.status ? existingDay.status : "Not Started");
             return {
               label: `${d.dayName} (${d.dateString})`,
               title: d.title || d.dayName,
@@ -674,7 +709,12 @@ export const useSabbathSchoolStore = () => {
     });
   };
 
-  const chatWithElderStephen = async (userMessage: string, contextSummary?: string, requestedCommentaryMode?: "prestige" | "velocity" | "auto") => {
+  const chatWithElderStephen = async (
+    userMessage: string,
+    contextSummary?: string,
+    requestedCommentaryMode?: "prestige" | "velocity" | "auto",
+    explicitDayIndex?: number
+  ) => {
     if (!userMessage.trim()) return;
 
     const updatedDiscussion = [
@@ -744,7 +784,8 @@ ${contextSummary ? `Special Context: ${contextSummary}` : ""}`;
         contextSummary: journeyContext,
         noteTitle: globalStateStore.lessonTitle,
         noteContent: (() => {
-          const c = globalStateStore.dailyLessons[globalStateStore.selectedDayIndex]?.content;
+          const targetIdx = typeof explicitDayIndex === "number" ? explicitDayIndex : globalStateStore.selectedDayIndex;
+          const c = globalStateStore.dailyLessons[targetIdx]?.content;
           if (Array.isArray(c)) {
             return c.map((item) => (typeof item === "string" ? item : item?.text || "")).join("\n\n");
           }

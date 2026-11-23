@@ -630,15 +630,29 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
     }, 10);
   };
 
-  // Sync scroll on textarea scroll & preserve proportional scroll across Read <-> Draft switches
+  // Sync scroll on textarea scroll & preserve exact anchor/proportional scroll across Read <-> Draft switches
   const scrollRatioRef = useRef<number>(0);
+  const anchorTextRef = useRef<string>("");
   const lastModeRef = useRef<{ id?: string; mode: 'read' | 'draft' }>({ id: note?.id, mode });
+
+  const normalizeAnchor = (raw: string) =>
+    raw.replace(/^#+\s*/, "").replace(/[*_`>-]/g, "").replace(/\s+/g, " ").trim().slice(0, 48).toLowerCase();
 
   const handleScroll = () => {
     const ta = textareaRef.current;
     if (ta) {
       const maxScroll = Math.max(1, ta.scrollHeight - ta.clientHeight);
       scrollRatioRef.current = ta.scrollTop / maxScroll;
+      const computedLineHeight = parseFloat(window.getComputedStyle(ta).lineHeight) || fontSize * 1.6;
+      const approxLineIdx = Math.max(0, Math.floor(Math.max(0, ta.scrollTop - 26) / computedLineHeight));
+      const lines = ta.value.split("\n");
+      for (let i = approxLineIdx; i < Math.min(lines.length, approxLineIdx + 6); i++) {
+        const candidate = normalizeAnchor(lines[i] || "");
+        if (candidate.length >= 3) {
+          anchorTextRef.current = candidate;
+          break;
+        }
+      }
     }
     if (textareaRef.current && backdropRef.current) {
       backdropRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -649,35 +663,79 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
   useEffect(() => {
     if (lastModeRef.current.id !== note?.id) {
       scrollRatioRef.current = 0;
+      anchorTextRef.current = "";
     } else if (lastModeRef.current.mode !== mode) {
       const ratio = scrollRatioRef.current;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (mode === 'draft' && textareaRef.current) {
-            const maxScroll = Math.max(0, textareaRef.current.scrollHeight - textareaRef.current.clientHeight);
-            textareaRef.current.scrollTop = ratio * maxScroll;
-          } else if (mode === 'read') {
-            const readScrollEl = document.getElementById('read-workspace')?.parentElement;
-            if (readScrollEl) {
-              const maxScroll = Math.max(0, readScrollEl.scrollHeight - readScrollEl.clientHeight);
-              readScrollEl.scrollTop = ratio * maxScroll;
+      const anchor = anchorTextRef.current;
+
+      const applyRestoredScroll = () => {
+        if (mode === 'draft' && textareaRef.current) {
+          const ta = textareaRef.current;
+          const computedLineHeight = parseFloat(window.getComputedStyle(ta).lineHeight) || fontSize * 1.6;
+          if (anchor) {
+            const lines = ta.value.split("\n");
+            const matchedIdx = lines.findIndex((line) => {
+              const norm = normalizeAnchor(line);
+              return norm.length >= 3 && (norm.startsWith(anchor.slice(0, 20)) || anchor.startsWith(norm.slice(0, 20)));
+            });
+            if (matchedIdx >= 0) {
+              ta.scrollTop = Math.max(0, 26 + matchedIdx * computedLineHeight - 12);
+              return;
             }
           }
-        });
-      });
+          const maxScroll = Math.max(0, ta.scrollHeight - ta.clientHeight);
+          ta.scrollTop = ratio * maxScroll;
+        } else if (mode === 'read') {
+          const readWs = document.getElementById('read-workspace');
+          const readScrollEl = (readWs?.closest('.overflow-y-auto') as HTMLElement | null) || readWs?.parentElement;
+          if (readScrollEl && readWs) {
+            if (anchor) {
+              const blocks = Array.from(readWs.querySelectorAll('h1, h2, h3, h4, p, li, blockquote'));
+              const matchedEl = blocks.find((el) => {
+                const norm = normalizeAnchor(el.textContent || "");
+                return norm.length >= 3 && (norm.startsWith(anchor.slice(0, 20)) || anchor.startsWith(norm.slice(0, 20)));
+              }) as HTMLElement | undefined;
+              if (matchedEl) {
+                const containerTop = readScrollEl.getBoundingClientRect().top;
+                const elTop = matchedEl.getBoundingClientRect().top;
+                readScrollEl.scrollTop = Math.max(0, readScrollEl.scrollTop + (elTop - containerTop) - 16);
+                return;
+              }
+            }
+            const maxScroll = Math.max(0, readScrollEl.scrollHeight - readScrollEl.clientHeight);
+            readScrollEl.scrollTop = ratio * maxScroll;
+          }
+        }
+      };
+
+      requestAnimationFrame(() => requestAnimationFrame(applyRestoredScroll));
+      setTimeout(applyRestoredScroll, 70);
     }
     lastModeRef.current = { id: note?.id, mode };
 
     if (mode !== 'read') return;
-    const readScrollEl = document.getElementById('read-workspace')?.parentElement;
-    if (!readScrollEl) return;
+    const readWs = document.getElementById('read-workspace');
+    const readScrollEl = (readWs?.closest('.overflow-y-auto') as HTMLElement | null) || readWs?.parentElement;
+    if (!readScrollEl || !readWs) return;
     const onReadScroll = () => {
       const maxScroll = Math.max(1, readScrollEl.scrollHeight - readScrollEl.clientHeight);
       scrollRatioRef.current = readScrollEl.scrollTop / maxScroll;
+      const containerTop = readScrollEl.getBoundingClientRect().top;
+      const blocks = Array.from(readWs.querySelectorAll('h1, h2, h3, h4, p, li, blockquote'));
+      for (const el of blocks) {
+        const rect = el.getBoundingClientRect();
+        if (rect.bottom >= containerTop + 8) {
+          const norm = normalizeAnchor(el.textContent || "");
+          if (norm.length >= 3) {
+            anchorTextRef.current = norm;
+          }
+          break;
+        }
+      }
     };
     readScrollEl.addEventListener('scroll', onReadScroll, { passive: true });
     return () => readScrollEl.removeEventListener('scroll', onReadScroll);
-  }, [note?.id, mode]);
+  }, [note?.id, mode, fontSize]);
 
   useEffect(() => {
     handleScroll();

@@ -5070,21 +5070,23 @@ export const WordStudy: React.FC<ToolProps> = ({
     "ἀλήθεια": "aletheia"
   };
 
-  const playPronunciation = (data: any, customWordText?: string) => {
-    if (!("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    
-    let targetTrans = "";
+  const playPronunciation = async (data: any, customWordText?: string) => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
 
+    let targetTrans = "";
     const cleanCustom = customWordText ? customWordText.toLowerCase().trim() : "";
-    
+
     // 1. If studyData matches customWordText or active word, use studyData.transliteration directly
     if (studyData && studyData.transliteration) {
-      if (!cleanCustom || 
-          studyData.word?.toLowerCase() === cleanCustom || 
-          studyData.lemma?.toLowerCase() === cleanCustom ||
-          studyData.strongs?.toLowerCase() === cleanCustom ||
-          studyData.transliteration?.toLowerCase() === cleanCustom) {
+      if (
+        !cleanCustom ||
+        studyData.word?.toLowerCase() === cleanCustom ||
+        studyData.lemma?.toLowerCase() === cleanCustom ||
+        studyData.strongs?.toLowerCase() === cleanCustom ||
+        studyData.transliteration?.toLowerCase() === cleanCustom
+      ) {
         targetTrans = studyData.transliteration;
       }
     }
@@ -5109,7 +5111,7 @@ export const WordStudy: React.FC<ToolProps> = ({
       targetTrans = COMMON_TRANSLITERATIONS[cleanSearch] || cleanSearch || "logos";
     }
 
-    // Clean text to say: Normalize diacritics (e.g. agapē -> agape, tôrāh -> torah) before stripping symbols!
+    // Clean text to say: Normalize diacritics (e.g. agapē -> agape, tôrāh -> torah) before stripping symbols
     const textToSay = targetTrans
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -5117,16 +5119,48 @@ export const WordStudy: React.FC<ToolProps> = ({
       .trim();
     if (!textToSay) return;
 
-    const utterance = new SpeechSynthesisUtterance(textToSay);
-    utterance.rate = 0.85; // Clear pacing for foreign transliteration
-    utterance.pitch = 0.95;
+    // Use natural Gemini TTS (/api/study/narrate) instead of robotic OS SpeechSynthesis
+    try {
+      const response = await apiFetch("/api/study/narrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: sanitizeVerbatimSpeechText(textToSay),
+          voice: "Charon"
+        })
+      });
+      if (response.ok) {
+        const resData = await safeParseResponseJson<any>(response);
+        if (resData?.success && resData?.audio) {
+          const sampleRate = 24000;
+          const float32Array = decodeAndCleanGeminiPcm(resData.audio, { sampleRate });
+          if (float32Array.length > 0) {
+            const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+            const ctx = new AudioCtx({ sampleRate });
+            const pcmBuffer = ctx.createBuffer(1, float32Array.length, sampleRate);
+            pcmBuffer.getChannelData(0).set(float32Array);
+            const source = ctx.createBufferSource();
+            source.buffer = pcmBuffer;
+            source.connect(ctx.destination);
+            source.onended = () => {
+              ctx.close().catch(() => {});
+            };
+            source.start(0);
+            return;
+          }
+        }
+      }
+    } catch {}
 
-    const bestVoice = getElderStephenVoice();
-    if (bestVoice) {
-      utterance.voice = bestVoice;
+    // Offline fallback only
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      const utterance = new SpeechSynthesisUtterance(textToSay);
+      utterance.rate = 0.85;
+      utterance.pitch = 0.95;
+      const bestVoice = getElderStephenVoice();
+      if (bestVoice) utterance.voice = bestVoice;
+      window.speechSynthesis.speak(utterance);
     }
-
-    window.speechSynthesis.speak(utterance);
   };
 
   const handleCrossCitedRefClick = (ref: string) => {

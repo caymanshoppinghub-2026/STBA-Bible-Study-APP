@@ -6190,12 +6190,12 @@ app.post("/api/elder-stephen", async (req, res) => {
           .match(/[^.!?]+[.!?]+/g) || [];
         const picked = cleanSentences
           .map((s) => s.trim())
-          .filter((s) => s.length >= 30 && !s.endsWith("?"))
+          .filter((s) => s.length >= 30 && !s.endsWith("?") && !/^Read\s+[1-3]?\s*[A-Za-z]+\s+\d+/i.test(s))
           .slice(0, 3)
           .join(" ");
         text = picked
-          ? `${picked} Across this week's 7-day study on *${studyDoc}*, this reminds us to test every teaching by Scripture and apply it faithfully.`
-          : `Today's study in *${studyDoc}* calls us to test every spiritual claim by Scripture and apply God's prophetic truth to our daily walk.`;
+          ? `${picked}`
+          : `Today's study in *${studyDoc}* highlights how God's Word guides practical Christian living and faithful discernment.`;
       } else {
         text = `Greetings, ${actualName}. I am Elder Stephen, here to answer your questions regarding today's lesson on ${studyDoc}. How can I assist you today?`;
       }
@@ -6243,30 +6243,36 @@ An effective teaching strategy balances historical explanation with practical il
 ### 5. Theological Meaning & Application
 We teach to communicate the Three Angels' Messages with winsome grace, vindicating God's beautiful character of love and holy law. Outline your main teaching points in simple, accessible language.`;
     } else {
+      const cleanSnippet = String(noteContent || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 220);
+      const isNT = /\b(matthew|mark|luke|john|acts|romans|corinthians|galatians|ephesians|philippians|colossians|thessalonians|timothy|titus|philemon|hebrews|james|peter|jude|revelation)\b/i.test(refText);
+      const testamentLabel = isNT ? "New Testament (Koine Greek)" : "Old Testament (Biblical Hebrew / Aramaic)";
+      const keyTermLine = isNT
+        ? `* **Logos / Rhema (λόγος / ῥῆμα)** — the revealed Word and living spoken counsel of Christ in *${refText}*.`
+        : `* **Dabar / Torah (דָּבָר / תּוֹרָה)** — God's covenant word and loving instruction revealed in *${refText}*.`;
+
       text = `### Study Summary
-Scripture interprets Scripture under the guidance of the Holy Spirit (*2 Timothy 3:16–17*). In exploring *${refText}* within our study of *${studyDoc}*, Christ remains the focal point of all doctrine and prophecy.
+In *${refText}* (${studyDoc}), Scripture invites us to trace God's redemptive purpose directly within its ${testamentLabel} setting.${cleanSnippet ? ` Focusing on the passage text (“${cleanSnippet}${cleanSnippet.length >= 220 ? "..." : ""}”) clarifies what God is teaching here.` : ""}
 
 ### 1. Context & Scriptural Foundation
-* Historical Setting: This passage anchors our faith securely on the rock of divine revelation.
-* Primary Scripture Passage: *${refText}*.
-* Foundation Cross-References: *Isaiah 28:10*, *John 5:39*, and *Revelation 14:12*.
+* **Primary Passage**: *${refText}* within *${studyDoc}*.
+* **Testament & Language**: ${testamentLabel} witness, interpreted by comparing Scripture with Scripture (*Isaiah 28:10*).
 
 ### 2. Key Terms & Original Language
-* **Sola Scriptura** — Scripture alone as our primary rule of faith and practice.
-* **Theopneustos (θεόπνευστος)** — God-breathed, divinely inspired (*2 Timothy 3:16*).
+${keyTermLine}
 * **Orthotomeo (ὀρθοτομέω)** — cutting straight, rightly dividing the word of truth (*2 Timothy 2:15*).
 
 ### 3. Exegetical Insight (Line Upon Line)
-Every doctrine and prophecy finds its fulfillment in Jesus Christ and His heavenly sanctuary ministry (*Hebrews 8:1-2*). Justification by faith upholds God's holy law rather than abolishing it (*Romans 3:31*).
+Reading *${refText}* in its immediate chapter context reveals how Christ's righteousness and covenant faithfulness uphold God's law (*Romans 3:31*, *Hebrews 8:1-2*).
 
 ### 4. Spirit of Prophecy
 * *The Great Controversy*, p. 599:
 > “The first and highest duty of every rational being is to learn from the Scriptures what is truth, and then to walk in the light and encourage others to follow his example.”
-* *Steps to Christ*, p. 90:
-> “The Word of God, like the character of its divine Author, presents mysteries that can never be fully comprehended by finite beings... But we need not on this account doubt God's Word.”
 
 ### 5. Theological Meaning & Application
-The Seventh-day Adventist movement was raised to proclaim the everlasting gospel in the setting of the Three Angels' Messages (*Revelation 14:6-12*), pointing humanity back to the Creator. How does this biblical truth transform your daily walk today?`;
+How does the specific truth of *${refText}* speak to your walk with Christ and prepare you to share it clearly with others today?`;
     }
 
     return res.json({ text: formatProperElderSpacing(text), commentaryMode: "prestige", modeUsed: "prestige", latencyMs });

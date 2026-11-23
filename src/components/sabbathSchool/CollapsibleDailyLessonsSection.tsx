@@ -372,7 +372,7 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
     if (!day) return;
     setSelectedDayIndex(dayIndex);
     const prompt = `Could you give a simple summary or key takeaway for today's study on "${day.title}"?`;
-    chatWithElderStephen(prompt, `Discussing ${day.label}: "${day.title}"`, "velocity");
+    chatWithElderStephen(prompt, `Discussing ${day.label}: "${day.title}"`, "velocity", dayIndex);
   };
 
   const completedCount = dailyLessons.filter((d) => normalizeStatus(d.status) === "Complete").length;
