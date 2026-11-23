@@ -821,10 +821,15 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
       // Inline code `code`
       escaped = escaped.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded text-[0.85em] font-mono bg-white/10 text-[var(--nb-gold)] border border-white/10">$1</code>');
 
-      // Scripture detection with click handler
-      const scriptureRegex = /\b(?:[1-3]\s)?[A-Z][A-Za-z]+(?:\s+[A-Za-z]+)?\s+\d+:\d+(?:-\d+)?\b/g;
+      // Scripture detection with click handler (supports hyphens, en/em-dashes, cross-chapter, and comma-separated verse ranges)
+      const scriptureRegex = /\b(?:[1-3]\s+)?[A-Z][A-Za-z]+(?:\s+(?:of\s+)?[A-Z]?[A-Za-z]+)?\s+\d+:\d+(?:\s*[-\u2012-\u2015\u2212]\s*\d+(?::\d+)?)*(?:\s*,\s*\d+(?:\s*[-\u2012-\u2015\u2212]\s*\d+)*)*\b/g;
       escaped = escaped.replace(scriptureRegex, (match) => {
-        return `<span data-scripture="${match}" class="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded text-xs font-mono bg-[var(--nb-teal-muted)] hover:bg-[var(--nb-teal)]/20 text-[var(--nb-teal)] border border-[var(--nb-teal)]/20 cursor-pointer transition-colors" title="Deep study with Elder Stephen">${match}</span>`;
+        const normalizedRef = match
+          .replace(/[\u2012-\u2015\u2212]/g, '-')
+          .replace(/\s*-\s*/g, '-')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return `<span data-scripture="${normalizedRef}" class="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded text-xs font-mono bg-[var(--nb-teal-muted)] hover:bg-[var(--nb-teal)]/20 text-[var(--nb-teal)] border border-[var(--nb-teal)]/20 cursor-pointer transition-colors" title="Deep study with Elder Stephen">${match}</span>`;
       });
 
       return escaped;

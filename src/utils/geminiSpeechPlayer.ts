@@ -82,10 +82,10 @@ export function isActiveGeminiSpeechPaused(): boolean {
  * long study notes and commentaries start speaking quickly and never hit
  * TTS length limits or cut off mid-sentence.
  */
-function splitTextIntoSpeechChunks(text: string, maxChunkLength = 650): string[] {
+function splitTextIntoSpeechChunks(text: string, maxChunkLength = 650, firstChunkLength = 240): string[] {
   const cleaned = sanitizeVerbatimSpeechText(text);
   if (!cleaned) return [];
-  if (cleaned.length <= maxChunkLength) return [cleaned];
+  if (cleaned.length <= firstChunkLength) return [cleaned];
 
   const sentences = cleaned.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [cleaned];
   const chunks: string[] = [];
@@ -95,7 +95,8 @@ function splitTextIntoSpeechChunks(text: string, maxChunkLength = 650): string[]
     const sentence = rawSentence.trim();
     if (!sentence) continue;
 
-    if (current && current.length + sentence.length + 1 > maxChunkLength) {
+    const limit = chunks.length === 0 ? firstChunkLength : maxChunkLength;
+    if (current && current.length + sentence.length + 1 > limit) {
       chunks.push(current.trim());
       current = sentence;
     } else {
@@ -173,7 +174,7 @@ async function fetchGeminiChunkBase64(
 
     const requestNarrate = async (useVerbatimEdge: boolean, overrideVoice?: string): Promise<FetchedAudioChunk | null> => {
       const controller = new AbortController();
-      const timeoutMs = useVerbatimEdge ? 12000 : 8000;
+      const timeoutMs = 15000;
       const timerId = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await apiFetch("/api/study/narrate", {
