@@ -630,13 +630,54 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
     }, 10);
   };
 
-  // Sync scroll on textarea scroll
+  // Sync scroll on textarea scroll & preserve proportional scroll across Read <-> Draft switches
+  const scrollRatioRef = useRef<number>(0);
+  const lastModeRef = useRef<{ id?: string; mode: 'read' | 'draft' }>({ id: note?.id, mode });
+
   const handleScroll = () => {
+    const ta = textareaRef.current;
+    if (ta) {
+      const maxScroll = Math.max(1, ta.scrollHeight - ta.clientHeight);
+      scrollRatioRef.current = ta.scrollTop / maxScroll;
+    }
     if (textareaRef.current && backdropRef.current) {
       backdropRef.current.scrollTop = textareaRef.current.scrollTop;
       backdropRef.current.scrollLeft = textareaRef.current.scrollLeft;
     }
   };
+
+  useEffect(() => {
+    if (lastModeRef.current.id !== note?.id) {
+      scrollRatioRef.current = 0;
+    } else if (lastModeRef.current.mode !== mode) {
+      const ratio = scrollRatioRef.current;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (mode === 'draft' && textareaRef.current) {
+            const maxScroll = Math.max(0, textareaRef.current.scrollHeight - textareaRef.current.clientHeight);
+            textareaRef.current.scrollTop = ratio * maxScroll;
+          } else if (mode === 'read') {
+            const readScrollEl = document.getElementById('read-workspace')?.parentElement;
+            if (readScrollEl) {
+              const maxScroll = Math.max(0, readScrollEl.scrollHeight - readScrollEl.clientHeight);
+              readScrollEl.scrollTop = ratio * maxScroll;
+            }
+          }
+        });
+      });
+    }
+    lastModeRef.current = { id: note?.id, mode };
+
+    if (mode !== 'read') return;
+    const readScrollEl = document.getElementById('read-workspace')?.parentElement;
+    if (!readScrollEl) return;
+    const onReadScroll = () => {
+      const maxScroll = Math.max(1, readScrollEl.scrollHeight - readScrollEl.clientHeight);
+      scrollRatioRef.current = readScrollEl.scrollTop / maxScroll;
+    };
+    readScrollEl.addEventListener('scroll', onReadScroll, { passive: true });
+    return () => readScrollEl.removeEventListener('scroll', onReadScroll);
+  }, [note?.id, mode]);
 
   useEffect(() => {
     handleScroll();

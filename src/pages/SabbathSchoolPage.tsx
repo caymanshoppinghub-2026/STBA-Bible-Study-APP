@@ -252,6 +252,26 @@ export const SabbathSchoolPage: React.FC = () => {
       <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden min-h-0 pb-12 lg:pb-0">
         {/* Main Content Pane */}
         <div
+          ref={(el) => {
+            if (!el || el.dataset.scrollRestored === "true") return;
+            el.dataset.scrollRestored = "true";
+            try {
+              const savedTop = Number(sessionStorage.getItem("stba_sabbath_scroll_top") || "0");
+              const savedWinY = Number(sessionStorage.getItem("stba_sabbath_window_y") || "0");
+              if (savedTop > 0 || savedWinY > 0) {
+                setTimeout(() => {
+                  if (savedTop > 0) el.scrollTop = savedTop;
+                  if (savedWinY > 0) window.scrollTo(0, savedWinY);
+                }, 140);
+              }
+            } catch {}
+          }}
+          onScroll={(e) => {
+            try {
+              sessionStorage.setItem("stba_sabbath_scroll_top", String((e.currentTarget as HTMLDivElement).scrollTop));
+              sessionStorage.setItem("stba_sabbath_window_y", String(window.scrollY));
+            } catch {}
+          }}
           className={`flex-1 lg:overflow-y-auto p-4 md:p-8 space-y-6 custom-scroll-pane min-w-0 transition-colors ${
             isLight ? "bg-[#F4EFE6]" : "bg-[#0D1117]"
           }`}

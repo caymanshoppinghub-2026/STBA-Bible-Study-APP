@@ -101,7 +101,31 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
     }
   };
 
-  const [openDays, setOpenDays] = useState<{ [key: number]: boolean }>({});
+  const [openDays, setOpenDays] = useState<{ [key: number]: boolean }>(() => {
+    try {
+      const saved = sessionStorage.getItem("stba_sabbath_open_days");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [wasSectionOpen] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem("stba_sabbath_section_open") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      sessionStorage.setItem("stba_sabbath_open_days", JSON.stringify(openDays));
+      if (Object.values(openDays).some(Boolean)) {
+        sessionStorage.setItem("stba_sabbath_section_open", "true");
+      }
+    } catch {}
+  }, [openDays]);
 
   const [isNotebookOpen, setIsNotebookOpen] = useState(false);
   const [selectedVerseRef, setSelectedVerseRef] = useState<string | null>(null);
@@ -361,7 +385,7 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
         subtitle={`${completedCount} of 7 days completed • Tap any day to expand full study text`}
         badge={`${completedCount}/7 Complete`}
         icon={<BookOpen size={20} />}
-        defaultOpen={false}
+        defaultOpen={wasSectionOpen}
         className="mb-6"
       >
         <div className="space-y-3">
@@ -523,22 +547,6 @@ export const CollapsibleDailyLessonsSection: React.FC = () => {
                           <Sparkles size={12} className="text-amber-500" />
                         )}
                         <span>Discuss Day with Elder Stephen</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedDayIndex(index);
-                          setIsNotebookOpen(true);
-                        }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition cursor-pointer ${
-                          isLight
-                            ? "bg-white hover:bg-stone-100 border-stone-300 text-stone-800"
-                            : "bg-neutral-900 hover:bg-neutral-850 border-neutral-750 text-neutral-300 hover:text-white"
-                        }`}
-                      >
-                        <CheckSquare size={12} className="text-amber-500" />
-                        <span>Discipleship Vault</span>
                       </button>
 
                       {/* Manual Mark as Complete Button inside expanded view */}
