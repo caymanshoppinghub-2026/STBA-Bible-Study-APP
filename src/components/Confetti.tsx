@@ -2,18 +2,19 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useApp } from "../context/AppContext";
 import { useTheme } from "../context/ThemeContext";
-import { 
-  Sparkles, 
-  Award, 
-  BookOpen, 
-  Brain, 
-  BookMarked, 
-  Compass, 
-  Check, 
+import {
+  Sparkles,
+  Award,
+  BookOpen,
+  Brain,
+  BookMarked,
+  Compass,
+  Check,
   Search,
   Quote,
-  ShieldCheck
+  X
 } from "lucide-react";
+import elderStephenAvatar from "../assets/images/elder_steven_portrait_1788201900752.jpg";
 
 interface Particle {
   id: number;
@@ -195,76 +196,129 @@ export const Confetti: React.FC = () => {
       </div>
 
       {/* 2. MILESTONE CELEBRATION MODAL OVERLAY */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs pointer-events-auto flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-xs pointer-events-auto flex items-center justify-center p-4">
         <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 30 }}
+          initial={{ opacity: 0, scale: 0.92, y: 24 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className={`w-full max-w-lg rounded-[24px] overflow-hidden relative shadow-2xl ${tokens.surface.class} ${tokens.shadow.class}`}
+          className="w-full max-w-[460px] rounded-[26px] overflow-hidden relative bg-gradient-to-b from-[#081733] via-[#040D1E] to-[#020814] border-2 border-[#E5B34B]/80 shadow-[0_0_55px_rgba(229,179,75,0.28),0_24px_60px_rgba(0,0,0,0.85)] text-white"
           id="milestone-modal-card"
         >
-          {/* Subtle gold flare background */}
-          <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-[#C9973A]/15 to-transparent pointer-events-none" />
+          {/* Ambient radial gold/navy top halo */}
+          <div className="absolute top-0 inset-x-0 h-52 bg-[radial-gradient(ellipse_at_top,rgba(242,198,94,0.24),transparent_70%)] pointer-events-none" />
 
-          {/* Modal Header Icon & Badge */}
-          <div className="pt-8 pb-4 flex flex-col items-center text-center relative z-10">
-            <div className="p-4 bg-[#C9973A]/10 rounded-full border border-[#C9973A]/20 shadow-inner mb-3">
-              {details.icon}
+          {/* Top-right circular close button */}
+          <button
+            type="button"
+            onClick={closeConfetti}
+            aria-label="Close milestone celebration"
+            className="absolute top-3.5 right-3.5 z-20 w-8 h-8 rounded-full bg-[#091834]/90 border border-[#E5B34B]/50 hover:border-[#F4CA64] text-stone-200 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {/* Hero Portrait with Golden Halo & Laurel Wreaths + Ribbon Badge */}
+          <div className="pt-6 pb-3 px-6 flex flex-col items-center text-center relative z-10">
+            <div className="relative flex items-center justify-center">
+              {/* Left Golden Laurel */}
+              <svg className="w-12 h-20 text-[#E5B34B] -mr-2 drop-shadow-[0_0_8px_rgba(229,179,75,0.55)]" viewBox="0 0 48 80" fill="currentColor" aria-hidden="true">
+                <path d="M36 70c-12-8-20-21-20-36 0-10 4-19 10-26-2 9-1 18 3 26-5-2-9-6-11-11 0 11 5 21 13 28-6-1-11-4-14-8 2 10 9 18 19 23z" />
+              </svg>
+
+              {/* Glowing Portrait Frame */}
+              <div className="w-24 h-24 rounded-full p-[3px] bg-gradient-to-b from-[#FCE396] via-[#E5B34B] to-[#9E6E1B] shadow-[0_0_28px_rgba(242,198,94,0.55)] relative z-10">
+                <img
+                  src={elderStephenAvatar}
+                  alt="Elder Stephen"
+                  className="w-full h-full rounded-full object-cover object-top bg-[#081733]"
+                />
+              </div>
+
+              {/* Right Golden Laurel */}
+              <svg className="w-12 h-20 text-[#E5B34B] -ml-2 drop-shadow-[0_0_8px_rgba(229,179,75,0.55)] scale-x-[-1]" viewBox="0 0 48 80" fill="currentColor" aria-hidden="true">
+                <path d="M36 70c-12-8-20-21-20-36 0-10 4-19 10-26-2 9-1 18 3 26-5-2-9-6-11-11 0 11 5 21 13 28-6-1-11-4-14-8 2 10 9 18 19 23z" />
+              </svg>
             </div>
-            
-            <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest px-3 py-1 rounded-full bg-[#C9973A]/20 text-[#C9973A] border border-[#C9973A]/30">
-              🎖️ MILESTONE: {details.badge}
-            </span>
 
-            <h2 className={`font-serif text-2xl font-black tracking-tight mt-3 max-w-[85%] ${tokens.text.class}`}>
-              {details.title}
-            </h2>
+            {/* Metallic Gold Ribbon Pill */}
+            <div className="-mt-3 relative z-20 inline-flex items-center gap-1.5 px-4 py-1 rounded-full bg-gradient-to-r from-[#C8922A] via-[#F4CA64] to-[#C8922A] text-[#081226] shadow-[0_4px_14px_rgba(229,179,75,0.45)] border border-[#FCE396]/70">
+              <Award className="w-3.5 h-3.5 text-[#081226] shrink-0" />
+              <span className="text-[10px] sm:text-[11px] font-mono font-extrabold uppercase tracking-widest">
+                MILESTONE: {details.badge}
+              </span>
+            </div>
+
+            {/* Serif Headline (last word italicized) */}
+            {(() => {
+              const words = details.title.trim().split(/\s+/);
+              const lastWord = words.pop() || "";
+              const leadWords = words.join(" ");
+              return (
+                <h2 className="font-serif text-2xl sm:text-[26px] font-bold tracking-tight text-white mt-3.5 leading-snug">
+                  {leadWords}{leadWords ? " " : ""}
+                  <span className="italic font-semibold text-[#FDF7E7]">{lastWord}</span>
+                </h2>
+              );
+            })()}
+
+            {/* Gold Hairline with Centered Diamond */}
+            <div className="w-full flex items-center gap-2 mt-3 px-4">
+              <div className="flex-1 h-[1px] bg-gradient-to-r from-transparent via-[#E5B34B]/70 to-[#E5B34B]" />
+              <span className="w-2 h-2 rotate-45 bg-[#F4CA64] shadow-[0_0_8px_rgba(244,202,100,0.9)]" />
+              <div className="flex-1 h-[1px] bg-gradient-to-l from-transparent via-[#E5B34B]/70 to-[#E5B34B]" />
+            </div>
           </div>
 
-          {/* Modal Content / Pastoral Message from Elder Stephen */}
-          <div className="px-6 pb-6 pt-2 space-y-5 relative z-10 text-left">
-            {/* Pastoral Letter Box */}
-            <div className={`p-4 rounded-2xl border flex gap-4 ${tokens.surfaceAlt.class}`}>
-              {/* Elder Stephen Avatar Container */}
-              <div className="w-12 h-12 rounded-full shrink-0 bg-[#C9973A]/15 border border-[#C9973A]/30 flex items-center justify-center relative overflow-hidden">
-                <span className="text-xl">👴</span>
-                <div className="absolute bottom-0 inset-x-0 h-2.5 bg-[#C9973A] flex items-center justify-center text-[6px] text-white font-bold uppercase tracking-tighter">
-                  Elder S
-                </div>
+          {/* Pastoral Message Card + Scripture Quote */}
+          <div className="px-5 pb-5 space-y-4 relative z-10 text-left">
+            <div className="p-4 rounded-2xl bg-[#0B162C]/90 border border-[#D4A346]/45 shadow-inner flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-full p-[2px] bg-gradient-to-b from-[#F4CA64] to-[#9E6E1B] shrink-0 shadow-[0_0_12px_rgba(229,179,75,0.3)]">
+                <img
+                  src={elderStephenAvatar}
+                  alt="Elder Stephen"
+                  className="w-full h-full rounded-full object-cover object-top"
+                />
               </div>
 
               <div className="space-y-1">
-                <span className="text-[10px] font-mono uppercase font-black text-[#C9973A]">
-                  Elder Stephen says:
+                <span className="text-[10px] font-mono uppercase font-extrabold tracking-wider text-[#F4CA64] block">
+                  Elder Stephen Says:
                 </span>
-                <p className={`text-xs leading-relaxed elder-stephen-output font-['SF_Pro_Text',_-apple-system,_BlinkMacSystemFont,_'San_Francisco',_'Helvetica_Neue',_Helvetica,_sans-serif] tracking-[0.65px] antialiased ${tokens.textSecondary.class}`}>
-                  "{activeConfetti.message}"
+                <p className="text-xs sm:text-[13px] leading-relaxed text-stone-100 font-sans">
+                  “{activeConfetti.message}”
                 </p>
               </div>
             </div>
 
-            {/* Scripture Quote Box */}
-            <div className="border-l-4 border-[#C9973A] pl-4 py-1.5 space-y-1">
+            {/* Open Book Ornament Divider */}
+            <div className="flex items-center gap-3 px-4">
+              <div className="flex-1 h-[1px] bg-gradient-to-r from-transparent to-[#E5B34B]/60" />
+              <BookOpen className="w-5 h-5 text-[#F4CA64] shrink-0" />
+              <div className="flex-1 h-[1px] bg-gradient-to-l from-transparent to-[#E5B34B]/60" />
+            </div>
+
+            {/* Scripture Quote */}
+            <div className="px-1 space-y-1">
               <div className="flex items-center gap-1.5">
-                <Quote className="w-3 h-3 text-[#C9973A]" />
-                <span className={`text-[10px] font-mono uppercase font-bold tracking-wider ${tokens.textSecondary.class}`}>
+                <Quote className="w-3.5 h-3.5 text-[#F4CA64]" />
+                <span className="text-[11px] font-mono uppercase font-bold tracking-wider text-[#F4CA64]">
                   {details.ref}
                 </span>
               </div>
-              <p className={`text-xs italic font-serif leading-relaxed ${tokens.text.class}`}>
-                "{details.verse}"
+              <p className="text-xs sm:text-[13px] italic font-serif leading-relaxed text-stone-200 pl-1">
+                “{details.verse}”
               </p>
             </div>
-          </div>
 
-          {/* Modal Footer Button */}
-          <div className={`p-5 border-t flex justify-end gap-3 ${tokens.surfaceAlt.class}`}>
+            {/* Full-Width Metallic Gold Action Button */}
             <button
               onClick={closeConfetti}
-              className="w-full sm:w-auto px-6 py-3 bg-[#C9973A] hover:bg-[#B5852F] text-neutral-950 font-sans font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer border border-[#C9973A]/20"
+              className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-b from-[#FCE396] via-[#E5B34B] to-[#C48E24] hover:brightness-110 active:scale-[0.99] text-[#081226] font-sans font-extrabold text-xs sm:text-sm uppercase tracking-widest transition-all shadow-[0_6px_22px_rgba(229,179,75,0.35)] flex items-center justify-center gap-2.5 cursor-pointer border border-[#FCE396]/60"
               id="milestone-dismiss-button"
             >
-              <ShieldCheck className="w-4 h-4 text-neutral-950" />
+              <span className="w-5 h-5 rounded-full bg-[#081226] text-[#F4CA64] flex items-center justify-center shrink-0">
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+              </span>
               <span>Amen, Praise God!</span>
             </button>
           </div>

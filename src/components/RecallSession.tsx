@@ -591,13 +591,15 @@ export const RecallSession: React.FC<RecallSessionProps> = ({
         favoriteScriptures: [selectedScripture.reference]
       };
 
-      // Call Elder Stephen on recall completion
-      await callElderStephen({
+      // Call Elder Stephen on recall completion in the background so UI completes immediately
+      void callElderStephen({
         currentMode: 'Recall',
         noteTitle: `Verbatim Recall of ${selectedScripture.reference}`,
         noteContent: `Word Accuracy: ${performance.score}% on ${selectedScripture.reference}. Original text: "${selectedScripture.text}".`,
         masteryState,
         userAction: 'recall_session'
+      }).catch((e) => {
+        console.error('Elder Stephen recall registration failed:', e);
       });
     } catch (e) {
       console.error('Elder Stephen recall registration failed:', e);
