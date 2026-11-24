@@ -382,6 +382,7 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
   const phaseRef = useRef<PhaseType>(phase);
   const scoreStatsRef = useRef(scoreStats);
   const evaluatedStagesLiveRef = useRef<Set<string>>(new Set());
+  const lastStageAdvanceAtRef = useRef<number>(0);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -511,16 +512,28 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
 
     const currentPhase = phaseRef.current;
 
-    // Trigger on evaluation score: as soon as the score is spoken, move stage indicator visually to the next stage
+    // Cooldown guard: prevent a single AI response or streaming chunk burst from cascading through Stages 1 -> 5
+    const nowMs = Date.now();
+    if (nowMs - lastStageAdvanceAtRef.current < 6000) {
+      return;
+    }
+
+    // Trigger on evaluation score: only apply to the current active stage (and match explicit stage number if stated)
     if (parsedScore !== null && currentPhase.startsWith("stage") && !evaluatedStagesLiveRef.current.has(currentPhase)) {
       const currentStageNum = parseInt(currentPhase.replace("stage", ""), 10);
+      const explicitStageMatch = lowerText.match(/evaluate\s+(?:your\s+)?(?:final\s+)?stage\s*([1-5])/i);
+      if (explicitStageMatch && parseInt(explicitStageMatch[1], 10) !== currentStageNum) {
+        return;
+      }
+
       evaluatedStagesLiveRef.current.add(currentPhase);
+      lastStageAdvanceAtRef.current = nowMs;
 
       if (currentStageNum < 5) {
         const nextStageNum = currentStageNum + 1;
         const nextStageId = `stage${nextStageNum}` as PhaseType;
 
-        // Immediately update stage score, reset session score for new stage, and move visual stage indicator
+        // Immediately update ONLY the evaluated stage's score and advance indicator to the next stage
         setScoreStats((prev) => {
           const nextStageScores = { ...prev.stageScores };
           nextStageScores[currentPhase] = parsedScore!;
@@ -531,7 +544,8 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
           };
         });
 
-        // Visually update the stage indicator immediately
+        // Synchronously update phaseRef so subsequent streaming chunks in this turn cannot re-trigger
+        phaseRef.current = nextStageId;
         setPhase(nextStageId);
         triggerToast(`AI Evaluated Stage ${currentStageNum} at ${parsedScore}%. Advanced to Stage ${nextStageNum}!`);
       } else {
@@ -573,6 +587,8 @@ export const TeachItStudio: React.FC<TeachItStudioProps> = ({
     }
 
     if (detectedStage && detectedStage !== phaseRef.current) {
+      phaseRef.current = detectedStage;
+      lastStageAdvanceAtRef.current = Date.now();
       setPhase(detectedStage);
       setScoreStats((prev) => ({
         ...prev,
@@ -1655,6 +1671,7 @@ Let us explore: How would you explain this truth gently and respectfully to a se
     setCustomFoundationalScriptures([]);
     setPhase("stage1");
     evaluatedStagesLiveRef.current.clear();
+    lastStageAdvanceAtRef.current = 0;
 
     setScoreStats({
       overallScore: 0,
@@ -3862,7 +3879,7 @@ Take all the time you need—our dialogue has no time limits. **In your own word
                 {/* 5-STAGE EVALUATION MINI-CARDS */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-6 mt-6 border-t border-white/10">
                   {stagesList.map((st) => {
-                    const stScore = scoreStats.stageScores[st.id] || scoreStats.overallScore || 85;
+                    const stScore = scoreStats.stageScores[st.id] || 0;
                     return (
                       <div
                         key={st.id}
