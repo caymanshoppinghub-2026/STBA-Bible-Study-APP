@@ -459,14 +459,14 @@ export const FloatingQuickNote: React.FC = () => {
                 }
               }}
               style={{ fontFamily: "'Lato', sans-serif" }}
-              className="flex items-center pl-3.5 pr-8 -mr-5 py-3 rounded-l-2xl rounded-r-none bg-[#0F172A] hover:bg-[#16223B] text-[#F3CF65] font-['Lato',sans-serif] font-bold not-italic text-xs shadow-2xl border border-r-0 border-[#C9973A]/75 hover:border-[#F3CF65] cursor-grab active:cursor-grabbing whitespace-nowrap touch-none transition-colors overflow-hidden"
+              className="flex items-center pl-4 pr-8 -mr-5 py-2.5 rounded-l-full rounded-r-none bg-gradient-to-b from-[#E1B654] to-[#B78628] hover:from-[#EAC162] hover:to-[#C49230] text-[#0F141F] font-['Lato',sans-serif] font-extrabold not-italic text-sm shadow-[0_8px_24px_rgba(0,0,0,0.35)] border border-r-0 border-[#F4D685] cursor-grab active:cursor-grabbing whitespace-nowrap touch-none transition-all overflow-hidden"
               title="Hover to expand • Click to slide out Discipleship Vault • Drag vertically to reposition (Alt+N)"
               aria-label="Open Discipleship Vault side panel"
             >
               <div className="w-5 h-5 flex items-center justify-center shrink-0 relative">
-                <PenLine className="w-4 h-4 text-[#C9973A] stroke-[2.2]" />
+                <PenLine className="w-4 h-4 text-[#0F141F] stroke-[2.3]" />
                 {recentSessionNotes.length > 0 && (
-                  <span className="absolute -top-2 -left-2 w-4 h-4 rounded-full bg-[#C9973A] text-stone-950 text-[9px] font-bold flex items-center justify-center">
+                  <span className="absolute -top-2 -left-2 w-4 h-4 rounded-full bg-[#0F141F] text-[#F3CF65] text-[9px] font-bold flex items-center justify-center">
                     {recentSessionNotes.length}
                   </span>
                 )}
@@ -480,9 +480,12 @@ export const FloatingQuickNote: React.FC = () => {
                     animate={{ width: "auto", opacity: 1, marginLeft: 8 }}
                     exit={{ width: 0, opacity: 0, marginLeft: 0 }}
                     transition={{ type: "spring", stiffness: 320, damping: 26 }}
-                    className="inline-block overflow-hidden text-xs font-bold tracking-wide text-[#F3CF65] whitespace-nowrap"
+                    className="inline-flex items-center gap-2 overflow-hidden text-sm font-extrabold tracking-tight text-[#0F141F] whitespace-nowrap"
                   >
-                    Discipleship Vault
+                    <span>Quick Note</span>
+                    <span className="px-2 py-0.5 rounded-md bg-[#996E1D]/45 text-[#1A1407] font-mono text-[11px] font-bold tracking-normal">
+                      Alt+N
+                    </span>
                   </motion.span>
                 )}
               </AnimatePresence>

@@ -30,10 +30,11 @@ const BIBLE_REF_REGEX =
  */
 export function renderTextWithVerseButtons(
   text: string,
-  onVerseClick?: (verse: string) => void
+  onVerseClick?: (verse: string) => void,
+  isLight: boolean = false
 ): React.ReactNode {
-  // Strip any accidental raw HTML tags for clean natural language formatting
-  const cleanText = text.replace(/<\/?[a-z][a-z0-9]*[^<>]*>/gi, "");
+  // Strip any accidental raw HTML tags and leading ### markdown hashes for clean natural language formatting
+  const cleanText = text.replace(/<\/?[a-z][a-z0-9]*[^<>]*>/gi, "").replace(/^#{1,6}\s*(.+)$/gm, "**$1**");
 
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
@@ -50,7 +51,7 @@ export function renderTextWithVerseButtons(
     // Text before the verse
     if (matchIndex > lastIndex) {
       const precedingText = cleanText.substring(lastIndex, matchIndex);
-      parts.push(renderFormattedInline(precedingText, `pre-${lastIndex}`));
+      parts.push(renderFormattedInline(precedingText, `pre-${lastIndex}`, isLight));
     }
 
     // Verse button with frosted glassmorphic Logos Scripture Hover Pop-Up
@@ -67,14 +68,18 @@ export function renderTextWithVerseButtons(
               onVerseClick(matchedRef);
             }
           }}
-          className="inline-flex items-center gap-1 px-2 py-0.5 mx-1 rounded-lg bg-[#E5B842]/15 hover:bg-[#E5B842]/30 border border-[#E5B842]/40 text-[#F3CF65] hover:text-white font-mono text-[11px] font-semibold transition-all cursor-pointer shadow-xs active:scale-95 group/vbtn align-baseline"
+          className={`inline-flex items-center gap-1 px-2 py-0.5 mx-1 rounded-lg border font-mono text-[11px] font-semibold transition-all cursor-pointer shadow-xs active:scale-95 group/vbtn align-baseline ${
+            isLight
+              ? "bg-[#FAF0D2] hover:bg-[#F3E2B3] border-[#C9973A]/60 text-[#7A520A] hover:text-stone-950"
+              : "bg-[#E5B842]/15 hover:bg-[#E5B842]/30 border border-[#E5B842]/40 text-[#F3CF65] hover:text-white"
+          }`}
           title={`Explore ${matchedRef} in Bible Study Mode`}
         >
-          <BookOpen className="w-3 h-3 text-[#F3CF65] group-hover/vbtn:scale-110 transition-transform shrink-0" />
-          <span className="underline decoration-[#F3CF65]/40 group-hover/vbtn:decoration-white">
+          <BookOpen className={`w-3 h-3 group-hover/vbtn:scale-110 transition-transform shrink-0 ${isLight ? "text-[#8C5E0C]" : "text-[#F3CF65]"}`} />
+          <span className={`underline ${isLight ? "decoration-[#8C5E0C]/50 group-hover/vbtn:decoration-stone-950" : "decoration-[#F3CF65]/40 group-hover/vbtn:decoration-white"}`}>
             {matchedRef}
           </span>
-          <ArrowUpRight className="w-2.5 h-2.5 text-[#F3CF65]/70 group-hover/vbtn:text-[#F3CF65] shrink-0" />
+          <ArrowUpRight className={`w-2.5 h-2.5 shrink-0 ${isLight ? "text-[#8C5E0C]/80 group-hover/vbtn:text-stone-950" : "text-[#F3CF65]/70 group-hover/vbtn:text-[#F3CF65]"}`} />
         </button>
       </LogosScriptureHoverTrigger>
     );
@@ -84,7 +89,7 @@ export function renderTextWithVerseButtons(
 
   // Trailing text
   if (lastIndex < cleanText.length) {
-    parts.push(renderFormattedInline(cleanText.substring(lastIndex), `post-${lastIndex}`));
+    parts.push(renderFormattedInline(cleanText.substring(lastIndex), `post-${lastIndex}`, isLight));
   }
 
   return parts.length > 0 ? parts : cleanText;
@@ -93,19 +98,19 @@ export function renderTextWithVerseButtons(
 /**
  * Handles basic markdown inline styling (bold **text**, italics *text*)
  */
-function renderFormattedInline(text: string, keyPrefix: string): React.ReactNode {
+function renderFormattedInline(text: string, keyPrefix: string, isLight: boolean = false): React.ReactNode {
   const segments = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   return segments.map((seg, i) => {
     if (seg.startsWith("**") && seg.endsWith("**")) {
       return (
-        <strong key={`${keyPrefix}-b-${i}`} className="font-bold text-white">
+        <strong key={`${keyPrefix}-b-${i}`} className={`font-bold ${isLight ? "text-stone-950" : "text-white"}`}>
           {seg.slice(2, -2)}
         </strong>
       );
     }
     if (seg.startsWith("*") && seg.endsWith("*")) {
       return (
-        <em key={`${keyPrefix}-i-${i}`} className="italic text-stone-200">
+        <em key={`${keyPrefix}-i-${i}`} className={`italic ${isLight ? "text-stone-800" : "text-stone-200"}`}>
           {seg.slice(1, -1)}
         </em>
       );

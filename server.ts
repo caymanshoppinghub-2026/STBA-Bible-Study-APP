@@ -6166,6 +6166,51 @@ app.post("/api/elder-stephen", async (req, res) => {
     const studyDoc = noteTitle || "the Scriptures";
     const refText = focalScripture || "God's Word";
 
+    let text = "";
+    if (isSabbathSchool) {
+      if (latestUserText && latestUserText.trim().length > 3 && noteContent) {
+        const cleanSentences = (
+          String(noteContent)
+            .replace(/^#+\s*/gm, "")
+            .replace(/\*\*/g, "")
+            .replace(/\s+/g, " ")
+            .match(/[^.!?]+[.!?]+/g) || []
+        )
+          .map((s) => s.trim())
+          .filter((s) => s.length >= 30 && !s.endsWith("?") && !/^Read\s+[1-3]?\s*[A-Za-z]+\s+\d+/i.test(s));
+
+        // Score sentences by overlap with the user's question keywords so custom questions get relevant lesson insights
+        const qWords = latestUserText
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, "")
+          .split(/\s+/)
+          .filter((w) => w.length >= 4 && !["could", "give", "simple", "summary", "takeaway", "today", "study", "what", "does", "mean", "about", "explain"].includes(w));
+
+        let selectedSentences: string[] = [];
+        if (qWords.length > 0) {
+          const scored = cleanSentences
+            .map((s, idx) => ({
+              s,
+              idx,
+              hits: qWords.filter((w) => s.toLowerCase().includes(w)).length
+            }))
+            .filter((item) => item.hits > 0)
+            .sort((a, b) => b.hits - a.hits || a.idx - b.idx);
+          selectedSentences = scored.slice(0, 4).map((item) => item.s);
+        }
+        if (selectedSentences.length < 2) {
+          selectedSentences = cleanSentences.slice(0, 4);
+        }
+
+        text = selectedSentences.length > 0
+          ? selectedSentences.join(" ")
+          : `In today's study on **${studyDoc}**, Scripture guides us to examine the biblical text in its context and apply its practical spiritual takeaway faithfully.`;
+      } else {
+        text = `Greetings, ${actualName}. I am Elder Stephen, here to answer your questions regarding today's lesson on ${studyDoc}. How can I assist you today?`;
+      }
+      return res.json({ text: formatProperElderSpacing(text), commentaryMode: resolvedMode, modeUsed: resolvedMode, latencyMs });
+    }
+
     if (resolvedMode === "velocity") {
       const text = formatProperElderSpacing(
 `### Biblical Meaning & Context
@@ -6180,26 +6225,6 @@ app.post("/api/elder-stephen", async (req, res) => {
 * Study this text prayerfully today, yielding your heart to Christ's sanctifying love.`
       );
       return res.json({ text, commentaryMode: "velocity", modeUsed: "velocity", latencyMs });
-    }
-
-    let text = "";
-    if (isSabbathSchool) {
-      if (latestUserText && latestUserText.trim().length > 10 && noteContent) {
-        const cleanSentences = String(noteContent)
-          .replace(/\s+/g, " ")
-          .match(/[^.!?]+[.!?]+/g) || [];
-        const picked = cleanSentences
-          .map((s) => s.trim())
-          .filter((s) => s.length >= 30 && !s.endsWith("?") && !/^Read\s+[1-3]?\s*[A-Za-z]+\s+\d+/i.test(s))
-          .slice(0, 3)
-          .join(" ");
-        text = picked
-          ? `${picked}`
-          : `Today's study in *${studyDoc}* highlights how God's Word guides practical Christian living and faithful discernment.`;
-      } else {
-        text = `Greetings, ${actualName}. I am Elder Stephen, here to answer your questions regarding today's lesson on ${studyDoc}. How can I assist you today?`;
-      }
-      return res.json({ text: formatProperElderSpacing(text), commentaryMode: resolvedMode, modeUsed: resolvedMode, latencyMs });
     }
 
     if (mode === "Recall") {
@@ -6309,19 +6334,20 @@ How does the specific truth of *${refText}* speak to your walk with Christ and p
     // User's active request text
     const userRequestText = latestUserText || `Please share your pastoral guidance on ${activePassage}.`;
 
-    if (effectiveMode === "velocity" && isSabbathSchool) {
-      const ssVelocityInstruction = `You are Elder Stephen, a warm Seventh-day Adventist pastoral mentor in "Study To Be Approved" (STBA).
-The student just clicked "Discuss Day with Elder Stephen" in Sabbath School Studies and asked for a simple summary or key takeaway.
+    if (isSabbathSchool && effectiveMode !== "prestige") {
+      const ssVelocityInstruction = `You are Elder Stephen, a warm, insightful Seventh-day Adventist pastoral mentor in "Study To Be Approved" (STBA).
+You are assisting ${actualName} in Sabbath School Studies.
 
 CRITICAL RULES:
-- Do NOT greet the user (no "Shalom", no "Greetings", no "Listen", no "How can I assist you today?"). Jump straight into the answer.
-- Keep your response VERY SHORT — a quick 30-second read (3 to 4 crisp sentences, ~70 to 100 words total).
-- Draw on the "Full 7-Day Lesson Arc" in the context so your insight connects today's day to the broader 7-day week and feels distinct from the Daily Syllabus summary.
-- Focus on the practical spiritual takeaway for ${actualName}.
-- Format with proper spaces between words and punctuation.`;
+- Directly and thoughtfully answer the student's exact question ("${userRequestText}") using the Active Day Content and the Full 7-Day Lesson Arc provided below.
+- Do NOT open with generic greetings ("Shalom", "Greetings", "Listen", "How can I assist you?"). Jump straight into a clear, engaging answer.
+- Length: Short, substantive, and well-rounded — 1 to 2 cohesive paragraphs (4 to 6 sentences, ~90 to 140 words). Not a tiny 1-liner, and not a long essay.
+- If asked for today's summary or key takeaway, synthesize what today's specific study teaches, weave in its key Scripture references naturally, and show how it connects to the broader 7-day week (offering a fresh pastoral lens rather than copying the Daily Syllabus verbatim).
+- If asked a specific question, answer that exact question directly from Scripture and the lesson context.
+- Format with clean, natural spacing between words and punctuation.`;
 
       const ssUserBlock = `Weekly Lesson: "${documentTitle}"
-${noteContent ? `Active Day Content:\n"""\n${noteContent.slice(0, 1800)}\n"""\n` : ""}${contextSummary ? `${contextSummary}\n` : ""}Student Question: "${userRequestText}"`;
+${noteContent ? `Active Day Content:\n"""\n${noteContent.slice(0, 2400)}\n"""\n` : ""}${contextSummary ? `${contextSummary}\n` : ""}${recentHistorySummary ? `Recent Conversation: ${recentHistorySummary}\n` : ""}Student Question: "${userRequestText}"`;
 
       const ssResult = await generateContentWithFallback(aiClient, {
         model: "gemini-3.8-flash",
@@ -6330,7 +6356,7 @@ ${noteContent ? `Active Day Content:\n"""\n${noteContent.slice(0, 1800)}\n"""\n`
           systemInstruction: ssVelocityInstruction,
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
         },
-        timeoutMs: 12000
+        timeoutMs: 15000
       });
 
       const ssText = formatProperElderSpacing(ssResult?.text || "");

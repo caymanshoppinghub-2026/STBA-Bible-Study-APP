@@ -777,15 +777,21 @@ ${contextSummary ? `Special Context: ${contextSummary}` : ""}`;
     }
 
     try {
+      const targetIdx = typeof explicitDayIndex === "number" ? explicitDayIndex : globalStateStore.selectedDayIndex;
+      const activeDayObj = globalStateStore.dailyLessons[targetIdx];
+      const resolvedDayTitle = activeDayObj?.title
+        ? `${activeDayObj.title} (${globalStateStore.lessonTitle})`
+        : globalStateStore.lessonTitle;
+
       const response = await askElderStephen({
         userId: "stba-member",
         userName: resolvedSenderName,
+        userMessage,
         currentMode: "Sabbath School Studies",
         contextSummary: journeyContext,
-        noteTitle: globalStateStore.lessonTitle,
+        noteTitle: resolvedDayTitle,
         noteContent: (() => {
-          const targetIdx = typeof explicitDayIndex === "number" ? explicitDayIndex : globalStateStore.selectedDayIndex;
-          const c = globalStateStore.dailyLessons[targetIdx]?.content;
+          const c = activeDayObj?.content;
           if (Array.isArray(c)) {
             return c.map((item) => (typeof item === "string" ? item : item?.text || "")).join("\n\n");
           }
@@ -793,7 +799,7 @@ ${contextSummary ? `Special Context: ${contextSummary}` : ""}`;
         })(),
         historyLog: updatedDiscussion,
         userAction: userMessage,
-        commentaryMode: requestedCommentaryMode || "prestige"
+        commentaryMode: requestedCommentaryMode === "prestige" ? "prestige" : "velocity"
       });
 
       saveStateAndNotify({

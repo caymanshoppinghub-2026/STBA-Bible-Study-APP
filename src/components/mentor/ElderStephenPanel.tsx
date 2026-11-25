@@ -233,7 +233,7 @@ export const ElderStephenPanel: React.FC = () => {
         )}
 
         <div className={`whitespace-pre-wrap elder-stephen-output font-lato font-['Lato',sans-serif] tracking-[0.2px] text-left leading-relaxed antialiased ${getBodyFontSizeClass(readingFontSize)} ${isLight ? "text-[#000000]" : "text-neutral-200"}`}>
-          {renderTextWithVerseButtons(cleanText, handleVerseClick)}
+          {renderTextWithVerseButtons(cleanText, handleVerseClick, isLight)}
         </div>
 
         {isVelocity && !isFirstWelcome && (

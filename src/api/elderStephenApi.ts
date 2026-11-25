@@ -63,6 +63,41 @@ export async function askElderStephen(params: ElderStephenParams): Promise<Elder
   const name = extractFirstName(params.userName, "Berean");
   const title = params.noteTitle || "the sacred scripture";
   const userText = params.userMessage || params.userAction || "";
+
+  if (params.currentMode === "Sabbath School Studies" || params.currentMode === "Syllabus") {
+    if (!userText || userText.trim().toLowerCase() === "discuss" || userText.trim().length === 0) {
+      return {
+        text: `Greetings, ${name}; as your Sabbath School mentor, I am here to explore "${title}" with you. What specific question or passage from this week's lesson is on your heart today?`,
+        commentaryMode: "velocity"
+      };
+    }
+
+    if (params.noteContent && params.noteContent.trim().length > 30) {
+      const cleanSentences = (
+        params.noteContent
+          .replace(/^#+\s*/gm, "")
+          .replace(/\*\*/g, "")
+          .replace(/\s+/g, " ")
+          .match(/[^.!?]+[.!?]+/g) || []
+      )
+        .map((s) => s.trim())
+        .filter((s) => s.length >= 30 && !s.endsWith("?") && !/^Read\s+[1-3]?\s*[A-Za-z]+\s+\d+/i.test(s));
+
+      if (cleanSentences.length > 0) {
+        return {
+          text: cleanSentences.slice(0, 4).join(" "),
+          commentaryMode: "velocity",
+          modeUsed: "velocity"
+        };
+      }
+    }
+
+    return {
+      text: `In **${title}**, Scripture reveals how God's holy law and redeeming grace unite in Christ's heavenly sanctuary ministry (*Hebrews 8:1-2*). Trusting His righteousness equips us to keep the commandments of God and the faith of Jesus (*Revelation 14:12*).`,
+      commentaryMode: "velocity"
+    };
+  }
+
   const isSpecific = isSpecificScopedRequest(userText);
 
   if (isSpecific) {
@@ -79,20 +114,6 @@ export async function askElderStephen(params: ElderStephenParams): Promise<Elder
       text: answer,
       commentaryMode: "velocity",
       modeUsed: "velocity"
-    };
-  }
-
-  if (params.currentMode === "Sabbath School Studies" || params.currentMode === "Syllabus") {
-    if (!userText || userText.trim().toLowerCase() === "discuss" || userText.trim().length === 0) {
-      return {
-        text: `Greetings, ${name}; as your Sabbath School mentor, I am here to explore "${title}" with you. What specific question or passage from this week's lesson is on your heart today?`,
-        commentaryMode: "velocity"
-      };
-    }
-
-    return {
-      text: `In **${title}**, Scripture reveals how God's holy law and redeeming grace unite in Christ's heavenly sanctuary ministry (*Hebrews 8:1-2*). Trusting His righteousness equips us to keep the commandments of God and the faith of Jesus (*Revelation 14:12*).`,
-      commentaryMode: "velocity"
     };
   }
 
