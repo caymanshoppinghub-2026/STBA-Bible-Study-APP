@@ -5,6 +5,9 @@
 
 import { addNotification, AppNotification } from "./notificationsManager";
 import { playNotificationBellRingSound } from "./audioFeedback";
+import { apiFetch, safeParseResponseJson } from "../lib/apiFetch";
+
+const LAST_NOTIFIED_SS_LESSON_KEY = "stba_last_notified_ss_lesson_key";
 
 export interface LiveContentRelease {
   id: string;
@@ -214,9 +217,71 @@ export function checkForLiveContentUpdates(): number {
 }
 
 /**
+ * Checks whether a newly scraped Sabbath School weekly lesson is available and
+ * dispatches a Notification Bell alert once per new weekly lesson (or immediately when forceNotify is true).
+ */
+export async function checkAndNotifyNewSabbathSchoolSync(
+  providedPayload?: any,
+  forceNotify: boolean = false
+): Promise<AppNotification | null> {
+  if (typeof window === "undefined") return null;
+
+  try {
+    let payload = providedPayload;
+    if (!payload) {
+      const res = await apiFetch("/api/sabbath-school/sync");
+      if (!res.ok) return null;
+      payload = await safeParseResponseJson<any>(res);
+    }
+
+    if (!payload || (!payload.lessonTitle && !payload.lessonId)) {
+      return null;
+    }
+
+    const quarterId = String(payload.quarterId || "2026-04").trim();
+    const lessonId = String(payload.lessonId || "").trim();
+    const lessonTitle = String(payload.lessonTitle || "").trim();
+    const quarterlyTitle = String(payload.quarterlyTitle || "Sabbath School Quarterly").trim();
+    const startDate = String(payload.startDate || "").trim();
+    const endDate = String(payload.endDate || "").trim();
+
+    const syncLessonKey = `${quarterId}:${lessonId}:${lessonTitle.toLowerCase()}`;
+    const lastNotifiedKey = localStorage.getItem(LAST_NOTIFIED_SS_LESSON_KEY) || "";
+
+    if (!forceNotify && lastNotifiedKey === syncLessonKey) {
+      return null;
+    }
+
+    localStorage.setItem(LAST_NOTIFIED_SS_LESSON_KEY, syncLessonKey);
+
+    const parsedNum = parseInt(lessonId, 10);
+    const lessonPrefix = !isNaN(parsedNum) ? `Lesson ${parsedNum}: ` : "";
+    const dateRangeLabel = startDate && endDate
+      ? ` (${startDate} – ${endDate})`
+      : startDate
+      ? ` (${startDate})`
+      : "";
+
+    return notifyLiveSectionUpdate({
+      sectionId: "sabbath-school",
+      sectionName: "Sabbath School",
+      title: `New Sabbath School Scrape: ${lessonPrefix}${lessonTitle || "Weekly Study"}`,
+      description: `Official lesson readings, Ellen G. White notes, and commentary videos for "${quarterlyTitle}"${dateRangeLabel} are now live!`,
+      link: "/sabbath-school",
+      linkText: "Open Sabbath School",
+      category: "sabbath-school",
+      playSound: true
+    });
+  } catch (err) {
+    console.warn("[ContentUpdatesWatcher] Sabbath School sync notification check skipped:", err);
+    return null;
+  }
+}
+
+/**
  * Initialize background watcher for live section updates.
- * - Checks immediately on app launch
- * - Sets up a recurring check every 45 seconds
+ * - Checks immediately on app launch (including newly scraped Sabbath School weekly lessons)
+ * - Sets up a recurring check every 45 seconds for section updates and every 30 minutes for weekly Sabbath School scrapes
  * - Listens for cross-tab storage and update broadcast events
  */
 export function initContentUpdatesWatcher(): () => void {
@@ -225,12 +290,18 @@ export function initContentUpdatesWatcher(): () => void {
   // First check on launch (delayed slightly so audio context is ready if user interacts)
   const initialTimer = setTimeout(() => {
     checkForLiveContentUpdates();
+    checkAndNotifyNewSabbathSchoolSync();
   }, 1200);
 
   // Background interval check every 45 seconds for freshly published updates
   const intervalId = setInterval(() => {
     checkForLiveContentUpdates();
   }, 45000);
+
+  // Periodic check for newly scraped weekly Sabbath School lessons (every 30 minutes)
+  const ssScrapeIntervalId = setInterval(() => {
+    checkAndNotifyNewSabbathSchoolSync();
+  }, 30 * 60 * 1000);
 
   // Cross-tab and window focus sync: check whenever user returns to the tab
   const handleFocus = () => {
@@ -250,6 +321,7 @@ export function initContentUpdatesWatcher(): () => void {
   return () => {
     clearTimeout(initialTimer);
     clearInterval(intervalId);
+    clearInterval(ssScrapeIntervalId);
     window.removeEventListener("focus", handleFocus);
     window.removeEventListener("storage", handleStorageChange);
   };

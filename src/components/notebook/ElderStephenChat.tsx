@@ -95,7 +95,8 @@ export const ElderStephenChat: React.FC<ElderStephenChatProps> = ({ note, trigge
         mode: 'velocity',
         passage: targetScrip,
         overrideMode: 'Notebook',
-        badge: 'Verse Insight'
+        badge: 'Verse Insight',
+        noteContent: note?.content || ''
       })
       if (onClearTriggerScripture) {
         onClearTriggerScripture()
@@ -109,15 +110,17 @@ export const ElderStephenChat: React.FC<ElderStephenChatProps> = ({ note, trigge
     const textToSend = inputText.trim()
     setInputText('')
     const mode = selectedMode === 'auto' ? 'velocity' : selectedMode
-    const activePassage = (note?.scriptureTags && note.scriptureTags.length > 0)
-      ? note.scriptureTags[0]
-      : extractScriptureReference(textToSend) || currentPassage
+    const typedVerse = extractScriptureReference(textToSend)
+    const activePassage = typedVerse
+      || (note?.scriptureTags && note.scriptureTags.length > 0 ? note.scriptureTags[0] : '')
+      || currentPassage
 
     await sendMessage(textToSend, {
       mode,
       overrideMode: 'Notebook',
       passage: activePassage,
-      topic: note?.title || currentTopic
+      topic: note?.title || currentTopic,
+      noteContent: note?.content || ''
     })
   }
 

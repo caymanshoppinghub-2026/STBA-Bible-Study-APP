@@ -118,6 +118,7 @@ export interface ElderStephenContextType {
       topic?: string;
       overrideMode?: StudyMode;
       badge?: string;
+      noteContent?: string;
     }
   ) => Promise<string>;
 
@@ -647,13 +648,15 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
       topic?: string;
       overrideMode?: StudyMode;
       badge?: string;
+      noteContent?: string;
     }
   ): Promise<string> => {
     const trimmed = text.trim();
     if (!trimmed || isLoading) return "";
 
     const activeMode = options?.overrideMode || studyFlow.currentMode;
-    const activePassage = options?.passage || extractScriptureReference(trimmed) || studyFlow.currentPassage;
+    const explicitVerseInQuestion = extractScriptureReference(trimmed);
+    const activePassage = explicitVerseInQuestion || options?.passage || studyFlow.currentPassage;
     const activeTopic = options?.topic || studyFlow.currentTopic;
     const commentaryMode = options?.mode || selectedCommentaryMode;
 
@@ -693,11 +696,16 @@ export const ElderStephenProvider: React.FC<{ children: React.ReactNode }> = ({ 
       // 3. Build rich cross-mode context summary
       const contextSummary = getContextSummaryString();
 
-      // 4. Send to backend Elder Stephen engine
+      // 4. Send to backend Elder Stephen engine (prefer live options.noteContent so fresh Notebook edits are always included)
+      const resolvedNoteContent =
+        (typeof options?.noteContent === "string" && options.noteContent.trim().length > 0)
+          ? options.noteContent
+          : documentContext?.content || (studyFlow.doctrineContext ? `Doctrine: ${studyFlow.doctrineContext.sectionTitle}\nDescription: ${studyFlow.doctrineContext.description || ""}\nTexts: ${studyFlow.doctrineContext.keyTexts?.join(", ")}` : "");
+
       const response = await callElderStephen({
         currentMode: activeMode === "Study" ? "STBA" : activeMode === "Doctrine" ? "Explain" : activeMode,
         noteTitle: activeTopic,
-        noteContent: documentContext?.content || (studyFlow.doctrineContext ? `Doctrine: ${studyFlow.doctrineContext.sectionTitle}\nDescription: ${studyFlow.doctrineContext.description || ""}\nTexts: ${studyFlow.doctrineContext.keyTexts?.join(", ")}` : ""),
+        noteContent: resolvedNoteContent,
         contextSummary,
         passage: activePassage,
         historyLog,

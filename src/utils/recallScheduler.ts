@@ -52,9 +52,16 @@ const STORAGE_KEYS = {
   TODAY_COMPLETED_IDS: "stba_today_recalls_verse_ids_v2",
   SNOOZE_UNTIL: "stba_recall_popup_snooze_until",
   LAST_SHOWN: "stba_recall_popup_last_shown",
+  LAST_COMPLETED_AT: "stba_recall_last_completed_at",
   STREAK_COUNT: "stba_recall_streak_count_v2",
   LAST_RECALL_DATE: "stba_last_recall_completed_date_v2"
 };
+
+/**
+ * Minimum spacing between automatic Scripture Memorization Challenge pop-ups (45 minutes — within 30 to 60 min window)
+ */
+export const RECALL_CHALLENGE_COOLDOWN_MINUTES = 45;
+const RECALL_CHALLENGE_COOLDOWN_MS = RECALL_CHALLENGE_COOLDOWN_MINUTES * 60 * 1000;
 
 // Foundational theological scriptures across SDA doctrines (initialized at 0 attempts / 0% score)
 const DEFAULT_SEED_SCRIPTURES: Array<Omit<RecallQueueItem, "lastReviewedAt" | "dueAt" | "decayStatus">> = [
@@ -484,7 +491,7 @@ export function hasUserCustomizedSettings(user?: UserAccount | null): boolean {
 /**
  * Calculates a friendly message indicating the next scheduled reminder time
  */
-export function getNextReminderTimeString(minutesFromNow = 20): {
+export function getNextReminderTimeString(minutesFromNow = RECALL_CHALLENGE_COOLDOWN_MINUTES): {
   message: string;
   formattedTime: string;
   minutes: number;
@@ -578,11 +585,17 @@ export function canTriggerRecallPopup(
       return { canTrigger: false, reason: `Pop-up snoozed for ${remainingMinutes}m`, progress };
     }
 
-    // 6. Cooldown to avoid continuous jarring interruptions (minimum 90 seconds between pop-ups)
+    // 6. Cooldown to space out memory challenges (minimum 45 minutes after completing or showing a challenge)
+    const lastCompletedAt = parseInt(localStorage.getItem(STORAGE_KEYS.LAST_COMPLETED_AT) || "0", 10);
+    if (lastCompletedAt > 0 && Date.now() - lastCompletedAt < RECALL_CHALLENGE_COOLDOWN_MS) {
+      const remainingMinutes = Math.ceil((RECALL_CHALLENGE_COOLDOWN_MS - (Date.now() - lastCompletedAt)) / (60 * 1000));
+      return { canTrigger: false, reason: `Next challenge spaced out (${remainingMinutes}m remaining)`, progress };
+    }
+
     const lastShown = parseInt(localStorage.getItem(STORAGE_KEYS.LAST_SHOWN) || "0", 10);
-    const cooldownMs = 90 * 1000;
-    if (Date.now() - lastShown < cooldownMs) {
-      return { canTrigger: false, reason: "Pop-up cooldown period active", progress };
+    if (lastShown > 0 && Date.now() - lastShown < RECALL_CHALLENGE_COOLDOWN_MS) {
+      const remainingMinutes = Math.ceil((RECALL_CHALLENGE_COOLDOWN_MS - (Date.now() - lastShown)) / (60 * 1000));
+      return { canTrigger: false, reason: `Pop-up cooldown period active (${remainingMinutes}m remaining)`, progress };
     }
   }
 
@@ -697,6 +710,14 @@ export function recordRecallCompletion(
     localStorage.setItem(STORAGE_KEYS.TODAY_COUNT, newCompletedToday.toString());
     localStorage.setItem(STORAGE_KEYS.TODAY_COMPLETED_IDS, JSON.stringify(completedIds));
     localStorage.setItem("stba_has_completed_session", "true");
+    localStorage.setItem(STORAGE_KEYS.LAST_COMPLETED_AT, now.toString());
+
+    // Enforce at least a 45-minute cooldown before the next pop-up challenge
+    const existingSnooze = parseInt(localStorage.getItem(STORAGE_KEYS.SNOOZE_UNTIL) || "0", 10);
+    const nextAllowedPopupAt = now + RECALL_CHALLENGE_COOLDOWN_MS;
+    if (nextAllowedPopupAt > existingSnooze) {
+      localStorage.setItem(STORAGE_KEYS.SNOOZE_UNTIL, nextAllowedPopupAt.toString());
+    }
 
     // Update streak logic
     const lastRecallDate = localStorage.getItem(STORAGE_KEYS.LAST_RECALL_DATE);

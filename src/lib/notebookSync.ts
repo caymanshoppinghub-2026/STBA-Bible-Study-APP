@@ -68,15 +68,53 @@ export function fromSupabase(row: any): StudyNote {
   }
 }
 
+function withSyncTimeout<T>(promiseLike: PromiseLike<T>, ms: number, fallbackValue: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(fallbackValue);
+      }
+    }, ms);
+    Promise.resolve(promiseLike)
+      .then((val) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(val);
+        }
+      })
+      .catch(() => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(fallbackValue);
+        }
+      });
+  });
+}
+
+let cachedAuthUser: { user: any; expiresAt: number } | null = null;
+
 /**
  * Ensures that the user identity is resolved and authenticated in Supabase or local persistent profile.
  */
 export async function ensureSupabaseAuth(): Promise<any> {
+  if (cachedAuthUser && Date.now() < cachedAuthUser.expiresAt) {
+    return cachedAuthUser.user;
+  }
+
   try {
-    // 1. Check current active session first
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      return session.user;
+    // 1. Check current active session first (bounded by 2.5s timeout so navigator.locks never stalls)
+    const sessionRes = await withSyncTimeout(
+      supabase.auth.getSession(),
+      2500,
+      { data: { session: null }, error: null } as any
+    );
+    if (sessionRes?.data?.session?.user) {
+      cachedAuthUser = { user: sessionRes.data.session.user, expiresAt: Date.now() + 60000 };
+      return sessionRes.data.session.user;
     }
   } catch (e) {}
 
@@ -105,70 +143,80 @@ export async function ensureSupabaseAuth(): Promise<any> {
     name = "Berean Scholar";
   }
 
-  // 3. Attempt silent Supabase auth or signup in background
+  // 3. Attempt silent Supabase auth or signup in background (bounded by 3.5s timeout)
   try {
     const password = `StbaSecPass_1779_${emailLower.replace(/[^a-zA-Z0-9]/g, '')}`;
-    const { data: signInData } = await supabase.auth.signInWithPassword({
-      email: emailLower,
-      password: password
-    });
-    if (signInData?.user) {
-      return signInData.user;
+    const signInRes = await withSyncTimeout(
+      supabase.auth.signInWithPassword({ email: emailLower, password }),
+      3500,
+      { data: null, error: null } as any
+    );
+    if (signInRes?.data?.user) {
+      cachedAuthUser = { user: signInRes.data.user, expiresAt: Date.now() + 60000 };
+      return signInRes.data.user;
     }
 
-    const { data: signUpData } = await supabase.auth.signUp({
-      email: emailLower,
-      password: password,
-      options: {
-        data: { name }
-      }
-    });
-    if (signUpData?.user) {
-      return signUpData.user;
+    const signUpRes = await withSyncTimeout(
+      supabase.auth.signUp({
+        email: emailLower,
+        password,
+        options: { data: { name } }
+      }),
+      3500,
+      { data: null, error: null } as any
+    );
+    if (signUpRes?.data?.user) {
+      cachedAuthUser = { user: signUpRes.data.user, expiresAt: Date.now() + 60000 };
+      return signUpRes.data.user;
     }
   } catch (e) {}
 
   // Fallback persistent user representation
   const deterministicId = getDeterministicUUID(emailLower);
-  return {
+  const fallbackUser = {
     id: deterministicId,
     email: emailLower,
     user_metadata: { name }
   };
+  cachedAuthUser = { user: fallbackUser, expiresAt: Date.now() + 60000 };
+  return fallbackUser;
 }
 
 /**
- * Checks if the cloud storage connection is alive (either Supabase or STBA Cloud Sync).
+ * Checks if the cloud storage connection is alive (either Supabase or STBA Cloud Sync) with strict timeout so "Verifying Cloud..." never hangs.
  */
 export async function checkSupabaseConnection(): Promise<{ ok: boolean; error?: string }> {
   try {
-    // Check Supabase first
-    const { error: sbErr } = await supabase
-      .from('stba_study_notes')
-      .select('id')
-      .limit(1);
+    const sbCheck = await withSyncTimeout(
+      supabase.from('stba_study_notes').select('id').limit(1),
+      4000,
+      { data: null, error: { message: 'TIMEOUT' } } as any
+    );
 
-    if (!sbErr) {
+    if (!sbCheck.error) {
       return { ok: true };
     }
 
-    // If Supabase table exists or server cloud is reachable
-    const res = await apiFetch("/api/notebook/status");
-    if (res.ok) {
+    // Fallback check to server cloud API
+    const res = await withSyncTimeout(
+      apiFetch("/api/notebook/status"),
+      3000,
+      null as any
+    );
+    if (res && res.ok) {
       return { ok: true };
     }
 
-    if (sbErr) {
-      if (sbErr.code === 'PGRST116' || sbErr.message?.includes('does not exist')) {
+    if (sbCheck.error) {
+      if (sbCheck.error.code === 'PGRST116' || sbCheck.error.message?.includes('does not exist')) {
         return { ok: false, error: 'TABLE_MISSING' };
       }
     }
     return { ok: true };
   } catch (err: any) {
-    // Fallback check to server API
     try {
-      const res = await apiFetch("/api/notebook/status");
-      if (res.ok) {
+      const res = await withSyncTimeout(apiFetch("/api/notebook/status"), 3000, null as any);
+      if (res && res.ok) {
         return { ok: true };
       }
     } catch {}
@@ -177,35 +225,45 @@ export async function checkSupabaseConnection(): Promise<{ ok: boolean; error?: 
 }
 
 /**
- * Loads all notes from cloud storage belonging to the authenticated user.
+ * Loads all notes from cloud storage belonging to the authenticated user, merging Supabase and server storage by newest updatedAt.
  */
 export async function fetchNotesFromSupabase(): Promise<StudyNote[]> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user || (await ensureSupabaseAuth());
+    const user = await ensureSupabaseAuth();
     const userId = user?.id;
+    if (!userId) return [];
 
-    // 1. Strictly query Supabase stba_study_notes table first
-    if (userId) {
-      const { data, error } = await supabase
+    const mergedMap = new Map<string, StudyNote>();
+
+    // 1. Query Supabase stba_study_notes table (bounded by 4.5s timeout)
+    const sbRes = await withSyncTimeout(
+      supabase
         .from('stba_study_notes')
         .select('*')
         .eq('user_id', userId)
-        .order('order', { ascending: true });
+        .order('order', { ascending: true }),
+      4500,
+      { data: null, error: { message: 'TIMEOUT' } } as any
+    );
 
-      if (!error && Array.isArray(data)) {
-        return data.map(fromSupabase);
-      }
+    if (!sbRes.error && Array.isArray(sbRes.data)) {
+      sbRes.data.map(fromSupabase).forEach((n) => {
+        mergedMap.set(getDeterministicUUID(n.id), { ...n, id: getDeterministicUUID(n.id) });
+      });
     }
 
-    // 2. Server API fallback only if Supabase returns error/unreachable
-    if (userId) {
-      try {
-        const res = await apiFetch(`/api/notebook/notes?userId=${encodeURIComponent(userId)}`);
-        if (res.ok) {
-          const json = await safeParseResponseJson<any>(res);
-          if (json && json.ok && Array.isArray(json.notes)) {
-            return json.notes.map((n: any) => ({
+    // 2. Also query server API and merge whichever copy has the newer updatedAt
+    try {
+      const res = await withSyncTimeout(
+        apiFetch(`/api/notebook/notes?userId=${encodeURIComponent(userId)}`),
+        3500,
+        null as any
+      );
+      if (res && res.ok) {
+        const json = await safeParseResponseJson<any>(res);
+        if (json && json.ok && Array.isArray(json.notes)) {
+          json.notes.forEach((n: any) => {
+            const formatted: StudyNote = {
               id: getDeterministicUUID(n.id),
               title: n.title || 'Untitled Note',
               summary: n.summary || '',
@@ -217,13 +275,17 @@ export async function fetchNotesFromSupabase(): Promise<StudyNote[]> {
               isFavorite: !!(n.isFavorite ?? n.is_favorite),
               children: (n.children || []).map(getDeterministicUUID),
               order: typeof n.order === 'number' ? n.order : 0
-            }));
-          }
+            };
+            const existing = mergedMap.get(formatted.id);
+            if (!existing || new Date(formatted.updatedAt) > new Date(existing.updatedAt)) {
+              mergedMap.set(formatted.id, formatted);
+            }
+          });
         }
-      } catch (e) {}
-    }
+      }
+    } catch (e) {}
 
-    return [];
+    return Array.from(mergedMap.values()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   } catch (err) {
     return [];
   }
@@ -237,6 +299,7 @@ export async function saveNoteToSupabase(note: StudyNote): Promise<string> {
   const user = await ensureSupabaseAuth();
   const userId = user?.id || "stba_default_user";
   const noteId = getDeterministicUUID(note.id);
+  const nowIso = note.updatedAt || new Date().toISOString();
 
   const payload: any = {
     id: noteId,
@@ -249,38 +312,42 @@ export async function saveNoteToSupabase(note: StudyNote): Promise<string> {
     order: typeof note.order === 'number' ? note.order : 0,
     is_favorite: !!(note.isFavorite ?? (note as any).is_favorite),
     user_id: userId,
-    createdAt: note.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: note.createdAt || nowIso,
+    updatedAt: nowIso
   };
 
-  // 1. Save to server backend
-  try {
-    await apiFetch("/api/notebook/save-note", {
+  // 1. Save to server backend AND Supabase in parallel (including updated_at so cross-origin merges pick up the latest edit!)
+  const serverSave = withSyncTimeout(
+    apiFetch("/api/notebook/save-note", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, note: payload })
-    });
-  } catch (e) {
-    console.warn("Server save note exception:", e);
-  }
+    }),
+    4000,
+    null as any
+  );
 
-  // 2. Attempt Supabase upsert in background
-  try {
-    const sbPayload = {
-      id: noteId,
-      title: payload.title,
-      summary: payload.summary,
-      content: payload.content,
-      category: payload.category,
-      scripture_tags: payload.scripture_tags,
-      children: payload.children,
-      order: payload.order,
-      is_favorite: payload.is_favorite,
-      user_id: userId
-    };
-    await supabase.from('stba_study_notes').upsert(sbPayload, { onConflict: 'id' });
-  } catch (e) {}
+  const sbPayload = {
+    id: noteId,
+    title: payload.title,
+    summary: payload.summary,
+    content: payload.content,
+    category: payload.category,
+    scripture_tags: payload.scripture_tags,
+    children: payload.children,
+    order: payload.order,
+    is_favorite: payload.is_favorite,
+    user_id: userId,
+    updated_at: nowIso
+  };
 
+  const sbSave = withSyncTimeout(
+    supabase.from('stba_study_notes').upsert(sbPayload, { onConflict: 'id' }),
+    4500,
+    null as any
+  );
+
+  await Promise.allSettled([serverSave, sbSave]);
   return noteId;
 }
 
@@ -325,32 +392,36 @@ export async function syncAllLocalNotesToSupabase(notes: StudyNote[]): Promise<S
     updatedAt: note.updatedAt || new Date().toISOString()
   }));
 
-  // 1. Bulk sync to server backend
-  try {
-    const res = await apiFetch("/api/notebook/sync-all", {
+  const sbRows = sanitizedNotes.map((note) => ({
+    id: note.id,
+    title: note.title || 'Untitled Note',
+    summary: note.summary || '',
+    content: note.content || '',
+    category: (note.category && (note.category as any) !== 'all') ? note.category : 'theology',
+    scripture_tags: note.scriptureTags || (note as any).scripture_tags || [],
+    children: note.children,
+    order: note.order,
+    is_favorite: !!(note.isFavorite ?? (note as any).is_favorite),
+    user_id: userId,
+    updated_at: note.updatedAt
+  }));
+
+  // Batch upsert to both Supabase and server backend in parallel
+  const sbUpsert = sbRows.length > 0
+    ? withSyncTimeout(supabase.from('stba_study_notes').upsert(sbRows, { onConflict: 'id' }), 5000, null as any)
+    : Promise.resolve(null);
+
+  const serverSync = withSyncTimeout(
+    apiFetch("/api/notebook/sync-all", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, notes: sanitizedNotes })
-    });
-    if (res.ok) {
-      const json = await safeParseResponseJson<any>(res);
-      if (json && json.ok && Array.isArray(json.notes)) {
-        return json.notes;
-      }
-    }
-  } catch (e) {
-    console.warn("Server bulk sync exception:", e);
-  }
+    }),
+    4500,
+    null as any
+  );
 
-  // 2. Sync to Supabase in parallel
-  for (const note of sanitizedNotes) {
-    try {
-      await saveNoteToSupabase(note);
-    } catch (err) {
-      console.warn(`Failed to sync note ${note.title} to Supabase:`, err);
-    }
-  }
-
+  await Promise.allSettled([sbUpsert, serverSync]);
   return sanitizedNotes;
 }
 
@@ -359,11 +430,12 @@ export async function syncAllLocalNotesToSupabase(notes: StudyNote[]): Promise<S
  */
 export async function checkCategoriesTable(): Promise<boolean> {
   try {
-    const { error } = await supabase
-      .from('stba_study_categories')
-      .select('id')
-      .limit(1);
-    if (error && (error.code === 'PGRST116' || error.message?.includes('does not exist'))) {
+    const res = await withSyncTimeout(
+      supabase.from('stba_study_categories').select('id').limit(1),
+      3500,
+      { data: null, error: null } as any
+    );
+    if (res?.error && (res.error.code === 'PGRST116' || res.error.message?.includes('does not exist'))) {
       return false;
     }
     return true;

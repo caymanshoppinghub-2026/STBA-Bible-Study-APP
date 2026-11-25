@@ -19,7 +19,7 @@ import {
 } from "../api/sabbathSchoolApi";
 import { TheologicalTakeawayItem } from "../utils/sabbathLessonTheology";
 import { askElderStephen, ElderStephenMessage } from "../api/elderStephenApi";
-import { notifyLiveSectionUpdate } from "../utils/contentUpdatesWatcher";
+import { notifyLiveSectionUpdate, checkAndNotifyNewSabbathSchoolSync } from "../utils/contentUpdatesWatcher";
 import { separateLessonAndEgwNotes, removeScriptureAbbreviationPeriods } from "../utils/sabbathUtils";
 
 export interface EGWDayTimestamp {
@@ -679,20 +679,14 @@ export const useSabbathSchoolStore = () => {
           lastSyncedAt: payload.lastSyncedAt || new Date().toISOString()
         });
 
-        if (forceRefresh) {
+        if (forceRefresh || !isSameLesson) {
           try {
             localStorage.setItem("stba_sabbath_selected_date", upcomingSabbathDate);
           } catch (e) {}
-          notifyLiveSectionUpdate({
-            sectionId: "sabbath-school",
-            sectionName: "Sabbath School",
-            title: `Sabbath School Master Sync: ${payload.lessonTitle || "Updated Lesson"}`,
-            description: `Official videos, EGW Notes timestamps, and lesson readings successfully updated for ${upcomingSabbathDate}!`,
-            link: "/sabbath-school",
-            linkText: "View Updated Lesson",
-            category: "sabbath-school"
-          });
         }
+
+        // Notify Notification Bell automatically whenever a newly scraped weekly lesson arrives (or on manual forceRefresh)
+        await checkAndNotifyNewSabbathSchoolSync(payload, forceRefresh);
       } else {
         saveStateAndNotify({ ...globalStateStore, isSyncing: false });
       }
@@ -777,11 +771,54 @@ ${contextSummary ? `Special Context: ${contextSummary}` : ""}`;
     }
 
     try {
-      const targetIdx = typeof explicitDayIndex === "number" ? explicitDayIndex : globalStateStore.selectedDayIndex;
+      // Detect if the student asked about a specific day of the week in their custom question
+      let detectedDayIdx: number | undefined = explicitDayIndex;
+      if (typeof detectedDayIdx !== "number") {
+        const lowerMsg = userMessage.toLowerCase();
+        const dayMatchers: Array<{ rx: RegExp; idx: number }> = [
+          { rx: /\b(sabbath\s+afternoon|day\s*1)\b/i, idx: 0 },
+          { rx: /\b(sunday|day\s*2)\b/i, idx: 1 },
+          { rx: /\b(monday|day\s*3)\b/i, idx: 2 },
+          { rx: /\b(tuesday|day\s*4)\b/i, idx: 3 },
+          { rx: /\b(wednesday|day\s*5)\b/i, idx: 4 },
+          { rx: /\b(thursday|day\s*6)\b/i, idx: 5 },
+          { rx: /\b(friday|day\s*7)\b/i, idx: 6 }
+        ];
+        const matchedDay = dayMatchers.find((m) => m.rx.test(lowerMsg));
+        if (matchedDay && globalStateStore.dailyLessons[matchedDay.idx]) {
+          detectedDayIdx = matchedDay.idx;
+        }
+      }
+
+      const targetIdx = typeof detectedDayIdx === "number" ? detectedDayIdx : globalStateStore.selectedDayIndex;
       const activeDayObj = globalStateStore.dailyLessons[targetIdx];
       const resolvedDayTitle = activeDayObj?.title
         ? `${activeDayObj.title} (${globalStateStore.lessonTitle})`
         : globalStateStore.lessonTitle;
+
+      const extractDayText = (d: any): string => {
+        const c = d?.content;
+        if (Array.isArray(c)) {
+          return c.map((item: any) => (typeof item === "string" ? item : item?.text || "")).join("\n\n");
+        }
+        return String(c || "");
+      };
+
+      const activeDayText = extractDayText(activeDayObj);
+      const fullWeekDigest = globalStateStore.dailyLessons
+        .map((d, idx) => {
+          const body = extractDayText(d).replace(/\s+/g, " ").trim();
+          const egw = Array.isArray(d.egwNotes) && d.egwNotes.length > 0
+            ? ` | EGW Note: ${d.egwNotes[0].slice(0, 260)}`
+            : "";
+          return `[Day ${idx + 1} — ${d.label}: "${d.title}"]\n${body.slice(0, 950)}${egw}`;
+        })
+        .join("\n\n");
+
+      const combinedLessonContent =
+        `[Focused Day (${activeDayObj?.label || `Day ${targetIdx + 1}`}) — "${activeDayObj?.title || ""}"]:\n${activeDayText}\n\n` +
+        `[Memory Verse]: ${globalStateStore.memoryVerse || ""}\n\n` +
+        `[Complete 7-Day Lesson Context for "${globalStateStore.lessonTitle}"]:\n${fullWeekDigest}`;
 
       const response = await askElderStephen({
         userId: "stba-member",
@@ -790,13 +827,7 @@ ${contextSummary ? `Special Context: ${contextSummary}` : ""}`;
         currentMode: "Sabbath School Studies",
         contextSummary: journeyContext,
         noteTitle: resolvedDayTitle,
-        noteContent: (() => {
-          const c = activeDayObj?.content;
-          if (Array.isArray(c)) {
-            return c.map((item) => (typeof item === "string" ? item : item?.text || "")).join("\n\n");
-          }
-          return c || "";
-        })(),
+        noteContent: combinedLessonContent,
         historyLog: updatedDiscussion,
         userAction: userMessage,
         commentaryMode: requestedCommentaryMode === "prestige" ? "prestige" : "velocity"

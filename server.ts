@@ -1948,7 +1948,9 @@ async function generateContentWithFallback(aiClient: any, requestPayload: any): 
 
   const baseModels = [
     "gemini-3.8-flash",
-    "gemini-2.5-flash"
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash"
   ];
 
   const modelsToTry = [...baseModels];
@@ -6164,67 +6166,187 @@ app.post("/api/elder-stephen", async (req, res) => {
   const runFallback = (resolvedMode: "prestige" | "velocity") => {
     const latencyMs = Date.now() - startTime;
     const studyDoc = noteTitle || "the Scriptures";
-    const refText = focalScripture || "God's Word";
+    const explicitVerse = extractScriptureReference(latestUserText || "");
+    const refText = explicitVerse || focalScripture || "God's Word";
+
+    // Gather sentences Elder Stephen already sent recently so fallback never repeats the previous answer
+    const priorElderText = (Array.isArray(historyLog) ? historyLog : [])
+      .filter((m: any) => m && (m.role === "elder" || m.role === "model"))
+      .slice(-3)
+      .map((m: any) => String(m.text || "").toLowerCase())
+      .join(" ");
+
+    // Look up matching KJV verse(s) if a reference or strong biblical keyword is in the question
+    let kjvQuoteSnippet = "";
+    try {
+      const kjvTarget = explicitVerse || (refText !== "God's Word" ? refText : "");
+      if (kjvTarget) {
+        const corpus = loadKjvFullCorpus();
+        const refMatch = kjvTarget.match(/^([1-3]?\s*[A-Za-z]+(?:\s+of\s+[A-Za-z]+)?)\s+(\d+):(\d+)/i);
+        if (refMatch && corpus.length > 0) {
+          const targetBook = refMatch[1].replace(/\s+/g, " ").trim().toLowerCase();
+          const targetChap = parseInt(refMatch[2], 10);
+          const targetVerse = parseInt(refMatch[3], 10);
+          const hit = corpus.find(
+            (v: any) =>
+              String(v.book || "").toLowerCase() === targetBook &&
+              Number(v.chapter) === targetChap &&
+              Number(v.verse) === targetVerse
+          );
+          if (hit && hit.text) {
+            kjvQuoteSnippet = `“${String(hit.text).trim()}” (*${hit.book} ${hit.chapter}:${hit.verse}*, KJV)`;
+          }
+        }
+      }
+      if (!kjvQuoteSnippet && latestUserText && latestUserText.trim().length > 4) {
+        const searchTerms = latestUserText
+          .replace(/[^a-zA-Z0-9\s]/g, " ")
+          .split(/\s+/)
+          .filter((w) => w.length >= 5 && !["explain", "summary", "takeaway", "lesson", "today", "sabbath", "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "elder", "stephen", "question", "about", "would", "could", "should", "meaning"].includes(w.toLowerCase()))
+          .slice(0, 3);
+        if (searchTerms.length > 0) {
+          const resSearch = searchFullKjvCorpus(`[${searchTerms.join("|")}]`);
+          if (resSearch.verses && resSearch.verses.length > 0) {
+            const topV = resSearch.verses[0];
+            kjvQuoteSnippet = `“${String(topV.text || "").trim()}” (*${topV.reference || `${topV.book} ${topV.chapter}:${topV.verse}`}*, KJV)`;
+          }
+        }
+      }
+    } catch (_kjvErr) {}
+
+    const isDiscussDaySummaryPrompt = /\b(simple,?\s+clear\s+summary|key\s+spiritual\s+takeaway\s+of\s+today|summarize\s+today)\b/i.test(latestUserText || "");
 
     let text = "";
     if (isSabbathSchool) {
       if (latestUserText && latestUserText.trim().length > 3 && noteContent) {
-        const cleanSentences = (
-          String(noteContent)
-            .replace(/^#+\s*/gm, "")
-            .replace(/\*\*/g, "")
-            .replace(/\s+/g, " ")
-            .match(/[^.!?]+[.!?]+/g) || []
-        )
-          .map((s) => s.trim())
-          .filter((s) => s.length >= 30 && !s.endsWith("?") && !/^Read\s+[1-3]?\s*[A-Za-z]+\s+\d+/i.test(s));
+        // Extract focused day vs full week sections if structured
+        const rawNoteStr = String(noteContent);
+        const focusedBlockMatch = rawNoteStr.match(/\[Focused Day[^\]]*\]:\s*([\s\S]*?)(?=\n\n\[Memory Verse\]|\n\n\[Complete 7-Day|$)/i);
+        const focusedRaw = focusedBlockMatch ? focusedBlockMatch[1] : rawNoteStr;
 
-        // Score sentences by overlap with the user's question keywords so custom questions get relevant lesson insights
-        const qWords = latestUserText
-          .toLowerCase()
-          .replace(/[^a-z0-9\s]/g, "")
-          .split(/\s+/)
-          .filter((w) => w.length >= 4 && !["could", "give", "simple", "summary", "takeaway", "today", "study", "what", "does", "mean", "about", "explain"].includes(w));
+        const parseCleanSentences = (src: string) =>
+          (
+            src
+              .replace(/\[Day\s*\d+[^\]]*\]/gi, " ")
+              .replace(/\[Memory Verse\]:?/gi, " ")
+              .replace(/\[Complete 7-Day[^\]]*\]:?/gi, " ")
+              .replace(/^#+\s*/gm, "")
+              .replace(/\*\*/g, "")
+              .replace(/\s+/g, " ")
+              .match(/[^.!?]+[.!?]+/g) || []
+          )
+            .map((s) => s.trim())
+            .filter(
+              (s) =>
+                s.length >= 30 &&
+                !s.endsWith("?") &&
+                !/^Read\s+[1-3]?\s*[A-Za-z]+\s+\d+/i.test(s)
+            );
 
-        let selectedSentences: string[] = [];
-        if (qWords.length > 0) {
-          const scored = cleanSentences
+        const focusedSentences = parseCleanSentences(focusedRaw);
+        const allWeekSentences = parseCleanSentences(rawNoteStr);
+
+        if (isDiscussDaySummaryPrompt) {
+          const picked = focusedSentences.slice(0, 4);
+          text = picked.length > 0
+            ? picked.join(" ")
+            : `In today's study on **${studyDoc}**, Scripture guides us to examine God's truth in its context and apply its spiritual lesson faithfully.`;
+        } else {
+          // Custom question: score across ALL 7 days and exclude sentences already sent in prior turns!
+          const stopWords = new Set([
+            "could", "would", "should", "give", "simple", "summary", "takeaway", "today",
+            "study", "what", "does", "mean", "about", "explain", "tell", "when", "where",
+            "which", "there", "their", "these", "those", "elder", "stephen", "lesson", "please"
+          ]);
+          const qWords = latestUserText
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, " ")
+            .split(/\s+/)
+            .filter((w) => w.length >= 3 && !stopWords.has(w));
+
+          const freshPool = allWeekSentences.filter(
+            (s) => !priorElderText.includes(s.slice(0, 45).toLowerCase())
+          );
+          const candidatePool = freshPool.length >= 2 ? freshPool : allWeekSentences;
+
+          const scored = candidatePool
             .map((s, idx) => ({
               s,
               idx,
-              hits: qWords.filter((w) => s.toLowerCase().includes(w)).length
+              hits: qWords.reduce((acc, w) => acc + (s.toLowerCase().includes(w) ? (w.length >= 5 ? 2 : 1) : 0), 0)
             }))
             .filter((item) => item.hits > 0)
             .sort((a, b) => b.hits - a.hits || a.idx - b.idx);
-          selectedSentences = scored.slice(0, 4).map((item) => item.s);
-        }
-        if (selectedSentences.length < 2) {
-          selectedSentences = cleanSentences.slice(0, 4);
-        }
 
-        text = selectedSentences.length > 0
-          ? selectedSentences.join(" ")
-          : `In today's study on **${studyDoc}**, Scripture guides us to examine the biblical text in its context and apply its practical spiritual takeaway faithfully.`;
+          // Deduplicate near-identical sentences across focused + week digest
+          const uniqueSelected: string[] = [];
+          for (const item of scored) {
+            const prefix = item.s.slice(0, 40).toLowerCase();
+            if (!uniqueSelected.some((u) => u.slice(0, 40).toLowerCase() === prefix)) {
+              uniqueSelected.push(item.s);
+            }
+            if (uniqueSelected.length >= 3) break;
+          }
+
+          if (uniqueSelected.length === 0) {
+            // Pick fresh later sentences from the focused day rather than repeating the first 4 opening sentences
+            const fallbackFresh = focusedSentences.filter(
+              (s) => !priorElderText.includes(s.slice(0, 45).toLowerCase())
+            );
+            uniqueSelected.push(...(fallbackFresh.length > 0 ? fallbackFresh : focusedSentences.slice(2)).slice(0, 3));
+          }
+
+          const lessonInsight = uniqueSelected.join(" ");
+          text = kjvQuoteSnippet
+            ? `Regarding your question on **${studyDoc}**: ${lessonInsight} Scripture affirms this directly: ${kjvQuoteSnippet}.`
+            : `Regarding your question on **${studyDoc}**: ${lessonInsight}`;
+        }
       } else {
-        text = `Greetings, ${actualName}. I am Elder Stephen, here to answer your questions regarding today's lesson on ${studyDoc}. How can I assist you today?`;
+        text = `In **${studyDoc}**, let us examine how Scripture interprets Scripture and anchors our daily walk with Christ.`;
       }
       return res.json({ text: formatProperElderSpacing(text), commentaryMode: resolvedMode, modeUsed: resolvedMode, latencyMs });
     }
 
     if (resolvedMode === "velocity") {
-      const text = formatProperElderSpacing(
-`### Biblical Meaning & Context
-* **${refText}**: Anchors our faith securely in divine revelation. As *Psalm 119:105* tells us, “Thy word is a lamp unto my feet, and a light unto my path.”
-* In Adventist hermeneutics, Scripture interprets Scripture under the guiding presence of the Holy Spirit.
+      // Dynamic, note-grounded & KJV-grounded Quick Answer (never static boilerplate)
+      const cleanNoteLines = String(noteContent || "")
+        .split(/\n+/)
+        .map((l) => l.replace(/^#+\s*/, "").replace(/^>\s*/, "").replace(/\*\*/g, "").trim())
+        .filter((l) => l.length >= 25 && !priorElderText.includes(l.slice(0, 40).toLowerCase()));
 
-### Document Continuity & Theological Role
-* In our ongoing study on *${studyDoc}*, this passage is strategically emphasized to highlight how God's truth builds line upon line (*Isaiah 28:10*).
-* It provides the doctrinal foundation necessary to understand how God's holy law and the everlasting gospel of grace harmoniously unite in Christ our High Priest.
+      const noteQWords = String(latestUserText || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length >= 4 && !["what", "does", "mean", "explain", "context", "relation", "study", "document", "emphasized", "point", "this", "that", "with", "from", "your", "note"].includes(w));
 
-### Pastoral Takeaway
-* Study this text prayerfully today, yielding your heart to Christ's sanctifying love.`
+      const matchedNoteLines = cleanNoteLines
+        .map((line, idx) => ({
+          line,
+          idx,
+          hits: noteQWords.reduce((acc, w) => acc + (line.toLowerCase().includes(w) ? 2 : 0), 0)
+        }))
+        .sort((a, b) => b.hits - a.hits || a.idx - b.idx)
+        .slice(0, 2)
+        .map((x) => x.line);
+
+      const noteExcerpt = matchedNoteLines.length > 0
+        ? matchedNoteLines.join(" ")
+        : (cleanNoteLines[0] || `Our study on *${studyDoc}* examines how God's Word reveals truth line upon line (*Isaiah 28:10*).`);
+
+      const DynamicVelocityText = formatProperElderSpacing(
+`### Direct Scriptural Answer
+* ${kjvQuoteSnippet ? `**Scripture Witness**: ${kjvQuoteSnippet}` : `**${refText}**: Reveals God's character and covenant truth when compared Scripture with Scripture (*2 Timothy 2:15*).`}
+* Directly addressing your question${latestUserText && latestUserText !== "notebook_write" ? ` (*“${latestUserText.slice(0, 90)}${latestUserText.length > 90 ? "..." : ""}”*)` : ""}: God calls us to test every teaching and spiritual claim by the plain testimony of His Word (*Isaiah 8:20*) and its Christlike fruit in daily life.
+
+### Connection to Your Note (*${studyDoc}*)
+* From your study notes: *“${noteExcerpt.slice(0, 240)}${noteExcerpt.length > 240 ? "..." : ""}”*
+* This reinforces the core theme of *${studyDoc}*, showing how sound doctrine and faithful obedience walk hand in hand.
+
+### Practical Takeaway
+* Hold fast to what is proven by Scripture and allow the Holy Spirit to apply this truth practically today.`
       );
-      return res.json({ text, commentaryMode: "velocity", modeUsed: "velocity", latencyMs });
+      return res.json({ text: DynamicVelocityText, commentaryMode: "velocity", modeUsed: "velocity", latencyMs });
     }
 
     if (mode === "Recall") {
@@ -6335,19 +6457,25 @@ How does the specific truth of *${refText}* speak to your walk with Christ and p
     const userRequestText = latestUserText || `Please share your pastoral guidance on ${activePassage}.`;
 
     if (isSabbathSchool && effectiveMode !== "prestige") {
+      const isDiscussDayBtn = /\b(simple,?\s+clear\s+summary|key\s+spiritual\s+takeaway\s+of\s+today|summarize\s+today)\b/i.test(userRequestText);
       const ssVelocityInstruction = `You are Elder Stephen, a warm, insightful Seventh-day Adventist pastoral mentor in "Study To Be Approved" (STBA).
 You are assisting ${actualName} in Sabbath School Studies.
 
 CRITICAL RULES:
-- Directly and thoughtfully answer the student's exact question ("${userRequestText}") using the Active Day Content and the Full 7-Day Lesson Arc provided below.
-- Do NOT open with generic greetings ("Shalom", "Greetings", "Listen", "How can I assist you?"). Jump straight into a clear, engaging answer.
-- Length: Short, substantive, and well-rounded — 1 to 2 cohesive paragraphs (4 to 6 sentences, ~90 to 140 words). Not a tiny 1-liner, and not a long essay.
-- If asked for today's summary or key takeaway, synthesize what today's specific study teaches, weave in its key Scripture references naturally, and show how it connects to the broader 7-day week (offering a fresh pastoral lens rather than copying the Daily Syllabus verbatim).
-- If asked a specific question, answer that exact question directly from Scripture and the lesson context.
+- ${isDiscussDayBtn
+  ? `The student clicked "Discuss Day": synthesize what today's specific study teaches, weave in its key Scripture references naturally, and show how it connects to the broader 7-day week (offering a fresh pastoral lens rather than copying the Daily Syllabus verbatim).`
+  : `The student typed a CUSTOM QUESTION ("${userRequestText}"):
+  1. Answer their EXACT question directly, clearly, and dynamically!
+  2. NEVER repeat or rehash the general day summary you already gave in Recent Conversation.
+  3. If they ask about ANY specific day of the week (Sabbath Afternoon, Sunday, Monday, Tuesday, Wednesday, Thursday, or Friday), draw directly from that day's section in the Complete 7-Day Lesson Context below.
+  4. If they ask a theological, scriptural, or practical question, explain it clearly using Scripture (KJV/NKJV) and connect it naturally to the lesson theme.`
+}
+- Do NOT open with generic greetings ("Shalom", "Greetings", "Listen", "How can I assist you?"). Jump straight into a clear, engaging, understandable answer.
+- Length: Short, substantive, and well-rounded — 1 to 2 cohesive paragraphs (4 to 6 sentences, ~90 to 150 words). Not a tiny 1-liner, and not a long essay.
 - Format with clean, natural spacing between words and punctuation.`;
 
       const ssUserBlock = `Weekly Lesson: "${documentTitle}"
-${noteContent ? `Active Day Content:\n"""\n${noteContent.slice(0, 2400)}\n"""\n` : ""}${contextSummary ? `${contextSummary}\n` : ""}${recentHistorySummary ? `Recent Conversation: ${recentHistorySummary}\n` : ""}Student Question: "${userRequestText}"`;
+${noteContent ? `Lesson Content (Focused Day + All 7 Days):\n"""\n${noteContent.slice(0, 7500)}\n"""\n` : ""}${contextSummary ? `${contextSummary}\n` : ""}${recentHistorySummary ? `Recent Conversation (DO NOT REPEAT THESE POINTS): ${recentHistorySummary}\n` : ""}Student Question: "${userRequestText}"`;
 
       const ssResult = await generateContentWithFallback(aiClient, {
         model: "gemini-3.8-flash",
@@ -6369,56 +6497,42 @@ ${noteContent ? `Active Day Content:\n"""\n${noteContent.slice(0, 2400)}\n"""\n`
     }
 
     // ==========================================
-    // BRANCH A: VELOCITY MODE (Fast, Concise Elder Stephen)
+    // BRANCH A: VELOCITY MODE (Fast, Concise, Dynamic Elder Stephen)
     // ==========================================
     if (effectiveMode === "velocity") {
+      const isVerseChipClick = /^Can you explain the context of .+ in relation to our study on/i.test(userRequestText);
       const velocitySystemInstruction = 
-`You are Elder Stephen, the unified brain across all app modules in the "Study To Be Approved" (STBA) ecosystem. Deliver lead-driven exegesis, adapt guidance based on the workspace tool in use (${activeToolName}), and support smooth playback with click-state controls. Manage transitions to Teach It sessions, recalling active passages, and greet new users warmly to master the Bible.
-
-Current User Context:
-- Disciple: ${actualName}
-- Subscription Tier: ${tier}
-- Active Workspace Tool: ${activeToolName} (Word Study, Bible Reader, SDA Commentary, Cross-References, Teach It)
-${lastPassage ? `- Last Studied Passage: ${lastPassage}\n` : ""}
+`You are Elder Stephen, the unified Seventh-day Adventist pastoral mentor across all modules in "Study To Be Approved" (STBA).
+You are assisting ${actualName} (${tier}) in ${mode} (${activeToolName}).
 
 Theological & Hermeneutical Foundations:
-- Sola Scriptura (KJV as primary text), the Great Controversy theme, and historic Adventist hermeneutics.
-- "Line upon line, precept upon precept, here a little, and there a little" (Isaiah 28:10).
-- Scripture interprets Scripture; all texts in God's Word harmonize in Christ.
-- Acknowledge ${actualName}'s tier (${tier}) naturally when welcoming or addressing them.
+- Sola Scriptura (KJV primary), Scripture interprets Scripture (Isaiah 28:10), historic Adventist hermeneutics, and the Great Controversy framework.
 
-CONTINUITY & NOTEBOOK CONTEXT RULES (CRITICAL):
-- The user is actively drafting, reading, or researching a study document in their notebook.
-- The document title is "${documentTitle}".
-- When the user asks about or clicks a scripture link (such as a cross-reference or supporting text like "${activePassage}"), Elder Stephen MUST ALWAYS build on previous knowledge and the context of the document.
-- NEVER say there has been a "mix-up in correspondence", NEVER say the user provided conflicting or wrong text, and NEVER express confusion between texts.
-- Instead, directly show the CONTINUITY:
-  1. Clarify the biblical meaning and context of ${activePassage}.
-  2. Explain why this particular scripture is emphasized at this point in the document or study.
-  3. Show how it connects with the document topic and any prior scriptures discussed (e.g. how ${activePassage} relates to the document's central theme and previous verses), illustrating the harmony of Adventist theology.
+CRITICAL DYNAMIC RESPONSE RULES:
+- The student is working on their study note titled "${documentTitle}". Their actual note text is provided below under "Document Content & Draft Notes".
+- ${isVerseChipClick
+  ? `The student clicked the scripture reference "${activePassage}" inside their note:
+  1. Explain the clear biblical meaning and context of ${activePassage}.
+  2. Show specifically how it connects to what they wrote in "${documentTitle}".
+  3. Close with a concise practical takeaway.`
+  : `The student typed a SPECIFIC QUESTION or prompt: "${userRequestText}"
+  1. Directly, clearly, and dynamically answer the EXACT question "${userRequestText}"!
+  2. Ground your answer in BOTH the student's own Study Note ("${documentTitle}") — referencing specific thoughts, verses, or sentences they wrote when relevant — AND plain biblical truth from Scripture.
+  3. NEVER repeat generic boilerplate or repeat your previous message from Preceding Conversation Context.
+  4. Keep the tone warm, clear, understandable, and pastorally insightful.`
+}
+- Length & Format: Concise yet thorough (~95 to 165 words). Use 2 to 3 clean markdown headings (\`###\`) with short bullet points tailored to the student's actual question (do NOT force irrelevant headings if the student asked a specific question about their notes).
+- Spacing & Readability: Always use clean, standard single spaces between words and after punctuation.`;
 
-Structure & Format (Outline Structure Mandatory):
-- Present your Quick Answer in a clean, hierarchical markdown outline format with bold headers and bullet points. Never use blocky, unbroken paragraphs.
-- Outline Template:
-  ### Biblical Meaning & Context
-  * **Primary Insight**: Direct meaning of the verse (${activePassage}) in Adventist theology.
-  * **Key Phrase / Language**: Brief explanation of a key phrase or theological term.
-  ### Document Continuity & Emphasis
-  * **Why It Is Emphasized Here**: Direct connection to "${documentTitle}" and previous verses discussed.
-  * **Theological Harmony**: How this text strengthens the overarching message (line upon line).
-  ### Pastoral Application
-  * Concise devotional or practical takeaway.
-- Spacing & Readability: You MUST format all text with standard, proper spaces between all words and after punctuation. Never concatenate words together.`;
-
-      // Optimized trimmed user/context block
+      // Optimized user/context block with full note visibility (up to 5,000 chars so newly added sentences are included)
       const userContextBlock = 
-`Study Mode: ${mode} (Velocity Mode / Quick Answer active).
+`Study Mode: ${mode} (Velocity Mode / Dynamic Contextual Answer).
 Focal Scripture: ${activePassage} (KJV).
 Study Document Title: "${documentTitle}".
-${noteContent ? `Document Content & Draft Notes:\n"""\n${noteContent.slice(0, 1600)}\n"""\n` : ""}${contextSummary ? `Context Summary: ${contextSummary}\n` : ""}${userStudyJourney ? `User Study Flow Journey: ${userStudyJourney}\n` : ""}User level: ${userLevel}.
-${recentHistorySummary ? `Preceding conversation context: ${recentHistorySummary}\n` : ""}User request: "${userRequestText}"
+${noteContent ? `Document Content & Draft Notes (Student's Live Note):\n"""\n${noteContent.slice(0, 5000)}\n"""\n` : ""}${contextSummary ? `Context Summary: ${contextSummary}\n` : ""}${userStudyJourney ? `User Study Flow Journey: ${userStudyJourney}\n` : ""}User level: ${userLevel}.
+${recentHistorySummary ? `Preceding conversation context (do not repeat): ${recentHistorySummary}\n` : ""}Student Question: "${userRequestText}"
 
-Please respond in Velocity Mode (Quick Answer) following the hierarchical outline structure with proper spacing between words.`;
+Respond directly and dynamically to the Student Question above using their live note context and Scripture.`;
 
       const contents = [
         ...recentHistory.slice(-3).map((msg: any) => ({
@@ -6519,7 +6633,7 @@ Core 6-Part Structure:
 `Study Mode: ${mode} (Prestige Mode / Full Comprehensive Commentary).
 Focal Scripture: ${activePassage} (KJV).
 Study Document Title: "${documentTitle}".
-${noteContent ? `Document Content & Draft Notes:\n"""\n${noteContent.slice(0, 1600)}\n"""\n` : ""}${contextSummary ? `Context Summary: ${contextSummary}\n` : ""}${userStudyJourney ? `User Study Flow Journey: ${userStudyJourney}\n` : ""}User level: ${userLevel} (completed ${masteryState?.completedVersesCount || 0}/28 verses, ${completionRate}%).
+${noteContent ? `Document Content & Draft Notes:\n"""\n${noteContent.slice(0, 5000)}\n"""\n` : ""}${contextSummary ? `Context Summary: ${contextSummary}\n` : ""}${userStudyJourney ? `User Study Flow Journey: ${userStudyJourney}\n` : ""}User level: ${userLevel} (completed ${masteryState?.completedVersesCount || 0}/28 verses, ${completionRate}%).
 ${keyObservations ? `Key user observations: ${keyObservations}\n` : ""}${recentHistorySummary ? `Preceding conversation context: ${recentHistorySummary}\n` : ""}User request: "${userRequestText}"
 
 Please respond in Prestige Mode following the full 6-part structure, ensuring you fully complete all 5 numbered points—especially "### 5. Theological Meaning & Application"—maintaining theological continuity with "${documentTitle}", in clean outline format with standard word spacing.`;

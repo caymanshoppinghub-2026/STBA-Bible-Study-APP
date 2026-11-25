@@ -198,12 +198,12 @@ export const RecallPopupModal: React.FC = () => {
 
     setProgress(result.updatedProgress);
 
-    // Compute next reminder message
-    const reminderInfo = getNextReminderTimeString(20);
+    // Compute next reminder message (spaced 45 minutes apart)
+    const reminderInfo = getNextReminderTimeString(45);
     const reminderNotice =
       result.updatedProgress.remaining === 0
         ? "Daily Verse Goal Complete! Your next reminder is scheduled for tomorrow at 7:00 AM."
-        : `Your next reminder is in 20 minutes (${reminderInfo.formattedTime}).`;
+        : `Your next reminder is in 45 minutes (${reminderInfo.formattedTime}).`;
 
     setCompletedState({
       score,

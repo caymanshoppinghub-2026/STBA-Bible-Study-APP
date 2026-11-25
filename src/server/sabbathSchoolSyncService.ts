@@ -991,7 +991,7 @@ export async function executeSabbathSchoolSync(forceRefresh = false): Promise<Sa
         embedUrl: `https://www.youtube-nocookie.com/embed/${mainLessonVid.videoId}?autoplay=1&controls=1&enablejsapi=1`,
         publishedText: mainLessonVid.timeAgo || "Current Week",
         isCurrentWeek: true,
-        lessonNumberText: "Lesson 4"
+        lessonNumberText: `Lesson ${parseInt(String(scrapedLesson?.lessonId || "4"), 10) || 4}`
       };
     }
   }
@@ -1011,7 +1011,7 @@ export async function executeSabbathSchoolSync(forceRefresh = false): Promise<Sa
         embedUrl: `https://www.youtube-nocookie.com/embed/${match.videoId}?autoplay=1&controls=1&enablejsapi=1`,
         publishedText: match.timeAgo || "Current Week",
         isCurrentWeek: true,
-        lessonNumberText: "Lesson 4"
+        lessonNumberText: `Lesson ${parseInt(String(scrapedLesson?.lessonId || "4"), 10) || 4}`
       };
     }
   }
@@ -1031,7 +1031,7 @@ export async function executeSabbathSchoolSync(forceRefresh = false): Promise<Sa
         embedUrl: `https://www.youtube-nocookie.com/embed/${match.videoId}?autoplay=1&controls=1&enablejsapi=1`,
         publishedText: match.timeAgo || "Current Week",
         isCurrentWeek: true,
-        lessonNumberText: "Lesson 4"
+        lessonNumberText: `Lesson ${parseInt(String(scrapedLesson?.lessonId || "4"), 10) || 4}`
       };
     }
   }
@@ -1051,7 +1051,7 @@ export async function executeSabbathSchoolSync(forceRefresh = false): Promise<Sa
         embedUrl: `https://www.youtube-nocookie.com/embed/${match.videoId}?autoplay=1&controls=1&enablejsapi=1`,
         publishedText: match.timeAgo || "Current Week",
         isCurrentWeek: true,
-        lessonNumberText: "Lesson 4"
+        lessonNumberText: `Lesson ${parseInt(String(scrapedLesson?.lessonId || "4"), 10) || 4}`
       };
     }
   }

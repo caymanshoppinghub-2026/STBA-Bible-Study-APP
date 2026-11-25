@@ -143,6 +143,10 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
   // Mode transition effect: When switching to 'read', flush any pending drafted text immediately
   useEffect(() => {
     if (mode === 'read') {
+      if (onUpdateDebouncedRef.current) {
+        clearTimeout(onUpdateDebouncedRef.current);
+        onUpdateDebouncedRef.current = null;
+      }
       // Stop voice dictation if active
       if (isDictating && recognitionRef.current) {
         try {
@@ -150,12 +154,12 @@ export const NoteRender: React.FC<NoteRenderProps> = ({ note, mode, onUpdate, on
         } catch {}
         setIsDictating(false);
       }
-      // Ensure latest content is captured and committed to parent state
+      // Ensure latest content is captured and committed to parent state (even if emptied)
       const activeText = textareaRef.current ? textareaRef.current.value : contentRef.current;
       if (activeText !== undefined && activeText !== null) {
         contentRef.current = activeText;
       }
-      if (contentRef.current && contentRef.current !== note?.content) {
+      if (contentRef.current !== undefined && contentRef.current !== null && contentRef.current !== (note?.content ?? '')) {
         onUpdate(contentRef.current);
       }
     } else {

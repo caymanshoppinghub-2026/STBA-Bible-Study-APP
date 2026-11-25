@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { 
   fetchNotesFromSupabase, 
+  saveNoteToSupabase,
   deleteNoteFromSupabase, 
   syncAllLocalNotesToSupabase, 
   checkSupabaseConnection,
@@ -731,9 +732,14 @@ export const NotebookPage: React.FC = () => {
   const location = useLocation()
   const { setStudyMode, updateDocumentContext, setCurrentPassage, currentTopic, studyFlow } = useElderStephen()
 
-  // Core States
-  const [notes, setNotes] = useState<StudyNote[]>([])
-  const [selectedNoteId, setSelectedNoteId] = useState<string>(() => (location.state as any)?.selectedNoteId || (location.state as any)?.noteId || '')
+  // Core States (hydrate immediately from local cache so notes render instantly before cloud check finishes)
+  const [notes, setNotes] = useState<StudyNote[]>(() => loadNotes())
+  const [selectedNoteId, setSelectedNoteId] = useState<string>(() => {
+    const requested = (location.state as any)?.selectedNoteId || (location.state as any)?.noteId;
+    if (requested) return requested;
+    const initialLocal = loadNotes();
+    return initialLocal[0]?.id || '';
+  })
   const [activeCategory, setActiveCategory] = useState<NoteCategory>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [editorMode, setEditorMode] = useState<EditorMode>('read')
@@ -1326,12 +1332,20 @@ export const NotebookPage: React.FC = () => {
     }, 4500)
   }
 
-  // Initial Load and Supabase auto-connection
+  // Initial Load and Supabase auto-connection (with strict 7s safety guard so "Verifying Cloud..." never hangs)
   useEffect(() => {
+    let isMounted = true
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) {
+        setSupabaseSyncStatus((prev) => (prev === 'checking' ? 'connected' : prev))
+      }
+    }, 7000)
+
     async function initializeSupabase() {
       setSupabaseSyncStatus('checking')
       try {
         const conn = await checkSupabaseConnection()
+        if (!isMounted) return
         if (conn.ok) {
           setSupabaseSyncStatus('connected')
           
@@ -1358,27 +1372,35 @@ export const NotebookPage: React.FC = () => {
 
           const localNotes = loadNotes()
           const cloudNotes = await fetchNotesFromSupabase()
+          if (!isMounted) return
           
-          // Merge local and cloud notes so newly created local notes are never deleted or wiped out
+          // Merge local and cloud notes by newest updatedAt so recent edits from either Vercel or local win
           const mergedMap = new Map<string, StudyNote>()
-          localNotes.forEach(n => mergedMap.set(n.id, n))
+          localNotes.forEach(n => mergedMap.set(getDeterministicUUID(n.id), { ...n, id: getDeterministicUUID(n.id) }))
           cloudNotes.forEach(cn => {
-            const ln = mergedMap.get(cn.id)
+            const cid = getDeterministicUUID(cn.id)
+            const ln = mergedMap.get(cid)
             if (!ln || new Date(cn.updatedAt) >= new Date(ln.updatedAt)) {
-              mergedMap.set(cn.id, cn)
+              mergedMap.set(cid, { ...cn, id: cid })
             }
           })
           const mergedNotes = Array.from(mergedMap.values()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           setNotes(mergedNotes)
           saveNotes(mergedNotes)
 
-          const matched = targetId && mergedNotes.some(n => n.id === targetId) ? targetId : (mergedNotes[0]?.id || '')
+          const matched = targetId && mergedNotes.some(n => n.id === getDeterministicUUID(targetId))
+            ? getDeterministicUUID(targetId)
+            : (mergedNotes[0]?.id || '')
           if (matched) setSelectedNoteId(matched)
 
-          // If there are local notes not yet in cloud, sync them up to Supabase in background
-          const missingInCloud = localNotes.filter(ln => !cloudNotes.some(cn => cn.id === ln.id))
-          if (missingInCloud.length > 0) {
-            syncAllLocalNotesToSupabase(missingInCloud).catch(e => console.warn(e))
+          // Push any local notes that are missing or newer than cloud up to Supabase in background
+          const outOfSyncLocal = localNotes.filter(ln => {
+            const lid = getDeterministicUUID(ln.id)
+            const cn = cloudNotes.find(c => getDeterministicUUID(c.id) === lid)
+            return !cn || new Date(ln.updatedAt) > new Date(cn.updatedAt)
+          })
+          if (outOfSyncLocal.length > 0) {
+            syncAllLocalNotesToSupabase(outOfSyncLocal).catch(e => console.warn(e))
           }
 
           if (cloudNotes.length > 0) {
@@ -1387,12 +1409,9 @@ export const NotebookPage: React.FC = () => {
         } else {
           if (conn.error === 'TABLE_MISSING') {
             setSupabaseSyncStatus('table_missing')
-          } else if (conn.error === 'NOT_AUTHENTICATED') {
-            setSupabaseSyncStatus('offline')
           } else {
             setSupabaseSyncStatus('offline')
           }
-          // Default fallback to local storage
           const local = loadNotes()
           setNotes(local)
           if (local.length > 0) {
@@ -1402,6 +1421,7 @@ export const NotebookPage: React.FC = () => {
           }
         }
       } catch (err: any) {
+        if (!isMounted) return
         setSupabaseSyncStatus('offline')
         const local = loadNotes()
         setNotes(local)
@@ -1410,11 +1430,51 @@ export const NotebookPage: React.FC = () => {
           const matched = targetId && local.some(n => n.id === targetId) ? targetId : local[0].id
           setSelectedNoteId(matched)
         }
+      } finally {
+        clearTimeout(safetyTimer)
       }
     }
 
     initializeSupabase()
+    return () => {
+      isMounted = false
+      clearTimeout(safetyTimer)
+    }
   }, [])
+
+  // Cross-tab / Cross-origin focus sync: when returning to Read view, pull any newer cloud edits (e.g. between Vercel and local)
+  const lastFocusSyncAtRef = useRef<number>(0)
+  useEffect(() => {
+    const handleWindowFocus = async () => {
+      if (editorMode === 'draft') return
+      if (Date.now() - lastFocusSyncAtRef.current < 12000) return
+      lastFocusSyncAtRef.current = Date.now()
+      try {
+        const cloudNotes = await fetchNotesFromSupabase()
+        if (!cloudNotes || cloudNotes.length === 0) return
+        const localNotes = loadNotes()
+        const mergedMap = new Map<string, StudyNote>()
+        localNotes.forEach(n => mergedMap.set(getDeterministicUUID(n.id), { ...n, id: getDeterministicUUID(n.id) }))
+        let changed = false
+        cloudNotes.forEach(cn => {
+          const cid = getDeterministicUUID(cn.id)
+          const ln = mergedMap.get(cid)
+          if (!ln || (new Date(cn.updatedAt) > new Date(ln.updatedAt) && cn.content !== ln.content)) {
+            mergedMap.set(cid, { ...cn, id: cid })
+            changed = true
+          }
+        })
+        if (changed) {
+          const merged = Array.from(mergedMap.values()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          setNotes(merged)
+          saveNotes(merged)
+          setSupabaseSyncStatus('connected')
+        }
+      } catch {}
+    }
+    window.addEventListener('focus', handleWindowFocus)
+    return () => window.removeEventListener('focus', handleWindowFocus)
+  }, [editorMode])
 
   // Manual Sync trigger
   const handleManualSync = async () => {
@@ -1568,8 +1628,8 @@ export const NotebookPage: React.FC = () => {
       setSelectedNoteId(mappedSelectedId)
     }
 
-    // Trigger asynchronous cloud sync in background without mutating active user selections
-    if (supabaseSyncStatus === 'connected') {
+    // Trigger asynchronous cloud sync in background even if initial verification was still in progress
+    if (supabaseSyncStatus !== 'table_missing') {
       const currentIds = new Set(sanitizedList.map(n => n.id))
       const deletedNotes = notes.filter(n => !currentIds.has(getDeterministicUUID(n.id)))
       
@@ -1581,9 +1641,13 @@ export const NotebookPage: React.FC = () => {
       })
 
       // Bulk upsert current content to cloud in background
-      syncAllLocalNotesToSupabase(sanitizedList).catch(err => {
-        console.error('Failed to sync updated list to cloud:', err)
-      })
+      syncAllLocalNotesToSupabase(sanitizedList)
+        .then(() => {
+          setSupabaseSyncStatus((prev) => (prev === 'checking' || prev === 'offline' ? 'connected' : prev))
+        })
+        .catch(err => {
+          console.error('Failed to sync updated list to cloud:', err)
+        })
     }
   }
 
@@ -1742,6 +1806,61 @@ export const NotebookPage: React.FC = () => {
     
     // Shift views on mobile
     setMobileTab('study')
+  }
+
+  // Explicitly flush any live Draft edits to local state AND cloud storage when clicking Read
+  const handleSwitchToReadMode = async () => {
+    if (editorMode === 'draft' && activeNote) {
+      const draftTextarea = document.getElementById('draft-textarea') as HTMLTextAreaElement | null
+      const liveText = draftTextarea ? draftTextarea.value : activeNote.content
+
+      const lines = liveText.split('\n')
+      let parsedTitle = activeNote.title
+      const firstLine = lines[0]?.trim() || ''
+      if (firstLine.startsWith('# ')) {
+        parsedTitle = firstLine.substring(2).trim() || activeNote.title
+      }
+      let parsedSummary = activeNote.summary
+      const firstParagraph = lines.find(line => line.trim() && !line.trim().startsWith('#') && !line.trim().startsWith('>'))
+      if (firstParagraph) {
+        parsedSummary = firstParagraph.trim().substring(0, 100) + (firstParagraph.trim().length > 100 ? '...' : '')
+      }
+      const scriptureRegex = /\b(?:[1-3]\s)?[A-Z][A-Za-z]+(?:\s+[A-Za-z]+)?\s+\d+:\d+(?:-\d+)?\b/g
+      const matchedTagsSet = new Set<string>()
+      lines.forEach(line => {
+        const lineMatches = line.match(scriptureRegex)
+        if (lineMatches) lineMatches.forEach(m => matchedTagsSet.add(m))
+      })
+      const scriptureTags = Array.from(matchedTagsSet).slice(0, 5)
+      const nowIso = new Date().toISOString()
+
+      const updatedNote: StudyNote = {
+        ...activeNote,
+        id: getDeterministicUUID(activeNote.id),
+        title: parsedTitle || 'Untitled Note',
+        summary: parsedSummary || 'Theological scratchpad',
+        content: liveText,
+        scriptureTags,
+        updatedAt: nowIso
+      }
+
+      const nextNotes = notes.map(n =>
+        getDeterministicUUID(n.id) === updatedNote.id ? updatedNote : n
+      )
+      setNotes(nextNotes)
+      saveNotes(nextNotes)
+      setEditorMode('read')
+
+      // Immediately persist the updated note to Supabase & server cloud
+      saveNoteToSupabase(updatedNote)
+        .then(() => {
+          setSupabaseSyncStatus('connected')
+          triggerSyncAlert('Note saved & synced to cloud!', 'success')
+        })
+        .catch(err => console.warn('Cloud save warning on Read switch:', err))
+      return
+    }
+    setEditorMode('read')
   }
 
   // Handle note content updates
@@ -2620,7 +2739,7 @@ export const NotebookPage: React.FC = () => {
                       : 'bg-stone-900 border-[var(--nb-border)]'
                   }`} id="stage-mode-toggles">
                     <button
-                      onClick={() => setEditorMode('read')}
+                      onClick={handleSwitchToReadMode}
                       className={`px-2 py-0.5 rounded font-semibold text-[11px] transition-all cursor-pointer ${
                         editorMode === 'read'
                           ? 'bg-[var(--nb-gold-muted)] text-[var(--nb-gold)] font-bold'
@@ -2923,7 +3042,7 @@ export const NotebookPage: React.FC = () => {
                 theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-[var(--nb-border)]'
               }`}>
                 <button 
-                  onClick={() => setEditorMode('read')} 
+                  onClick={handleSwitchToReadMode} 
                   className={`px-2 py-0.5 rounded transition bg-transparent ${
                     editorMode === 'read' 
                       ? 'bg-[var(--nb-gold-muted)] text-[var(--nb-gold)] font-bold' 
