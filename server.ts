@@ -6191,10 +6191,10 @@ app.post("/api/elder-stephen", async (req, res) => {
             (v: any) =>
               String(v.book || "").toLowerCase() === targetBook &&
               Number(v.chapter) === targetChap &&
-              Number(v.verse) === targetVerse
+              Number(v.verseNumber) === targetVerse
           );
           if (hit && hit.text) {
-            kjvQuoteSnippet = `“${String(hit.text).trim()}” (*${hit.book} ${hit.chapter}:${hit.verse}*, KJV)`;
+            kjvQuoteSnippet = `“${String(hit.text).trim()}” (*${hit.reference || `${hit.book} ${hit.chapter}:${hit.verseNumber}`}*, KJV)`;
           }
         }
       }
@@ -6412,16 +6412,16 @@ We teach to communicate the Three Angels' Messages with winsome grace, vindicati
           const chapVerses = corpus.filter(
             (v: any) => String(v.book || "").toLowerCase() === bLow && Number(v.chapter) === parsedChap
           );
-          const idx = chapVerses.findIndex((v: any) => Number(v.verse) === parsedVerse);
+          const idx = chapVerses.findIndex((v: any) => Number(v.verseNumber) === parsedVerse);
           if (idx !== -1) {
             if (!primaryVerseText || primaryVerseText.length < 15) {
               primaryVerseText = String(chapVerses[idx].text || "").trim();
             }
             if (idx > 0) {
-              prevNeighbor = `${chapVerses[idx - 1].book} ${chapVerses[idx - 1].chapter}:${chapVerses[idx - 1].verse} — “${String(chapVerses[idx - 1].text || "").trim()}”`;
+              prevNeighbor = `${chapVerses[idx - 1].reference} — “${String(chapVerses[idx - 1].text || "").trim()}”`;
             }
             if (idx + 1 < chapVerses.length) {
-              nextNeighbor = `${chapVerses[idx + 1].book} ${chapVerses[idx + 1].chapter}:${chapVerses[idx + 1].verse} — “${String(chapVerses[idx + 1].text || "").trim()}”`;
+              nextNeighbor = `${chapVerses[idx + 1].reference} — “${String(chapVerses[idx + 1].text || "").trim()}”`;
             }
           }
         }
@@ -6488,7 +6488,7 @@ We teach to communicate the Three Angels' Messages with winsome grace, vindicati
               const vb = String(v.book || "").toLowerCase();
               if (usedBooks.has(vb)) continue;
               if (rx.test(String(v.text || ""))) {
-                const refStr = `${v.book} ${v.chapter}:${v.verse}`;
+                const refStr = v.reference || `${v.book} ${v.chapter}:${v.verseNumber}`;
                 if (!priorElderText.includes(refStr.toLowerCase())) {
                   usedBooks.add(vb);
                   crossRefBullets.push(`* *${refStr}* — “${String(v.text || "").trim()}”`);
