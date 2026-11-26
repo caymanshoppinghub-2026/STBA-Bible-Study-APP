@@ -1,0 +1,7 @@
+strongs.json.gz — Strong's Greek and Hebrew dictionaries
+
+Source: Open Scriptures "strongs" project (https://github.com/openscriptures/strongs)
+  - Greek: "Dictionary of Greek Words" from Strong's Exhaustive Concordance (James Strong, 1890)
+  - Hebrew: "A Concise Dictionary of the Words in the Hebrew Bible" (James Strong, 1894)
+JSON versions Copyright 2009/2010 Open Scriptures, licensed CC-BY-SA (https://creativecommons.org/licenses/by-sa/3.0/).
+Underlying Strong's text is public domain. Regenerate with: node scripts/build-strongs-data.mjs <greek.js> <hebrew.js>

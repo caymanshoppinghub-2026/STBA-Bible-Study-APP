@@ -9014,6 +9014,215 @@ app.post("/api/notebook/delete-highlight", (req, res) => {
   res.json({ ok: true });
 });
 
+// ==============================================
+// FULL OFFLINE STRONG'S LEXICON (5,523 Greek + 8,674 Hebrew entries; in-memory, sub-millisecond lookups)
+// Source: Open Scriptures (CC-BY-SA) — see src/data/STRONGS_ATTRIBUTION.txt
+// ==============================================
+type StrongsRow = [string, string, string, string, string, string]; // lemma, translit, pron, def, derivation, kjv
+interface StrongsStore {
+  g: Record<string, StrongsRow>;
+  h: Record<string, StrongsRow>;
+  byLemma: Map<string, string[]>;      // folded lemma -> ["G5485"]
+  byTranslit: Map<string, string[]>;   // folded transliteration -> ["G5485"]
+  byEnglish: Map<string, Array<{ key: string; pos: number; n: number }>>; // KJV rendering word -> entries
+}
+let strongsStore: StrongsStore | null = null;
+let strongsLoadAttempted = false;
+
+function foldStrongsText(s: string): string {
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f\u0591-\u05C7]/g, "")
+    .toLowerCase()
+    .replace(/ς/g, "σ")
+    .replace(/[^\p{L}\p{N}]/gu, "")
+    .trim();
+}
+
+function loadStrongsStore(): StrongsStore | null {
+  if (strongsStore || strongsLoadAttempted) return strongsStore;
+  strongsLoadAttempted = true;
+  const base = typeof __dirname !== "undefined" ? __dirname : process.cwd();
+  const candidatePaths = [
+    path.join(process.cwd(), "src", "data", "strongs.json.gz"),
+    path.resolve(base, "..", "src", "data", "strongs.json.gz"),
+    path.resolve(base, "src", "data", "strongs.json.gz"),
+  ];
+  const STOP = new Set(["the", "and", "for", "self", "one", "that", "with", "from", "ing", "her", "him", "his", "its", "all", "any", "not", "are", "was", "who", "phrase"]);
+  for (const p of candidatePaths) {
+    try {
+      if (!fs.existsSync(p)) continue;
+      const raw = JSON.parse(zlib.gunzipSync(fs.readFileSync(p)).toString("utf8"));
+      const store: StrongsStore = { g: raw.g || {}, h: raw.h || {}, byLemma: new Map(), byTranslit: new Map(), byEnglish: new Map() };
+      const add = (map: Map<string, string[]>, k: string, v: string) => {
+        if (!k) return;
+        const arr = map.get(k);
+        if (arr) arr.push(v); else map.set(k, [v]);
+      };
+      for (const [lang, table] of [["G", store.g], ["H", store.h]] as const) {
+        for (const [num, row] of Object.entries(table)) {
+          const key = `${lang}${num}`;
+          add(store.byLemma, foldStrongsText(row[0]), key);
+          add(store.byTranslit, foldStrongsText(row[1]), key);
+          const words = (row[5] || "").toLowerCase().match(/[a-z]{3,}/g) || [];
+          const seen = new Set<string>();
+          words.forEach((w, pos) => {
+            if (STOP.has(w) || seen.has(w)) return;
+            seen.add(w);
+            const arr = store.byEnglish.get(w) || [];
+            arr.push({ key, pos, n: words.length });
+            store.byEnglish.set(w, arr);
+          });
+        }
+      }
+      strongsStore = store;
+      console.log(`[Strong's Lexicon] Loaded ${Object.keys(store.g).length} Greek + ${Object.keys(store.h).length} Hebrew entries from ${p}`);
+      return store;
+    } catch (err) {
+      console.warn("[Strong's Lexicon] Failed to load from", p, err);
+    }
+  }
+  return null;
+}
+
+function buildStrongsPayload(key: string, rawWord: string): any | null {
+  const store = loadStrongsStore();
+  if (!store) return null;
+  const lang = key[0] === "G" ? "G" : "H";
+  const row = (lang === "G" ? store.g : store.h)[key.slice(1)];
+  if (!row) return null;
+  const [lemma, translit, pron, def, deriv, kjv] = row;
+  const isGk = lang === "G";
+  const definition = def ? def.replace(/^[\s,;:]+/, "") : "No definition recorded.";
+  return {
+    word: rawWord,
+    strongs: key,
+    lemma,
+    transliteration: translit,
+    morphology: `${isGk ? "Koine Greek" : "Biblical Hebrew"} lexical entry — Strong's ${key}`,
+    pronunciation: pron || translit,
+    dictionaryDefinition: definition.charAt(0).toUpperCase() + definition.slice(1) + (definition.endsWith(".") ? "" : "."),
+    usageNote: `${deriv ? `Root/derivation: ${deriv.replace(/[;,\s]+$/, "")}. ` : ""}${kjv ? `Rendered in the KJV as: ${kjv.replace(/[.\s]+$/, "")}.` : ""}`.trim() || `Strong's ${key}.`,
+    versesCount: 0,
+    occurrences: [] as string[],
+    sdaDictionaryEntries: [{ entry: definition, source: `Strong's ${isGk ? "Greek" : "Hebrew"} Dictionary (${key})` }]
+  };
+}
+
+/** Generate clean English/KJV base-form candidates for instant offline Strong's lookup. */
+function getEnglishStemCandidates(raw: string): string[] {
+  const base = raw.toLowerCase().replace(/[^a-z]/g, "");
+  if (!base) return [];
+  const out = new Set<string>([base]);
+  const add = (s: string) => { if (s.length >= 3) out.add(s); };
+
+  // KJV archaic verb endings (-eth, -est)
+  if (base.endsWith("ieth") && base.length > 5) add(base.slice(0, -4) + "y");
+  if (base.endsWith("iest") && base.length > 5) add(base.slice(0, -4) + "y");
+  if (base.endsWith("eth") && base.length > 4) {
+    add(base.slice(0, -3));
+    add(base.slice(0, -3) + "e");
+  }
+  if (base.endsWith("est") && base.length > 4) {
+    add(base.slice(0, -3));
+    add(base.slice(0, -3) + "e");
+  }
+  // Standard English inflections (-ies, -ied, -ing, -ed, -es, -s, -ly, -er, -en)
+  if (base.endsWith("ies") && base.length > 4) add(base.slice(0, -3) + "y");
+  if (base.endsWith("ied") && base.length > 4) add(base.slice(0, -3) + "y");
+  if (base.endsWith("ing") && base.length > 5) {
+    const stem = base.slice(0, -3);
+    add(stem);
+    add(stem + "e");
+    if (stem.length > 3 && stem[stem.length - 1] === stem[stem.length - 2]) add(stem.slice(0, -1));
+  }
+  if (base.endsWith("ed") && base.length > 4) {
+    const stem = base.slice(0, -2);
+    add(stem);
+    add(stem + "e");
+    if (stem.length > 3 && stem[stem.length - 1] === stem[stem.length - 2]) add(stem.slice(0, -1));
+  }
+  if (base.endsWith("es") && base.length > 4) {
+    add(base.slice(0, -2));
+    add(base.slice(0, -1));
+  }
+  if (base.endsWith("s") && !base.endsWith("ss") && base.length > 3) add(base.slice(0, -1));
+  if (base.endsWith("ly") && base.length > 5) add(base.slice(0, -2));
+  if (base.endsWith("en") && base.length > 5) {
+    const stem = base.slice(0, -2);
+    add(stem);
+    add(stem + "e");
+    if (stem.length > 3 && stem[stem.length - 1] === stem[stem.length - 2]) {
+      add(stem.slice(0, -1));
+      add(stem.slice(0, -1) + "e");
+    }
+  }
+  return Array.from(out);
+}
+
+/** Instant lookup by Strong's number, original-script lemma, transliteration, or English KJV rendering. */
+function lookupStrongsEntry(rawWord: string, preferLang: "Greek" | "Hebrew"): { primary: any; alternatives: any[] } | null {
+  const store = loadStrongsStore();
+  if (!store) return null;
+  const q = String(rawWord || "").trim();
+  if (!q) return null;
+  const prefer = preferLang === "Greek" ? "G" : "H";
+
+  // 1. Strong's number (G3056 / H430 / bare digits using the preferred language)
+  const numMatch = /^([gh])?\s*0*(\d{1,4})$/i.exec(q);
+  if (numMatch) {
+    const lang = (numMatch[1] || prefer).toUpperCase();
+    const key = `${lang}${numMatch[2]}`;
+    const payload = buildStrongsPayload(key, rawWord);
+    if (payload) return { primary: payload, alternatives: [] };
+  }
+
+  const folded = foldStrongsText(q);
+  if (!folded) return null;
+  const pickPreferred = (keys: string[] | undefined) =>
+    keys && keys.length ? (keys.find((k) => k[0] === prefer) || keys[0]) : null;
+
+  // 2. Original-script lemma or transliteration
+  const exact = pickPreferred(store.byLemma.get(folded)) || pickPreferred(store.byTranslit.get(folded));
+  if (exact) {
+    const primary = buildStrongsPayload(exact, rawWord);
+    if (primary) return { primary, alternatives: [] };
+  }
+
+  // 3. English KJV rendering (exact + KJV/English stem candidates) ranked by testament match and prominence
+  const candidates = getEnglishStemCandidates(q);
+  const collected: { key: string; pos: number; n: number; stemRank: number }[] = [];
+  const seenKeys = new Set<string>();
+  candidates.forEach((cand, stemRank) => {
+    const hits = store.byEnglish.get(cand);
+    if (!hits) return;
+    for (const h of hits) {
+      if (seenKeys.has(h.key)) continue;
+      seenKeys.add(h.key);
+      collected.push({ ...h, stemRank });
+    }
+  });
+
+  if (collected.length) {
+    const ranked = collected.sort((a, b) => {
+      const langA = a.key[0] === prefer ? 0 : 1;
+      const langB = b.key[0] === prefer ? 0 : 1;
+      return langA - langB || a.stemRank - b.stemRank || a.pos - b.pos || a.n - b.n || Number(a.key.slice(1)) - Number(b.key.slice(1));
+    });
+    const primary = buildStrongsPayload(ranked[0].key, rawWord);
+    if (primary) {
+      const alternatives = ranked.slice(1, 6).map((h) => buildStrongsPayload(h.key, rawWord)).filter(Boolean).map((p: any) => ({
+        strongs: p.strongs, lemma: p.lemma, transliteration: p.transliteration, pronunciation: p.pronunciation, definition: p.dictionaryDefinition
+      }));
+      return { primary, alternatives };
+    }
+  }
+  return null;
+}
+
+// Warm the lexicon at boot so the very first word click is instant
+setImmediate(() => { try { loadStrongsStore(); } catch {} });
+
 // Original Language Word Study API route returning Strong's indices and SDA exegesis insights
 app.post("/api/study/word-study", async (req, res) => {
   const { word, reference, verseNumber } = req.body;
@@ -9559,19 +9768,38 @@ app.post("/api/study/word-study", async (req, res) => {
     }
   }
 
-  const matched = WORD_REGISTRY[cleanQuery];
-  if (matched) {
-    return res.json({ word: rawWord, ...matched });
-  }
-
   // Determine the lookup language from the word itself (script / Strong's prefix) before falling back to the passage testament
   const hasGreekScript = /[\u0370-\u03FF\u1F00-\u1FFF]/.test(rawWord);
   const hasHebrewScript = /[\u0590-\u05FF]/.test(rawWord);
   const strongsPrefix = /^\s*([gh])\d{1,4}\s*$/i.exec(rawWord)?.[1]?.toLowerCase();
+  const explicitLang = hasGreekScript || strongsPrefix === "g" || hasHebrewScript || strongsPrefix === "h";
   const detectedLang: "Greek" | "Hebrew" =
     hasGreekScript || strongsPrefix === "g" ? "Greek"
     : hasHebrewScript || strongsPrefix === "h" ? "Hebrew"
     : isNewTestamentReference(reference) ? "Greek" : "Hebrew";
+
+  // Curated SDA-aligned entries: only return if the entry matches the passage's testament (or user explicitly queried a Greek/Hebrew term)
+  const matched = WORD_REGISTRY[cleanQuery];
+  if (matched) {
+    const matchedIsGreek = String(matched.strongs || "").toUpperCase().startsWith("G");
+    const matchedIsHebrew = String(matched.strongs || "").toUpperCase().startsWith("H");
+    const langMatches =
+      explicitLang ||
+      (detectedLang === "Greek" && matchedIsGreek) ||
+      (detectedLang === "Hebrew" && matchedIsHebrew);
+    if (langMatches) {
+      return res.json({ word: rawWord, ...matched });
+    }
+  }
+
+  // Instant offline lookup from the full Strong's lexicon (5,523 Greek + 8,674 Hebrew) — no network or AI round-trip required
+  const offlineHit = lookupStrongsEntry(rawWord, detectedLang);
+  if (offlineHit) {
+    return res.json({
+      ...offlineHit.primary,
+      ...(offlineHit.alternatives.length > 0 ? { alternatives: offlineHit.alternatives } : {})
+    });
+  }
 
   // Dynamic lookup via Gemini if not precompiled to maintain limitless active lookup capability
   const aiClient = getGeminiClient();
@@ -10314,87 +10542,35 @@ Return ONLY a valid JSON object matching this exact schema:
 });
 
 
-// Robust Server-side Keyword Extractor for Word Study synchronization
+// Instant deterministic Server-side Keyword Extractor for Word Study synchronization (zero AI stall)
 app.post("/api/study/extract-keywords", async (req, res) => {
-  const { verseText, reference } = req.body;
+  const { verseText } = req.body;
   if (!verseText) {
     return res.json({ keywords: [] });
   }
 
-  const aiClient = getGeminiClient();
-  if (!aiClient) {
-    // Local fallback smart parser
-    const cleanStr = verseText.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()\"'?“”;:]/g, "");
-    const words = cleanStr.split(/\s+/).filter((w: string) => {
-      const wordClean = w.toLowerCase().trim();
-      return wordClean.length > 3 && !["then", "that", "this", "them", "their", "with", "from", "your", "have", "shall", "unto", "they", "those", "were", "said", "another", "having", "other", "whose"].includes(wordClean);
-    });
-    const unique = Array.from(new Set(words));
-    return res.json({ keywords: unique });
+  const STOP_WORDS = new Set([
+    "the", "and", "for", "that", "this", "them", "their", "with", "from", "your", "have", "shall",
+    "unto", "they", "those", "were", "said", "another", "having", "other", "whose", "will", "wilt",
+    "shalt", "thou", "thee", "thine", "thy", "mine", "into", "upon", "also", "then", "than", "when",
+    "where", "which", "what", "who", "whom", "there", "here", "been", "being", "hath", "hast", "doth",
+    "dost", "didst", "would", "could", "should", "about", "after", "before", "over", "under", "again",
+    "because", "through", "between", "against", "among", "therefore", "wherefore", "neither", "either",
+    "every", "such", "much", "many", "more", "most", "some", "none", "only", "very", "even", "ever",
+    "never", "still", "thus", "while", "since", "until", "till", "both", "each", "same", "these"
+  ]);
+
+  const cleanStr = String(verseText).replace(/[.,\/#!$%\^&\*;:{}=\-_`~()\"'?“”‘’;:—–\[\]]/g, " ");
+  const seen = new Set<string>();
+  const keywords: string[] = [];
+  for (const raw of cleanStr.split(/\s+/)) {
+    const w = raw.trim();
+    const low = w.toLowerCase();
+    if (low.length < 3 || STOP_WORDS.has(low) || seen.has(low)) continue;
+    seen.add(low);
+    keywords.push(w);
   }
-
-  try {
-    const prompt = `Analyze this Bible verse: "${verseText}" (${reference})
-Extract all key study words (keywords) in the exact order they appear in the verse.
-Target terms must include: nouns, verbs, theological terms, symbolic terms, and repeated words.
-Exclude common English stop words ("and", "the", "shall/will", "to", "of", "in", "it", etc.).
-Return a JSON object with a single "keywords" array of clean singular or contextually appropriate words/phrases as they appear in the verse.
-Format:
-{
-  "keywords": ["gospel", "fly", "preach", "dwell", "earth", "nation", "tribe", "tongue", "people"]
-}
-Respond with ONLY valid JSON. No markdown code blocks.`;
-
-    const response = await generateContentWithFallback(aiClient, {
-      model: "gemini-3.8-flash",
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json"
-      }
-    });
-
-    const text = response.text || "";
-    
-    function safeParseJSON(input: string): any {
-      const cleaned = input.trim();
-      try {
-        return JSON.parse(cleaned);
-      } catch (e) {
-        const firstBrace = cleaned.indexOf('{');
-        const lastBrace = cleaned.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-          try {
-            return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
-          } catch (inner) {}
-        }
-        const codeStrip = cleaned.replace(/```json/g, "").replace(/```/g, "").trim();
-        return JSON.parse(codeStrip);
-      }
-    }
-
-    try {
-      const parsed = safeParseJSON(text);
-      return res.json({ keywords: parsed.keywords || [] });
-    } catch {
-      // Heuristic fallback
-      const cleanStr = verseText.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()\"'?“”;:]/g, "");
-      const words = cleanStr.split(/\s+/).filter((w: string) => {
-        const wordClean = w.toLowerCase().trim();
-        return wordClean.length > 3 && !["then", "that", "this", "them", "their", "with", "from", "your", "have", "shall", "unto", "they", "those", "were", "said", "another", "having", "other", "whose"].includes(wordClean);
-      });
-      const unique = Array.from(new Set(words));
-      return res.json({ keywords: unique });
-    }
-  } catch (err) {
-    console.log("[Keyword Extraction Status] Handled and activated local extraction:", err ? "Model quota reached or offline" : "Local extraction active");
-    const cleanStr = verseText.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()\"'?“”;:]/g, "");
-    const words = cleanStr.split(/\s+/).filter((w: string) => {
-      const wordClean = w.toLowerCase().trim();
-      return wordClean.length > 3 && !["then", "that", "this", "them", "their", "with", "from", "your", "have", "shall", "unto", "they", "those", "were", "said", "another", "having", "other", "whose"].includes(wordClean);
-    });
-    const unique = Array.from(new Set(words));
-    return res.json({ keywords: unique });
-  }
+  return res.json({ keywords });
 });
 
 

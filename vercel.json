@@ -14,7 +14,7 @@
     "api/index.js": {
       "maxDuration": 60,
       "memory": 1024,
-      "includeFiles": "src/data/kjv_full.json.gz,data/tour_audio_cache.json"
+      "includeFiles": "src/data/kjv_full.json.gz,src/data/strongs.json.gz,data/tour_audio_cache.json"
     }
   }
 }

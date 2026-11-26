@@ -4706,7 +4706,7 @@ const SdaEntriesDropdown: React.FC<SdaEntriesDropdownProps> = ({ entries, theme 
           {entries.map((item, idx) => (
             <div
               key={idx}
-              className={`p-2.5 rounded border leading-relaxed text-xs transition-colors ${
+              className={`p-2.5 rounded border leading-relaxed text-[16px] transition-colors ${
                 theme === "dark" ? "bg-[#181D26] border-gray-850 text-gray-300" : "bg-white border-gray-150 text-gray-750"
               }`}
             >
@@ -4739,27 +4739,40 @@ export const WordStudy: React.FC<ToolProps> = ({
   const [errorMsg, setErrorMsg] = useState("");
   const [verseKeywords, setVerseKeywords] = useState<string[]>([]);
   const [extracting, setExtracting] = useState(false);
+  const lookupReqIdRef = useRef(0);
 
   const doLookup = async (wordToLook: string) => {
-    if (!wordToLook.trim()) return;
+    const trimmed = wordToLook.trim();
+    if (!trimmed) return;
+    const reqId = ++lookupReqIdRef.current;
     setLoading(true);
     setErrorMsg("");
 
-    // 1. Check IndexedDB persistent study resource cache (< 2ms)
+    const activeRef = report?.reference || "Revelation 14:6-12";
+    const isNT = isNewTestamentReference(activeRef);
+    const hasExplicitScript = /[\u0370-\u03FF\u1F00-\u1FFF\u0590-\u05FF]/.test(trimmed) || /^\s*[gh]\d{1,4}\s*$/i.test(trimmed);
+    const expectedPrefix = isNT ? "G" : "H";
+    const cacheKey = hasExplicitScript ? trimmed.toLowerCase() : `${isNT ? "greek" : "hebrew"}:${trimmed.toLowerCase()}`;
+
+    // 1. Check IndexedDB persistent study resource cache (< 2ms), scoped by testament language
     try {
-      const cached = await stbaStorage.getStudyResource("word_study", wordToLook);
-      const q = wordToLook.trim().toLowerCase();
+      const cached = await stbaStorage.getStudyResource("word_study", cacheKey);
+      const q = trimmed.toLowerCase();
       const isLogosQuery = ["word", "logos", "g3056", "λόγος"].includes(q);
-      // Ignore stale/poisoned cache entries: placeholder results or "logos" returned for an unrelated word
+      const cachedStrongs = String((cached as any)?.strongs || "").toUpperCase();
+      const wrongTestament = !hasExplicitScript && cachedStrongs && !cachedStrongs.startsWith(expectedPrefix);
+      // Ignore stale/poisoned cache entries: placeholder results, wrong testament, or "logos" returned for an unrelated word
       const isPoisoned =
         !!cached &&
         ((cached as any).unavailable === true ||
+          wrongTestament ||
           (String((cached as any).transliteration || "").toLowerCase() === "logos" && !isLogosQuery));
       if (cached && !isPoisoned) {
+        if (lookupReqIdRef.current !== reqId) return;
         setStudyData(cached);
-        setSearchQuery(wordToLook.trim());
+        setSearchQuery(trimmed);
         setRecentWords((prev) => {
-          const cleaned = wordToLook.trim().toLowerCase();
+          const cleaned = trimmed.toLowerCase();
           const next = prev.filter(w => w !== cleaned);
           return [cleaned, ...next].slice(0, 8);
         });
@@ -4770,14 +4783,14 @@ export const WordStudy: React.FC<ToolProps> = ({
       // Non-fatal
     }
 
-    // 2. Fetch from backend API if not locally cached
+    // 2. Fetch from backend API (instant offline Strong's Greek & Hebrew lexicon)
     try {
       const response = await apiFetch("/api/study/word-study", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          word: wordToLook.trim(),
-          reference: report?.reference || "Revelation 14:6-12",
+          word: trimmed,
+          reference: activeRef,
           verseNumber: activeVerseIndex
         })
       });
@@ -4787,28 +4800,32 @@ export const WordStudy: React.FC<ToolProps> = ({
       }
 
       const data = await safeParseResponseJson<any>(response);
+      if (lookupReqIdRef.current !== reqId) return;
       if (!data || data.ok === false) {
         throw new Error(data?.error || "Linguistic ledger non-JSON response.");
       }
       setStudyData(data);
-      setSearchQuery(wordToLook.trim());
+      setSearchQuery(trimmed);
 
-      // Persist in IndexedDB so subsequent lookups are instant (never cache placeholder/unavailable results)
+      // Persist in IndexedDB scoped by testament so subsequent lookups are instant (never cache unavailable results)
       if (!data.unavailable) {
-        stbaStorage.saveStudyResource("word_study", wordToLook, data, report?.reference).catch(() => {});
+        stbaStorage.saveStudyResource("word_study", cacheKey, data, activeRef).catch(() => {});
       }
 
       // Add to recent list
       setRecentWords((prev) => {
-        const cleaned = wordToLook.trim().toLowerCase();
+        const cleaned = trimmed.toLowerCase();
         const next = prev.filter(w => w !== cleaned);
         return [cleaned, ...next].slice(0, 8);
       });
     } catch (err: any) {
+      if (lookupReqIdRef.current !== reqId) return;
       console.error(err);
       setErrorMsg("Failed to compile lexical audit. Please retry.");
     } finally {
-      setLoading(false);
+      if (lookupReqIdRef.current === reqId) {
+        setLoading(false);
+      }
     }
   };
 
@@ -4862,50 +4879,36 @@ export const WordStudy: React.FC<ToolProps> = ({
       }
 
       if (!vText) {
-        setVerseKeywords(["patience", "saints", "keep", "commandments", "faith", "jesus"]);
+        setVerseKeywords([]);
+        setExtracting(false);
         return;
       }
 
-      setExtracting(true);
-      try {
-        const res = await apiFetch("/api/study/extract-keywords", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ verseText: vText, reference: refTitle })
-        });
-        if (res.ok) {
-          const data = await safeParseResponseJson<any>(res);
-          if (data && data.keywords && data.keywords.length > 0) {
-            setVerseKeywords(data.keywords);
-            // Automatically trigger the lookup study for the very first keyword detected!
-            const firstWord = data.keywords[0];
-            if (firstWord) {
-              handleWordSelect(firstWord);
-            }
-          } else {
-            // Heuristic local fallback
-            const cleanStr = vText.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()\"'?“”;:]/g, "");
-            const words = cleanStr.split(/\s+/).filter((w: string) => {
-              const wordClean = w.toLowerCase().trim();
-              return wordClean.length > 3 && !["then", "that", "this", "them", "their", "with", "from", "your", "have", "shall", "unto", "they", "those", "were", "said", "another", "having", "other", "whose"].includes(wordClean);
-            });
-            const unique = Array.from(new Set(words));
-            setVerseKeywords(unique);
-            if (unique[0]) handleWordSelect(unique[0]);
-          }
-        }
-      } catch (err) {
-        console.warn("Failed extracting keywords via server, local fallback", err);
-        const cleanStr = vText.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()\"'?“”;:]/g, "");
-        const words = cleanStr.split(/\s+/).filter((w: string) => {
-          const wordClean = w.toLowerCase().trim();
-          return wordClean.length > 3 && !["then", "that", "this", "them", "their", "with", "from", "your", "have", "shall", "unto", "they", "those", "were", "said", "another", "having", "other", "whose"].includes(wordClean);
-        });
-        const unique = Array.from(new Set(words));
-        setVerseKeywords(unique);
-        if (unique[0]) handleWordSelect(unique[0]);
-      } finally {
-        setExtracting(false);
+      // Instant local keyword extraction (0ms, zero AI stall) so Proverbs/OT/NT verses respond immediately
+      const STOP_WORDS = new Set([
+        "the", "and", "for", "that", "this", "them", "their", "with", "from", "your", "have", "shall",
+        "unto", "they", "those", "were", "said", "another", "having", "other", "whose", "will", "wilt",
+        "shalt", "thou", "thee", "thine", "thy", "mine", "into", "upon", "also", "then", "than", "when",
+        "where", "which", "what", "who", "whom", "there", "here", "been", "being", "hath", "hast", "doth",
+        "dost", "didst", "would", "could", "should", "about", "after", "before", "over", "under", "again",
+        "because", "through", "between", "against", "among", "therefore", "wherefore", "neither", "either",
+        "every", "such", "much", "many", "more", "most", "some", "none", "only", "very", "even", "ever",
+        "never", "still", "thus", "while", "since", "until", "till", "both", "each", "same", "these"
+      ]);
+      const cleanStr = vText.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()\"'?“”‘’;:—–\[\]]/g, " ");
+      const seen = new Set<string>();
+      const unique: string[] = [];
+      for (const raw of cleanStr.split(/\s+/)) {
+        const w = raw.trim();
+        const low = w.toLowerCase();
+        if (low.length < 3 || STOP_WORDS.has(low) || seen.has(low)) continue;
+        seen.add(low);
+        unique.push(w);
+      }
+      setVerseKeywords(unique);
+      setExtracting(false);
+      if (unique[0]) {
+        handleWordSelect(unique[0]);
       }
     };
 
@@ -5324,7 +5327,13 @@ export const WordStudy: React.FC<ToolProps> = ({
               {/* Lemma and translation header */}
               <div className="mb-3 pr-20">
                 <span className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider block mb-0.5">
-                  {isNewTestamentReference(report?.reference || "Revelation 14:12") ? "GREEK" : "HEBREW"} LEXICAL CORE WORD
+                  {String(studyData.strongs || "").toUpperCase().startsWith("G")
+                    ? "GREEK"
+                    : String(studyData.strongs || "").toUpperCase().startsWith("H")
+                      ? "HEBREW"
+                      : isNewTestamentReference(report?.reference || "Revelation 14:12")
+                        ? "GREEK"
+                        : "HEBREW"} LEXICAL CORE WORD
                 </span>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-2xl font-serif font-bold text-emerald-500 tracking-wide block select-all">
@@ -5365,7 +5374,7 @@ export const WordStudy: React.FC<ToolProps> = ({
                 {studyData.sdaDictionaryEntries && studyData.sdaDictionaryEntries.length > 0 ? (
                   <div className="space-y-2">
                     {/* Primary Entry */}
-                    <div className={`p-3 rounded-lg border leading-relaxed text-xs sm:text-sm transition-colors ${
+                    <div className={`p-3 rounded-lg border leading-relaxed text-[16px] transition-colors ${
                       theme === "dark" ? "bg-[#1C2028] border-[#2C3545] text-gray-200" : "bg-white border-gray-200 text-gray-800"
                     }`}>
                       <span className="font-mono text-[9px] font-bold text-emerald-500 uppercase block mb-1">
@@ -5380,14 +5389,14 @@ export const WordStudy: React.FC<ToolProps> = ({
                     )}
                   </div>
                 ) : (
-                  <p className={`font-sans leading-relaxed text-xs sm:text-sm ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}>
+                  <p className={`font-sans leading-relaxed text-[16px] ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}>
                     {studyData.dictionaryDefinition}
                   </p>
                 )}
               </div>
 
               {/* Frequency metrics count */}
-              {studyData.versesCount && (
+              {studyData.versesCount > 0 && (
                 <div className="text-[10px] font-mono text-gray-400 border-t pt-2 mt-2 flex justify-between select-none">
                   <span>Occurrences in scripture codices:</span>
                   <span className="text-emerald-500 font-bold">{studyData.versesCount} times</span>
@@ -5403,7 +5412,7 @@ export const WordStudy: React.FC<ToolProps> = ({
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                 <span>SDA EXEGETICAL COMMENTARY & THEOLOGICAL INSIGHT</span>
               </div>
-              <p className={`font-sans leading-relaxed text-xs sm:text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-750"}`}>
+              <p className={`font-sans leading-relaxed text-[16px] ${theme === "dark" ? "text-gray-300" : "text-gray-750"}`}>
                 <ScriptureLinkedText text={studyData.usageNote} onNavigateRef={handleCrossCitedRefClick} />
               </p>
             </div>
