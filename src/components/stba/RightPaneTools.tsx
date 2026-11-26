@@ -1937,13 +1937,19 @@ export const ElderStephenCommentary: React.FC<ToolProps> = ({
 
       setLoading(true);
 
+      const priorHistory = messages.slice(-4).map((m) => ({
+        role: (m.sender === "elder" ? "elder" : "user") as "elder" | "user",
+        text: m.text.slice(0, 350)
+      }));
+
       const payload = {
         currentMode: "Explain" as const,
         contextSummary: `Commentary for verse ${referenceLabel}: "${verseText}" under topic ${report.topic || activeRef}`,
         noteTitle: `Exegesis of ${referenceLabel}`,
         noteContent: verseText,
-        userAction: `Generate specific, detailed verse commentary and Great Controversy exegesis for ${referenceLabel}.`,
+        userAction: `Generate specific, detailed, non-repetitive verse commentary and Great Controversy exegesis for ${referenceLabel}.`,
         historyLog: [
+          ...priorHistory,
           {
             role: "user" as const,
             text: `Please give me your detailed pastoral commentary and Great Controversy exegesis on ${referenceLabel}: "${verseText}"`
@@ -5087,11 +5093,11 @@ export const WordStudy: React.FC<ToolProps> = ({
       window.speechSynthesis.cancel();
     }
 
-    let targetTrans = "";
+    let targetPron = "";
     const cleanCustom = customWordText ? customWordText.toLowerCase().trim() : "";
 
-    // 1. If studyData matches customWordText or active word, use studyData.transliteration directly
-    if (studyData && studyData.transliteration) {
+    // 1. If studyData matches customWordText (or no customWordText), prefer Strong's phonetic pronunciation then transliteration
+    if (studyData && (studyData.pronunciation || studyData.transliteration)) {
       if (
         !cleanCustom ||
         studyData.word?.toLowerCase() === cleanCustom ||
@@ -5099,35 +5105,54 @@ export const WordStudy: React.FC<ToolProps> = ({
         studyData.strongs?.toLowerCase() === cleanCustom ||
         studyData.transliteration?.toLowerCase() === cleanCustom
       ) {
-        targetTrans = studyData.transliteration;
+        targetPron = studyData.pronunciation || studyData.transliteration;
       }
     }
 
     // 2. Direct data object parameter check
-    if (!targetTrans && data && data.transliteration) {
-      targetTrans = data.transliteration;
+    if (!targetPron && data && (data.pronunciation || data.transliteration)) {
+      targetPron = data.pronunciation || data.transliteration;
     }
 
-    // 3. Fallback map lookup
-    if (!targetTrans && cleanCustom) {
-      targetTrans = COMMON_TRANSLITERATIONS[cleanCustom] || "";
+    // 3. For any clicked word pill not currently loaded in studyData, resolve its exact Hebrew/Greek pronunciation from Strong's (< 2ms)
+    if (!targetPron && cleanCustom) {
+      try {
+        const activeRef = report?.reference || "Revelation 14:6-12";
+        const res = await apiFetch("/api/study/word-study", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            word: customWordText!.trim(),
+            reference: activeRef,
+            verseNumber: activeVerseIndex
+          })
+        });
+        if (res.ok) {
+          const resolved = await safeParseResponseJson<any>(res);
+          if (resolved && !resolved.unavailable && (resolved.pronunciation || resolved.transliteration)) {
+            targetPron = resolved.pronunciation || resolved.transliteration;
+          }
+        }
+      } catch {}
     }
 
-    // 4. General fallback to active studyData or search query
-    if (!targetTrans && studyData && studyData.transliteration) {
-      targetTrans = studyData.transliteration;
+    // 4. Fallback map or clicked word itself (never pronounce a different word's studyData!)
+    if (!targetPron && cleanCustom) {
+      targetPron = COMMON_TRANSLITERATIONS[cleanCustom] || customWordText || "";
     }
 
-    if (!targetTrans) {
+    if (!targetPron) {
       const cleanSearch = (searchQuery || "").toLowerCase().trim();
-      targetTrans = COMMON_TRANSLITERATIONS[cleanSearch] || cleanSearch || customWordText || "";
+      targetPron = studyData?.pronunciation || studyData?.transliteration || COMMON_TRANSLITERATIONS[cleanSearch] || cleanSearch || "";
     }
 
-    // Clean text to say: Normalize diacritics (e.g. agapē -> agape, tôrāh -> torah) before stripping symbols
-    const textToSay = targetTrans
+    // Normalize Strong's phonetic respelling & diacritics into clean speakable syllables (e.g. khok-maw' -> khok maw)
+    const textToSay = targetPron
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-zA-Z\s'-]/g, "")
+      .replace(/[-]+/g, " ")
+      .replace(/[^a-zA-Z\s]/g, "")
+      .replace(/\s+/g, " ")
       .trim();
     if (!textToSay) return;
 

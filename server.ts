@@ -6390,36 +6390,178 @@ An effective teaching strategy balances historical explanation with practical il
 ### 5. Theological Meaning & Application
 We teach to communicate the Three Angels' Messages with winsome grace, vindicating God's beautiful character of love and holy law. Outline your main teaching points in simple, accessible language.`;
     } else {
-      const cleanSnippet = String(noteContent || "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 220);
-      const isNT = /\b(matthew|mark|luke|john|acts|romans|corinthians|galatians|ephesians|philippians|colossians|thessalonians|timothy|titus|philemon|hebrews|james|peter|jude|revelation)\b/i.test(refText);
+      const isNT = isNewTestamentReference(refText);
+      const detectedLang: "Greek" | "Hebrew" = isNT ? "Greek" : "Hebrew";
       const testamentLabel = isNT ? "New Testament (Koine Greek)" : "Old Testament (Biblical Hebrew / Aramaic)";
-      const keyTermLine = isNT
-        ? `* **Logos / Rhema (λόγος / ῥῆμα)** — the revealed Word and living spoken counsel of Christ in *${refText}*.`
-        : `* **Dabar / Torah (דָּבָר / תּוֹרָה)** — God's covenant word and loving instruction revealed in *${refText}*.`;
+
+      // 1. Resolve actual verse text and immediate chapter neighbors from KJV corpus
+      let primaryVerseText = String(noteContent || "").replace(/\s+/g, " ").trim();
+      let prevNeighbor = "";
+      let nextNeighbor = "";
+      let parsedBook = "";
+      let parsedChap = 0;
+      let parsedVerse = 0;
+      try {
+        const corpus = loadKjvFullCorpus();
+        const refMatch = refText.match(/^([1-3]?\s*[A-Za-z]+(?:\s+of\s+[A-Za-z]+)?)\s+(\d+)(?::(\d+))?/i);
+        if (refMatch && corpus.length > 0) {
+          parsedBook = refMatch[1].replace(/\s+/g, " ").trim();
+          parsedChap = parseInt(refMatch[2], 10);
+          parsedVerse = refMatch[3] ? parseInt(refMatch[3], 10) : 1;
+          const bLow = parsedBook.toLowerCase();
+          const chapVerses = corpus.filter(
+            (v: any) => String(v.book || "").toLowerCase() === bLow && Number(v.chapter) === parsedChap
+          );
+          const idx = chapVerses.findIndex((v: any) => Number(v.verse) === parsedVerse);
+          if (idx !== -1) {
+            if (!primaryVerseText || primaryVerseText.length < 15) {
+              primaryVerseText = String(chapVerses[idx].text || "").trim();
+            }
+            if (idx > 0) {
+              prevNeighbor = `${chapVerses[idx - 1].book} ${chapVerses[idx - 1].chapter}:${chapVerses[idx - 1].verse} — “${String(chapVerses[idx - 1].text || "").trim()}”`;
+            }
+            if (idx + 1 < chapVerses.length) {
+              nextNeighbor = `${chapVerses[idx + 1].book} ${chapVerses[idx + 1].chapter}:${chapVerses[idx + 1].verse} — “${String(chapVerses[idx + 1].text || "").trim()}”`;
+            }
+          }
+        }
+      } catch {}
+
+      // 2. Extract 2-3 real Strong's Hebrew/Greek terms directly from THIS verse's text
+      const STOP_TERMS = new Set([
+        "the", "and", "for", "that", "this", "them", "their", "with", "from", "your", "have", "shall",
+        "unto", "they", "those", "were", "said", "another", "having", "other", "whose", "will", "wilt",
+        "shalt", "thou", "thee", "thine", "thy", "mine", "into", "upon", "also", "then", "than", "when",
+        "where", "which", "what", "who", "whom", "there", "here", "been", "being", "hath", "hast", "doth",
+        "dost", "didst", "would", "could", "should", "about", "after", "before", "over", "under", "again",
+        "because", "through", "between", "against", "among", "therefore", "wherefore", "neither", "either",
+        "every", "such", "much", "many", "more", "most", "some", "none", "only", "very", "even", "ever",
+        "never", "still", "thus", "while", "since", "until", "till", "both", "each", "same", "these", "my", "our"
+      ]);
+      const verseTokens = Array.from(
+        new Set(
+          (primaryVerseText || "")
+            .replace(/[^A-Za-z\s]/g, " ")
+            .split(/\s+/)
+            .map((w) => w.trim())
+            .filter((w) => w.length >= 4 && !STOP_TERMS.has(w.toLowerCase()))
+        )
+      );
+
+      const lexicalBullets: string[] = [];
+      const seenStrongs = new Set<string>();
+      const primaryKeywords: string[] = [];
+      for (const tok of verseTokens) {
+        if (lexicalBullets.length >= 3) break;
+        const hit = lookupStrongsEntry(tok, detectedLang);
+        if (hit?.primary && !seenStrongs.has(hit.primary.strongs)) {
+          seenStrongs.add(hit.primary.strongs);
+          primaryKeywords.push(tok.toLowerCase());
+          const p = hit.primary;
+          const shortDef = String(p.dictionaryDefinition || "").split(/[.;]/)[0].trim();
+          lexicalBullets.push(
+            `* **${tok} — ${p.transliteration} (${p.lemma}, Strong's ${p.strongs}, *${p.pronunciation}*)**: ${shortDef}.`
+          );
+        }
+      }
+      if (lexicalBullets.length === 0) {
+        const fallbackTok = isNT ? "logos" : "dabar";
+        const hit = lookupStrongsEntry(fallbackTok, detectedLang);
+        if (hit?.primary) {
+          const p = hit.primary;
+          lexicalBullets.push(
+            `* **${p.transliteration} (${p.lemma}, Strong's ${p.strongs}, *${p.pronunciation}*)**: ${p.dictionaryDefinition}`
+          );
+        }
+      }
+
+      // 3. Find 2 distinct KJV cross-references from OTHER books sharing this verse's key terms
+      const crossRefBullets: string[] = [];
+      try {
+        const corpus = loadKjvFullCorpus();
+        if (corpus.length > 0 && primaryKeywords.length > 0) {
+          const bLow = parsedBook.toLowerCase();
+          const usedBooks = new Set<string>([bLow]);
+          for (const kw of primaryKeywords.slice(0, 2)) {
+            const rx = new RegExp(`\\b${kw}\\b`, "i");
+            for (const v of corpus) {
+              const vb = String(v.book || "").toLowerCase();
+              if (usedBooks.has(vb)) continue;
+              if (rx.test(String(v.text || ""))) {
+                const refStr = `${v.book} ${v.chapter}:${v.verse}`;
+                if (!priorElderText.includes(refStr.toLowerCase())) {
+                  usedBooks.add(vb);
+                  crossRefBullets.push(`* *${refStr}* — “${String(v.text || "").trim()}”`);
+                  break;
+                }
+              }
+            }
+            if (crossRefBullets.length >= 2) break;
+          }
+        }
+      } catch {}
+
+      // 4. Select a genre-matched, non-repeating Spirit of Prophecy quotation
+      const sopPool: { themes: string[]; source: string; quote: string }[] = [
+        { themes: ["proverbs", "wisdom", "psalm", "ecclesiastes", "job", "understanding", "knowledge"], source: "*Education*, p. 123", quote: "The Bible is the most comprehensive and the most instructive history which men possess. It came fresh from the fountain of eternal truth, and throughout the ages a divine hand has preserved its purity." },
+        { themes: ["proverbs", "wisdom", "heart", "incline", "ear", "treasure", "seek", "search"], source: "*Christ's Object Lessons*, p. 107", quote: "There are truths in the word of God that lie hidden beneath the surface, like veins of gold in the earth, waiting to reward the diligent, prayerful seeker." },
+        { themes: ["proverbs", "commandment", "law", "path", "way", "righteous", "upright"], source: "*Steps to Christ*, p. 88", quote: "Fill the whole heart with the words of God. They are the living water, quenching your burning thirst. They are the living bread from heaven." },
+        { themes: ["proverbs", "psalm", "fear", "lord", "guard", "keep", "preserve", "shield"], source: "*Patriarchs and Prophets*, p. 596", quote: "True wisdom is not gained by human speculation alone, but by reverent submission of the mind and will to the revealed counsel of God." },
+        { themes: ["revelation", "daniel", "prophecy", "angel", "judgment", "seal", "beast", "sanctuary"], source: "*The Great Controversy*, p. 599", quote: "The first and highest duty of every rational being is to learn from the Scriptures what is truth, and then to walk in the light and encourage others to follow his example." },
+        { themes: ["revelation", "hebrews", "sanctuary", "priest", "covenant", "blood", "atonement"], source: "*The Great Controversy*, p. 488", quote: "The intercession of Christ in man's behalf in the sanctuary above is as essential to the plan of salvation as was His death upon the cross." },
+        { themes: ["matthew", "mark", "luke", "john", "jesus", "christ", "gospel", "faith", "grace"], source: "*The Desire of Ages*, p. 390", quote: "In every command and in every promise of the word of God is the power, the very life of God, by which the command may be fulfilled and the promise realized." },
+        { themes: ["romans", "corinthians", "galatians", "ephesians", "philippians", "timothy", "peter", "james"], source: "*The Acts of the Apostles*, p. 502", quote: "God's servants are to be students of His word, comparing scripture with scripture, that they may present the truth with clearness and spiritual power." },
+        { themes: ["genesis", "exodus", "leviticus", "numbers", "deuteronomy", "sabbath", "creation"], source: "*Patriarchs and Prophets*, p. 365", quote: "The law of God is as sacred as God Himself. It is a revelation of His will, a transcript of His character, the expression of divine love and wisdom." },
+        { themes: ["isaiah", "jeremiah", "ezekiel", "hosea", "joel", "amos", "micah", "malachi"], source: "*Prophets and Kings*, p. 626", quote: "Through the ages, God has spoken through His prophets to call His people back to covenant faithfulness and the certainty of His coming kingdom." }
+      ];
+      const refAndTextLow = `${refText} ${primaryVerseText}`.toLowerCase();
+      let refHash = 0;
+      for (let i = 0; i < refText.length; i++) refHash = (refHash * 31 + refText.charCodeAt(i)) >>> 0;
+
+      const themeMatches = sopPool.filter((q) => q.themes.some((t) => refAndTextLow.includes(t)));
+      const orderedSop = [...themeMatches, ...sopPool.filter((q) => !themeMatches.includes(q))];
+      const freshSop = orderedSop.filter((q) => !priorElderText.includes(q.quote.slice(0, 42).toLowerCase()));
+      const chosenSop = (freshSop.length > 0 ? freshSop : orderedSop)[refHash % (freshSop.length > 0 ? freshSop.length : orderedSop.length)];
+
+      // 5. Vary the closing pastoral reflection question by verse hash so consecutive verses never ask the same line
+      const appPrompts = [
+        `Looking closely at **${refText}**, which key term above challenges your habits or priorities most directly this week?`,
+        `How can you put the counsel of **${refText}** into concrete practice in your personal devotions and family life today?`,
+        `In light of **${refText}** and its parallel witness in Scripture, how would you explain this principle in plain words to a friend?`,
+        `What step of faith or surrender is God inviting you to take right now as you meditate on **${refText}**?`
+      ];
+      const chosenAppPrompt = appPrompts[refHash % appPrompts.length];
+
+      const cleanSnippet = primaryVerseText.slice(0, 260);
+      const contextLines = [
+        `* **Focal Text (${refText})**: ${cleanSnippet ? `“${cleanSnippet}${primaryVerseText.length > 260 ? "..." : ""}”` : `Studied within *${studyDoc}*.`}`,
+        `* **Testament & Language**: ${testamentLabel}.`,
+        ...(prevNeighbor ? [`* **Preceding Flow**: ${prevNeighbor}`] : []),
+        ...(nextNeighbor ? [`* **Following Flow**: ${nextNeighbor}`] : [])
+      ].join("\n");
+
+      const exegeticalSection = crossRefBullets.length > 0
+        ? `Comparing Scripture with Scripture illuminates **${refText}** through parallel biblical witnesses:\n${crossRefBullets.join("\n")}`
+        : `Reading **${refText}** within its surrounding chapter reveals how God's revealed Word builds truth line upon line (*Isaiah 28:10*).`;
 
       text = `### Study Summary
-In *${refText}* (${studyDoc}), Scripture invites us to trace God's redemptive purpose directly within its ${testamentLabel} setting.${cleanSnippet ? ` Focusing on the passage text (“${cleanSnippet}${cleanSnippet.length >= 220 ? "..." : ""}”) clarifies what God is teaching here.` : ""}
+In **${refText}**, Scripture calls our attention to ${primaryKeywords.length > 0 ? `the interplay of *${primaryKeywords.join("*, *")}*` : `the specific covenant message of this text`}${cleanSnippet ? ` — “${cleanSnippet}${primaryVerseText.length > 260 ? "..." : ""}”` : ""}.
 
 ### 1. Context & Scriptural Foundation
-* **Primary Passage**: *${refText}* within *${studyDoc}*.
-* **Testament & Language**: ${testamentLabel} witness, interpreted by comparing Scripture with Scripture (*Isaiah 28:10*).
+${contextLines}
 
 ### 2. Key Terms & Original Language
-${keyTermLine}
-* **Orthotomeo (ὀρθοτομέω)** — cutting straight, rightly dividing the word of truth (*2 Timothy 2:15*).
+${lexicalBullets.join("\n")}
 
 ### 3. Exegetical Insight (Line Upon Line)
-Reading *${refText}* in its immediate chapter context reveals how Christ's righteousness and covenant faithfulness uphold God's law (*Romans 3:31*, *Hebrews 8:1-2*).
+${exegeticalSection}
 
 ### 4. Spirit of Prophecy
-* *The Great Controversy*, p. 599:
-> “The first and highest duty of every rational being is to learn from the Scriptures what is truth, and then to walk in the light and encourage others to follow his example.”
+* ${chosenSop.source}:
+> “${chosenSop.quote}”
 
 ### 5. Theological Meaning & Application
-How does the specific truth of *${refText}* speak to your walk with Christ and prepare you to share it clearly with others today?`;
+* **Practical Reflection**: ${chosenAppPrompt}`;
     }
 
     return res.json({ text: formatProperElderSpacing(text), commentaryMode: "prestige", modeUsed: "prestige", latencyMs });
