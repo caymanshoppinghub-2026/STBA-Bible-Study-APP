@@ -4746,6 +4746,9 @@ export const WordStudy: React.FC<ToolProps> = ({
   const [verseKeywords, setVerseKeywords] = useState<string[]>([]);
   const [extracting, setExtracting] = useState(false);
   const lookupReqIdRef = useRef(0);
+  const pronAudioCtxRef = useRef<AudioContext | null>(null);
+  const pronSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const pronHtmlAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const doLookup = async (wordToLook: string) => {
     const trimmed = wordToLook.trim();
@@ -4758,7 +4761,7 @@ export const WordStudy: React.FC<ToolProps> = ({
     const isNT = isNewTestamentReference(activeRef);
     const hasExplicitScript = /[\u0370-\u03FF\u1F00-\u1FFF\u0590-\u05FF]/.test(trimmed) || /^\s*[gh]\d{1,4}\s*$/i.test(trimmed);
     const expectedPrefix = isNT ? "G" : "H";
-    const cacheKey = hasExplicitScript ? trimmed.toLowerCase() : `${isNT ? "greek" : "hebrew"}:${trimmed.toLowerCase()}`;
+    const cacheKey = hasExplicitScript ? `v2:${trimmed.toLowerCase()}` : `v2:${isNT ? "greek" : "hebrew"}:${trimmed.toLowerCase()}`;
 
     // 1. Check IndexedDB persistent study resource cache (< 2ms), scoped by testament language
     try {
@@ -5089,6 +5092,32 @@ export const WordStudy: React.FC<ToolProps> = ({
   };
 
   const playPronunciation = async (data: any, customWordText?: string) => {
+    // 0. Synchronously unlock/resume AudioContext inside the user click gesture (before any await!)
+    let unlockedCtx: AudioContext | null = null;
+    try {
+      if (pronSourceRef.current) {
+        try { pronSourceRef.current.stop(); } catch {}
+        pronSourceRef.current = null;
+      }
+      if (pronHtmlAudioRef.current) {
+        try {
+          pronHtmlAudioRef.current.pause();
+          pronHtmlAudioRef.current.currentTime = 0;
+        } catch {}
+        pronHtmlAudioRef.current = null;
+      }
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        if (!pronAudioCtxRef.current || pronAudioCtxRef.current.state === "closed") {
+          pronAudioCtxRef.current = new AudioCtx();
+        }
+        unlockedCtx = pronAudioCtxRef.current;
+        if (unlockedCtx.state === "suspended") {
+          unlockedCtx.resume().catch(() => {});
+        }
+      }
+    } catch {}
+
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -5156,40 +5185,74 @@ export const WordStudy: React.FC<ToolProps> = ({
       .trim();
     if (!textToSay) return;
 
-    // Use natural Gemini TTS (/api/study/narrate) instead of robotic OS SpeechSynthesis
+    // 5. Synthesize via /api/study/narrate (verbatimReadAloud uses instant quota-free Microsoft Neural MP3)
     try {
       const response = await apiFetch("/api/study/narrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: sanitizeVerbatimSpeechText(textToSay),
-          voice: "Charon"
+          voice: "Charon",
+          verbatimReadAloud: true
         })
       });
       if (response.ok) {
         const resData = await safeParseResponseJson<any>(response);
         if (resData?.success && resData?.audio) {
-          const sampleRate = 24000;
-          const float32Array = decodeAndCleanGeminiPcm(resData.audio, { sampleRate });
-          if (float32Array.length > 0) {
-            const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-            const ctx = new AudioCtx({ sampleRate });
-            const pcmBuffer = ctx.createBuffer(1, float32Array.length, sampleRate);
-            pcmBuffer.getChannelData(0).set(float32Array);
-            const source = ctx.createBufferSource();
-            source.buffer = pcmBuffer;
-            source.connect(ctx.destination);
-            source.onended = () => {
-              ctx.close().catch(() => {});
-            };
-            source.start(0);
-            return;
+          const fmt = String(resData.format || "").toLowerCase();
+          // Handle MP3 format (Microsoft Edge Neural) properly — never feed MP3 bytes into raw PCM decoder!
+          if (fmt === "mp3" || resData.audio.startsWith("SUQz") || resData.audio.startsWith("//u") || resData.audio.startsWith("/+")) {
+            const binaryStr = atob(resData.audio);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+            if (unlockedCtx) {
+              try {
+                if (unlockedCtx.state === "suspended") await unlockedCtx.resume();
+                const decoded = await unlockedCtx.decodeAudioData(bytes.buffer.slice(0));
+                const source = unlockedCtx.createBufferSource();
+                source.buffer = decoded;
+                source.connect(unlockedCtx.destination);
+                pronSourceRef.current = source;
+                source.onended = () => {
+                  if (pronSourceRef.current === source) pronSourceRef.current = null;
+                };
+                source.start(0);
+                return;
+              } catch {}
+            }
+
+            // Backup HTML5 Audio playback for MP3
+            try {
+              const audioEl = new Audio(`data:audio/mpeg;base64,${resData.audio}`);
+              pronHtmlAudioRef.current = audioEl;
+              await audioEl.play();
+              return;
+            } catch {}
+          } else {
+            // Handle raw 24kHz PCM format (Gemini TTS)
+            const sampleRate = 24000;
+            const float32Array = decodeAndCleanGeminiPcm(resData.audio, { sampleRate });
+            if (float32Array.length > 0 && unlockedCtx) {
+              if (unlockedCtx.state === "suspended") await unlockedCtx.resume();
+              const pcmBuffer = unlockedCtx.createBuffer(1, float32Array.length, sampleRate);
+              pcmBuffer.getChannelData(0).set(float32Array);
+              const source = unlockedCtx.createBufferSource();
+              source.buffer = pcmBuffer;
+              source.connect(unlockedCtx.destination);
+              pronSourceRef.current = source;
+              source.onended = () => {
+                if (pronSourceRef.current === source) pronSourceRef.current = null;
+              };
+              source.start(0);
+              return;
+            }
           }
         }
       }
     } catch {}
 
-    // Offline fallback only
+    // 6. Browser SpeechSynthesis offline fallback
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       const utterance = new SpeechSynthesisUtterance(textToSay);
       utterance.rate = 0.85;
@@ -5361,8 +5424,20 @@ export const WordStudy: React.FC<ToolProps> = ({
                         : "HEBREW"} LEXICAL CORE WORD
                 </span>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-2xl font-serif font-bold text-emerald-500 tracking-wide block select-all">
-                    {studyData.lemma}
+                  <span
+                    dir={/[\u0590-\u05FF]/.test(String(studyData.lemma || "")) ? "rtl" : "ltr"}
+                    style={
+                      /[\u0590-\u05FF]/.test(String(studyData.lemma || ""))
+                        ? { fontFamily: '"Noto Serif Hebrew", "SBL Hebrew", "Ezra SIL", "Arial Hebrew", "Times New Roman", serif' }
+                        : undefined
+                    }
+                    className="text-2xl font-serif font-bold text-emerald-500 tracking-wide block select-all"
+                  >
+                    {String(studyData.lemma || "")
+                      .replace(/\u034F/g, "")
+                      .replace(/\u05C7/g, "\u05B8")
+                      .replace(/\u05BA/g, "\u05B9")
+                      .replace(/\u05BD/g, "")}
                   </span>
                   <button
                     type="button"

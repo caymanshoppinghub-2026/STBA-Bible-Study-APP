@@ -9227,14 +9227,44 @@ function loadStrongsStore(): StrongsStore | null {
   return null;
 }
 
+function normalizeHebrewLemma(raw: string): string {
+  if (!raw) return "";
+  return raw
+    .replace(/\u034F/g, "")          // strip Combining Grapheme Joiner
+    .replace(/\u05C7/g, "\u05B8")    // Qamats Qatan -> standard Qamats (avoids dotted circle/tofu)
+    .replace(/\u05BA/g, "\u05B9")    // Holam Haser for Vav -> standard Holam
+    .replace(/\u05BD/g, "")          // strip Meteg cantillation mark
+    .normalize("NFC")
+    .trim();
+}
+
+function normalizeReadableTranslit(raw: string, isGreek: boolean): string {
+  if (!raw) return "";
+  if (isGreek) return raw.normalize("NFC").trim();
+  return raw
+    .replace(/\u1D49/g, "e")         // superscript schwa ᵉ -> e
+    .replace(/\u02E2/g, "s")         // superscript ˢ -> s
+    .replace(/\u00E7/g, "s")         // Open Scriptures Samekh ç -> s
+    .replace(/\u00C7/g, "S")
+    .replace(/[\u02BB\u02BC]/g, "'") // Ayin ʻ / Aleph ʼ -> clean apostrophe
+    .replace(/\u1E6D/g, "t")         // ṭ -> t
+    .replace(/\u1E6C/g, "T")         // Ṭ -> T
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip circumflex/breve diacritics (â, ê, î, ô, û, ă, ĕ, ŏ)
+    .normalize("NFC")
+    .trim();
+}
+
 function buildStrongsPayload(key: string, rawWord: string): any | null {
   const store = loadStrongsStore();
   if (!store) return null;
   const lang = key[0] === "G" ? "G" : "H";
   const row = (lang === "G" ? store.g : store.h)[key.slice(1)];
   if (!row) return null;
-  const [lemma, translit, pron, def, deriv, kjv] = row;
+  const [rawLemma, rawTranslit, pron, def, deriv, kjv] = row;
   const isGk = lang === "G";
+  const lemma = isGk ? String(rawLemma || "").normalize("NFC").trim() : normalizeHebrewLemma(String(rawLemma || ""));
+  const translit = normalizeReadableTranslit(String(rawTranslit || ""), isGk);
   const definition = def ? def.replace(/^[\s,;:]+/, "") : "No definition recorded.";
   return {
     word: rawWord,
