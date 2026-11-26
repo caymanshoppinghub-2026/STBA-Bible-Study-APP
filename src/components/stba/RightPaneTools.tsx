@@ -4748,7 +4748,14 @@ export const WordStudy: React.FC<ToolProps> = ({
     // 1. Check IndexedDB persistent study resource cache (< 2ms)
     try {
       const cached = await stbaStorage.getStudyResource("word_study", wordToLook);
-      if (cached) {
+      const q = wordToLook.trim().toLowerCase();
+      const isLogosQuery = ["word", "logos", "g3056", "λόγος"].includes(q);
+      // Ignore stale/poisoned cache entries: placeholder results or "logos" returned for an unrelated word
+      const isPoisoned =
+        !!cached &&
+        ((cached as any).unavailable === true ||
+          (String((cached as any).transliteration || "").toLowerCase() === "logos" && !isLogosQuery));
+      if (cached && !isPoisoned) {
         setStudyData(cached);
         setSearchQuery(wordToLook.trim());
         setRecentWords((prev) => {
@@ -4786,8 +4793,10 @@ export const WordStudy: React.FC<ToolProps> = ({
       setStudyData(data);
       setSearchQuery(wordToLook.trim());
 
-      // Persist in IndexedDB so subsequent lookups are instant
-      stbaStorage.saveStudyResource("word_study", wordToLook, data, report?.reference).catch(() => {});
+      // Persist in IndexedDB so subsequent lookups are instant (never cache placeholder/unavailable results)
+      if (!data.unavailable) {
+        stbaStorage.saveStudyResource("word_study", wordToLook, data, report?.reference).catch(() => {});
+      }
 
       // Add to recent list
       setRecentWords((prev) => {
@@ -5108,7 +5117,7 @@ export const WordStudy: React.FC<ToolProps> = ({
 
     if (!targetTrans) {
       const cleanSearch = (searchQuery || "").toLowerCase().trim();
-      targetTrans = COMMON_TRANSLITERATIONS[cleanSearch] || cleanSearch || "logos";
+      targetTrans = COMMON_TRANSLITERATIONS[cleanSearch] || cleanSearch || customWordText || "";
     }
 
     // Clean text to say: Normalize diacritics (e.g. agapē -> agape, tôrāh -> torah) before stripping symbols

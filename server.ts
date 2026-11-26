@@ -9494,49 +9494,112 @@ app.post("/api/study/word-study", async (req, res) => {
   registerWord(["love", "g26", "ἀγάπη", "agape"], loveData);
   registerWord(["truth", "g225", "ἀλήθεια", "aletheia"], truthData);
 
+  // Extended Strong's-linked lexicon: [English/translit/Strong's keys, Strong's, lemma, transliteration, pronunciation, definition]
+  const EXTENDED_LEXICON: Array<[string[], string, string, string, string, string]> = [
+    [["grace", "charis", "g5485", "χάρις"], "G5485", "χάρις", "charis", "khar'-ece", "Grace, favor, unmerited kindness; God's free gift of goodness toward the undeserving."],
+    [["mercy", "eleos", "g1656", "ἔλεος"], "G1656", "ἔλεος", "eleos", "el'-eh-os", "Mercy, compassion, kindness shown toward the miserable and needy."],
+    [["salvation", "soteria", "g4991", "σωτηρία"], "G4991", "σωτηρία", "soteria", "so-tay-ree'-ah", "Deliverance, rescue, preservation; salvation from sin and its consequences."],
+    [["redemption", "redeem", "apolutrosis", "g629", "ἀπολύτρωσις"], "G629", "ἀπολύτρωσις", "apolutrosis", "ap-ol-oo'-tro-sis", "A releasing effected by payment of ransom; redemption, deliverance."],
+    [["righteousness", "dikaiosune", "g1343", "δικαιοσύνη"], "G1343", "δικαιοσύνη", "dikaiosune", "dik-ah-yos-oo'-nay", "Righteousness, the state of being right with God; justice and uprightness."],
+    [["sin", "hamartia", "g266", "ἁμαρτία"], "G266", "ἁμαρτία", "hamartia", "ham-ar-tee'-ah", "Sin; literally 'missing the mark'; an offense against God's law."],
+    [["law", "nomos", "g3551", "νόμος"], "G3551", "νόμος", "nomos", "nom'-os", "Law, anything established or received by usage; the law of God, especially the Torah."],
+    [["spirit", "pneuma", "g4151", "πνεῦμα"], "G4151", "πνεῦμα", "pneuma", "pnyoo'-mah", "Spirit, breath, wind; the Holy Spirit and the human spirit."],
+    [["peace", "eirene", "g1515", "εἰρήνη"], "G1515", "εἰρήνη", "eirene", "i-rah'-nay", "Peace, harmony, wholeness; the tranquility found in right relationship with God."],
+    [["repent", "repentance", "metanoeo", "g3340", "μετανοέω"], "G3340", "μετανοέω", "metanoeo", "met-an-o-eh'-o", "To change one's mind and purpose; to repent and turn from sin to God."],
+    [["hope", "elpis", "g1680", "ἐλπίς"], "G1680", "ἐλπίς", "elpis", "el-pece'", "Expectation of good, confident hope; especially the blessed hope of Christ's return."],
+    [["baptism", "baptisma", "g908", "βάπτισμα"], "G908", "βάπτισμα", "baptisma", "bap'-tis-mah", "Immersion, baptism; the rite symbolizing death to sin and new life in Christ."],
+    [["resurrection", "anastasis", "g386", "ἀνάστασις"], "G386", "ἀνάστασις", "anastasis", "an-as'-tas-is", "A standing up again; rising from the dead, resurrection."],
+    [["sabbath", "sabbaton", "g4521", "σάββατον"], "G4521", "σάββατον", "sabbaton", "sab'-bat-on", "The Sabbath; the seventh day of the week set apart as a day of rest and worship."],
+    [["lord", "kurios", "kyrios", "g2962", "κύριος"], "G2962", "κύριος", "kurios", "koo'-ree-os", "Lord, master, one with authority; title of Christ and of God."],
+    [["god", "theos", "g2316", "θεός"], "G2316", "θεός", "theos", "theh'-os", "God, a deity; the Supreme Being, Creator of all things."],
+    [["christ", "christos", "g5547", "Χριστός"], "G5547", "Χριστός", "christos", "khris-tos'", "Anointed One; the Greek equivalent of Messiah."],
+    [["life", "zoe", "g2222", "ζωή"], "G2222", "ζωή", "zoe", "dzo-ay'", "Life, both physical and spiritual; the eternal life given in Christ."],
+    [["death", "thanatos", "g2288", "θάνατος"], "G2288", "θάνατος", "thanatos", "than'-at-os", "Death, the separation of life; the penalty for sin."],
+    [["heaven", "ouranos", "g3772", "οὐρανός"], "G3772", "οὐρανός", "ouranos", "oo-ran-os'", "Heaven, the sky; the dwelling place of God."],
+    [["kingdom", "basileia", "g932", "βασιλεία"], "G932", "βασιλεία", "basileia", "bas-il-i'-ah", "Kingdom, royal power and dominion; the reign of God."],
+    [["covenant", "testament", "diatheke", "g1242", "διαθήκη"], "G1242", "διαθήκη", "diatheke", "dee-ath-ay'-kay", "Covenant, a solemn arrangement established by God with His people."],
+    [["scripture", "scriptures", "graphe", "g1124", "γραφή"], "G1124", "γραφή", "graphe", "graf-ay'", "A writing; Scripture, the sacred writings."],
+    [["inspiration", "inspired", "theopneustos", "g2315", "θεόπνευστος"], "G2315", "θεόπνευστος", "theopneustos", "theh-op'-nyoo-stos", "God-breathed; divinely inspired (2 Timothy 3:16)."],
+    [["dividing", "orthotomeo", "g3718", "ὀρθοτομέω"], "G3718", "ὀρθοτομέω", "orthotomeo", "or-thot-om-eh'-o", "To cut straight; to handle correctly (2 Timothy 2:15, 'rightly dividing')."],
+    [["shabbat", "shabbath", "h7676", "שַׁבָּת"], "H7676", "שַׁבָּת", "shabbath", "shab-bawth'", "Sabbath; a day of ceasing and rest, the seventh day."],
+    [["elohim", "h430", "אֱלֹהִים"], "H430", "אֱלֹהִים", "elohim", "el-o-heem'", "God, gods; the plural of majesty used of the one true God."],
+    [["yhwh", "jehovah", "yahweh", "h3068", "יְהוָה"], "H3068", "יְהוָה", "YHWH (Yahweh)", "yeh-ho-vaw'", "The LORD; the personal covenant name of God."],
+    [["berith", "h1285", "בְּרִית"], "H1285", "בְּרִית", "berith", "ber-eeth'", "Covenant, pledge, alliance established by God with His people."],
+    [["shalom", "h7965", "שָׁלוֹם"], "H7965", "שָׁלוֹם", "shalom", "shaw-lome'", "Peace, completeness, welfare, wholeness."],
+    [["chesed", "hesed", "lovingkindness", "h2617", "חֶסֶד"], "H2617", "חֶסֶד", "chesed", "kheh'-sed", "Lovingkindness, steadfast covenant love and mercy."],
+    [["qadosh", "holy", "h6918", "קָדוֹשׁ"], "H6918", "קָדוֹשׁ", "qadosh", "kaw-doshe'", "Holy, set apart, sacred."],
+    [["yeshuah", "h3444", "יְשׁוּעָה"], "H3444", "יְשׁוּעָה", "yeshuah", "yesh-oo'-aw", "Salvation, deliverance, victory."],
+    [["torah", "h8451", "תּוֹרָה"], "H8451", "תּוֹרָה", "torah", "to-raw'", "Law, instruction, direction; the Law of God."],
+    [["create", "bara", "h1254", "בָּרָא"], "H1254", "בָּרָא", "bara", "baw-raw'", "To create, shape; used only of God's creative activity."],
+    [["atonement", "kaphar", "h3722", "כָּפַר"], "H3722", "כָּפַר", "kaphar", "kaw-far'", "To cover, atone, make reconciliation."],
+    [["messiah", "mashiach", "h4899", "מָשִׁיחַ"], "H4899", "מָשִׁיחַ", "mashiach", "maw-shee'-akh", "Anointed One; Messiah."],
+    [["heart", "leb", "h3820", "לֵב"], "H3820", "לֵב", "leb", "labe", "Heart, inner man, mind, will."],
+    [["emet", "h571", "אֱמֶת"], "H571", "אֱמֶת", "emet", "eh'-meth", "Truth, faithfulness, reliability."],
+    [["ruach", "h7307", "רוּחַ"], "H7307", "רוּחַ", "ruach", "roo'-akh", "Spirit, breath, wind."],
+    [["dabar", "h1697", "דָּבָר"], "H1697", "דָּבָר", "dabar", "daw-vawr'", "Word, matter, thing; the spoken word of God."],
+    [["tsaddiq", "righteous", "h6662", "צַדִּיק"], "H6662", "צַדִּיק", "tsaddiq", "tsad-deek'", "Just, righteous, lawful."]
+  ];
+  for (const [keys, strongs, lemma, translit, pron, def] of EXTENDED_LEXICON) {
+    const isGk = strongs.startsWith("G");
+    const entryData = {
+      strongs,
+      lemma,
+      transliteration: translit,
+      morphology: isGk ? "Koine Greek lexical form (Strong's " + strongs + ")" : "Biblical Hebrew lexical form (Strong's " + strongs + ")",
+      pronunciation: pron,
+      dictionaryDefinition: def,
+      usageNote: `Strong's ${strongs} (${lemma}, ${translit}): ${def}`,
+      versesCount: 0,
+      occurrences: [] as string[],
+      sdaDictionaryEntries: [{ entry: def, source: "Strong's Concordance" }]
+    };
+    for (const k of keys) {
+      const ck = k.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "").trim();
+      if (ck && !WORD_REGISTRY[ck]) WORD_REGISTRY[ck] = entryData;
+    }
+  }
+
   const matched = WORD_REGISTRY[cleanQuery];
   if (matched) {
     return res.json({ word: rawWord, ...matched });
   }
 
+  // Determine the lookup language from the word itself (script / Strong's prefix) before falling back to the passage testament
+  const hasGreekScript = /[\u0370-\u03FF\u1F00-\u1FFF]/.test(rawWord);
+  const hasHebrewScript = /[\u0590-\u05FF]/.test(rawWord);
+  const strongsPrefix = /^\s*([gh])\d{1,4}\s*$/i.exec(rawWord)?.[1]?.toLowerCase();
+  const detectedLang: "Greek" | "Hebrew" =
+    hasGreekScript || strongsPrefix === "g" ? "Greek"
+    : hasHebrewScript || strongsPrefix === "h" ? "Hebrew"
+    : isNewTestamentReference(reference) ? "Greek" : "Hebrew";
+
   // Dynamic lookup via Gemini if not precompiled to maintain limitless active lookup capability
   const aiClient = getGeminiClient();
+  // Honest fallback: never fabricate a Strong's number or substitute another word (e.g. "logos").
+  // Flags the payload as unavailable so the client does not cache it and can prompt a retry.
   const runFallback = () => {
-    // Determine language strictly based on New Testament reference
-    const isGreek = isNewTestamentReference(reference);
-    const generatedStrongs = `${isGreek ? "G" : "H"}${Math.floor(Math.random() * 3000) + 500}`;
-    const generatedLemma = isGreek ? "λόγος" : "דָּבָר";
-    const generatedTrans = isGreek ? "logos" : "dabar";
-    const generatedPoss = isGreek ? "Noun / Verb / Adjective (Greek)" : "Noun / Verb / Adjective (Hebrew)";
-
-    const dictDef = `Lexical definition for "${rawWord}": In ${isGreek ? "Greek" : "Hebrew"} biblical manuscripts, this term denotes ${rawWord}, reflecting its foundational linguistic and covenant significance in scripture.`;
-    const noteDef = `SDA Exegetical Commentary on "${rawWord}": In ${reference || "Scripture"}, "${rawWord}" plays a vital role in revealing divine truth. Seventh-day Adventist scholarship emphasizes understanding this term within its full biblical context to deepen personal faith and discipleship.`;
-
+    const langLabel = detectedLang;
     return res.json({
       word: rawWord,
-      strongs: generatedStrongs,
-      lemma: generatedLemma,
-      transliteration: generatedTrans,
-      morphology: `${generatedPoss}, parsed dynamically in current study reference context`,
-      pronunciation: isGreek ? "loh'-gos" : "dah-bar'",
-      dictionaryDefinition: dictDef,
-      usageNote: noteDef,
-      versesCount: 24,
-      occurrences: [`${reference || "Revelation 14:12"}`, isGreek ? "John 1:1" : "Psalm 119:105", isGreek ? "Revelation 14:12" : "Isaiah 40:8"],
-      sdaDictionaryEntries: [
-        {
-          entry: dictDef,
-          source: "SDA Bible Dictionary"
-        }
-      ]
+      unavailable: true,
+      strongs: "Pending",
+      lemma: rawWord,
+      transliteration: rawWord,
+      morphology: `${langLabel} lexical lookup temporarily unavailable`,
+      pronunciation: rawWord,
+      dictionaryDefinition: `The live ${langLabel} lexicon could not be reached for "${rawWord}" right now. Please tap Study again in a moment to retrieve its exact Strong's number, original-language root, and pronunciation.`,
+      usageNote: `No verified Strong's entry was returned for "${rawWord}", so no root or number is shown rather than displaying an incorrect one.`,
+      versesCount: 0,
+      occurrences: [] as string[],
+      sdaDictionaryEntries: []
     });
   };
 
   try {
     if (!aiClient) return runFallback();
 
-    const isNT = isNewTestamentReference(reference);
-    const lang = isNT ? "Greek" : "Hebrew";
+    const isNT = detectedLang === "Greek";
+    const lang = detectedLang;
     const letterExample = isNT ? "εὐαγγέλιον" : "דָּבָר";
     const strongsExample = isNT ? "G2098" : "H1697";
     const romanizationExample = isNT ? "euaggelion" : "dabar";
@@ -9595,6 +9658,18 @@ DO NOT duplicate usageNote inside sdaDictionaryEntries. DO NOT output generic bo
 
     try {
       const parsedJson = safeParseJSON(responseText);
+
+      // Validate the model's answer so a wrong word/number (e.g. defaulting to "logos") is never shown
+      const strongsOk = typeof parsedJson?.strongs === "string" && new RegExp(`^${isNT ? "G" : "H"}\\d{1,4}$`).test(parsedJson.strongs.trim());
+      const lemmaOk = typeof parsedJson?.lemma === "string" && (isNT ? /[\u0370-\u03FF\u1F00-\u1FFF]/ : /[\u0590-\u05FF]/).test(parsedJson.lemma);
+      const transliteration = String(parsedJson?.transliteration || "").toLowerCase();
+      const queryIsLogos = ["word", "logos", "g3056", "λόγος"].includes(cleanQuery) || cleanQuery === "λογος";
+      const wrongLogos = transliteration === "logos" && !queryIsLogos;
+      if (!strongsOk || !lemmaOk || wrongLogos || !parsedJson.pronunciation) {
+        return runFallback();
+      }
+      parsedJson.strongs = parsedJson.strongs.trim().toUpperCase();
+
       if (parsedJson) {
         if (Array.isArray(parsedJson.sdaDictionaryEntries)) {
           parsedJson.sdaDictionaryEntries = parsedJson.sdaDictionaryEntries.filter((e: any) => {
