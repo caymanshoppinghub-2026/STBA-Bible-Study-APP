@@ -166,14 +166,14 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     [activeSpec, revealedNodeIds]
   );
 
-  // Dynamically compute Interconnected SDA Concepts around the focused node on Click 3!
+  // Dynamically compute Interconnected SDA Concepts around the focused node on Click 3 (wide galactic orbit)
   const focusedConceptSatellites = useMemo(() => {
     if (focusStep < 3 || !focusedNodeId) return [];
     const node = activeSpec.nodes.find((n) => n.id === focusedNodeId);
     if (!node) return [];
     const concepts = getSdaConceptsForNode(node);
     const count = concepts.length;
-    const radius = node.anchorRefs.length >= 7 ? 220 : 186;
+    const radius = node.anchorRefs.length >= 7 ? 310 : 255;
     return concepts.map((concept, idx) => {
       // Offset angles cleanly between scripture satellites so zero labels collide
       const angle = -Math.PI / 4 + (idx / count) * (Math.PI * 2);
@@ -262,7 +262,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     const node = activeSpec.nodes.find((n) => n.id === focusedNodeId);
     if (!node || !node.anchorRefs || node.anchorRefs.length === 0) return [];
     const count = node.anchorRefs.length;
-    const radius = count >= 7 ? 152 : count >= 5 ? 136 : count >= 4 ? 124 : 108;
+    const radius = count >= 7 ? 195 : count >= 5 ? 172 : count >= 4 ? 156 : 138;
     return node.anchorRefs.map((ref, idx) => {
       const angle =
         count >= 4
@@ -308,8 +308,8 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
 
   const handleWheelZoom = (e: React.WheelEvent<SVGSVGElement>) => {
     e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.12 : -0.12;
-    setZoom((z) => Math.min(2.2, Math.max(0.55, Number((z + delta).toFixed(2)))));
+    const delta = e.deltaY < 0 ? 0.14 : -0.14;
+    setZoom((z) => Math.min(2.6, Math.max(0.4, Number((z + delta).toFixed(2)))));
   };
 
   const handlePointerDownCanvas = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -599,7 +599,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
               </div>
 
               <svg
-                viewBox="-140 -90 1280 800"
+                viewBox="-440 -360 1880 1420"
                 preserveAspectRatio="xMidYMid meet"
                 onWheel={handleWheelZoom}
                 onPointerDown={handlePointerDownCanvas}
@@ -636,10 +636,10 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                   transform={`translate(${500 + pan.x}, ${300 + pan.y}) scale(${zoom}) translate(-500, -300)`}
                   style={{ transition: isPanning ? "none" : "transform 340ms cubic-bezier(0.22, 1, 0.36, 1)" }}
                 >
-                  {/* Concentric astrolabe rings */}
-                  <circle cx="500" cy="300" r="185" fill="none" stroke="#D4AF37" strokeOpacity="0.12" strokeDasharray="4 6" />
-                  <circle cx="500" cy="300" r="345" fill="none" stroke="#D4AF37" strokeOpacity="0.09" strokeDasharray="3 8" />
-                  <circle cx="500" cy="300" r="515" fill="none" stroke="#D4AF37" strokeOpacity="0.07" strokeDasharray="2 10" />
+                  {/* Concentric astrolabe rings matching the wide galactic expanse */}
+                  <circle cx="500" cy="300" r="290" fill="none" stroke="#D4AF37" strokeOpacity="0.12" strokeDasharray="5 8" />
+                  <circle cx="500" cy="300" r="520" fill="none" stroke="#D4AF37" strokeOpacity="0.09" strokeDasharray="4 10" />
+                  <circle cx="500" cy="300" r="760" fill="none" stroke="#D4AF37" strokeOpacity="0.07" strokeDasharray="3 12" />
 
                   {/* 1. Doctrine-to-Doctrine Connectors */}
                   {doctrineEdges
