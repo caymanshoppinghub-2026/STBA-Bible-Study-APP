@@ -34,6 +34,7 @@ import {
   getSdaConceptsForNode
 } from "../../data/doctrineBlueprintGraph";
 import { DEFAULT_DOCTRINE_TRACKS } from "../../data/doctrineTracksDb";
+import { ArchitecturalBlueprintView } from "./ArchitecturalBlueprintView";
 
 export type BlueprintStage = "overview" | "constellation" | "blueprint";
 
@@ -323,12 +324,13 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     });
   }, [activeSpec, focusedNodeId, focusStep, liveKjvCache]);
 
-  // Lock body scroll & allow ESC to exit dedicated full-screen Stage 2 constellation
+  // Lock body scroll in dedicated full-screen Stage 2 & Stage 3 overlays; allow ESC in Stage 2
   React.useEffect(() => {
-    if (stage !== "constellation") return;
+    if (stage !== "constellation" && stage !== "blueprint") return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKeyDown = (e: KeyboardEvent) => {
+      if (stage !== "constellation") return;
       if (e.key === "Escape") {
         if (previewScripture) {
           setPreviewScripture(null);
@@ -1134,9 +1136,31 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
         )
       : null;
 
+  // Dedicated Full-Screen Stage 3 Architectural Blueprint Portal (rendered outside AnimatePresence so portals mount cleanly)
+  const fullScreenBlueprintOverlay =
+    stage === "blueprint" && typeof document !== "undefined"
+      ? createPortal(
+          <ArchitecturalBlueprintView
+            node={focusedNode}
+            trackTitle={activeSpec.shortTitle}
+            onBackToConstellation={() => {
+              setStage("constellation");
+              setBreadcrumbPath([activeSpec.shortTitle, focusedNode.label]);
+            }}
+            onExitToOverview={() => {
+              setStage("overview");
+              setBreadcrumbPath([activeSpec.shortTitle]);
+            }}
+            onLaunchBibleStudy={onLaunchBibleStudy}
+          />,
+          document.body
+        )
+      : null;
+
   return (
     <>
       {fullScreenConstellationOverlay}
+      {fullScreenBlueprintOverlay}
       <div
       className="relative rounded-2xl overflow-hidden border border-[#D4AF37]/30 shadow-[0_24px_70px_rgba(4,10,24,0.65)] text-[#F4EFE4]"
       style={{
@@ -1399,89 +1423,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                 </motion.div>
               )}
 
-              {/* Stage 2 renders via fullScreenConstellationOverlay outside AnimatePresence */}
-
-              {/* ===================================================================== */}
-              {/* STAGE 3: STRUCTURED ARCHITECTURAL BLUEPRINT (FOUNDATION FOR PHASE 2)  */}
-              {/* ===================================================================== */}
-              {stage === "blueprint" && (
-                <motion.div
-                  key={`blueprint-${selectedTrackId}-${focusedNode.id}`}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  transition={{ duration: 0.25 }}
-                  className="space-y-6"
-                >
-                  {/* Gold-Framed Doctrine Header Banner */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#0A1A36]/90 border border-[#E5C158]/45">
-                    <div>
-                      <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#E5C158]">
-                        Architectural Blueprint • {activeSpec.shortTitle}
-                      </span>
-                      <h2 className="font-serif text-xl sm:text-2xl font-bold uppercase tracking-wide text-[#FDF0BE] mt-0.5">
-                        {focusedNode.label}
-                      </h2>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setStage("constellation")}
-                        className="px-3.5 py-2 rounded-lg text-xs font-semibold border border-[#D4AF37]/30 text-[#CFD9EC] hover:bg-white/5 cursor-pointer"
-                      >
-                        ← Constellation Map
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onLaunchBibleStudy(focusedNode.anchorRefs[0] || activeSpec.primaryPassage, focusedNode.label)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-[#081326] bg-[#E5C158] hover:bg-[#F3D77D] transition-colors cursor-pointer"
-                      >
-                        <BookOpen className="w-3.5 h-3.5" />
-                        <span>Study in Split Reader</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 3-Column Architectural Pillar Preview (Expanded in Phase 2 & 3) */}
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    {activeTrackDb.outline.sections.slice(0, 3).map((sec, idx) => (
-                      <div
-                        key={idx}
-                        className="flex flex-col justify-between p-5 rounded-xl bg-[#08162E]/85 border border-[#D4AF37]/30 space-y-4"
-                      >
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between gap-2 border-b border-[#D4AF37]/20 pb-2">
-                            <span className="text-[10px] font-mono uppercase tracking-wider text-[#E5C158]">
-                              Pillar 0{idx + 1}
-                            </span>
-                            <CheckCircle2 className="w-4 h-4 text-[#D4AF37]/60" />
-                          </div>
-                          <h3 className="font-serif text-base font-bold text-[#FDF0BE]">{sec.title}</h3>
-                          <p className="text-sm text-[#D6DFEF] leading-relaxed">{sec.summary}</p>
-                        </div>
-
-                        <div className="p-3 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/35 space-y-1.5">
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#F3D77D] block">
-                            Highlighted Anchor Verses
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {sec.key_references.map((ref) => (
-                              <button
-                                key={ref}
-                                type="button"
-                                onClick={() => onLaunchBibleStudy(ref, sec.title)}
-                                className="text-xs font-mono px-2 py-0.5 rounded bg-[#071328] border border-[#D4AF37]/40 text-[#FDF0BE] hover:bg-[#D4AF37]/25 cursor-pointer"
-                              >
-                                {ref}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
+              {/* Stage 2 & Stage 3 render via full-screen portals outside AnimatePresence */}
             </AnimatePresence>
           </div>
         </div>
