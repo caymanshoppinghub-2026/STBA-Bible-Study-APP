@@ -13,6 +13,16 @@ export interface ConstellationScriptureNode {
   y: number; // 0..600 SVG coordinate space
 }
 
+export interface ConstellationPortalNode {
+  id: string;
+  label: string;
+  targetTrackId: string;
+  fromNodeId: string;
+  relationTag: string;
+  x: number;
+  y: number;
+}
+
 export interface ConstellationDoctrineNode {
   id: string;
   label: string;
@@ -24,6 +34,7 @@ export interface ConstellationDoctrineNode {
   isHub?: boolean;
   connectedTo: string[];
   anchorRefs: string[];
+  beliefsIncluded?: string[]; // Optional list of Fundamental Beliefs in this cluster
 }
 
 export interface TrackBlueprintSpec {
@@ -37,6 +48,7 @@ export interface TrackBlueprintSpec {
   pillarChips: [BlueprintPillarChip, BlueprintPillarChip, BlueprintPillarChip];
   nodes: ConstellationDoctrineNode[];
   scriptureNodes: ConstellationScriptureNode[];
+  portalNodes: ConstellationPortalNode[];
 }
 
 export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
@@ -58,69 +70,87 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
       {
         id: "fb-hub",
         label: "Sola Scriptura",
-        shortTag: "Core Pillar",
-        summary: "All Scripture is God-breathed—the infallible revelation of His will, the standard of character, and the test of all doctrine.",
+        shortTag: "Core Pillar • #1",
+        summary: "All Scripture is God-breathed—the infallible revelation of His will, the standard of character, and the unifying foundation of all 28 Fundamental Beliefs.",
         sectionIndex: 0,
         x: 500,
         y: 300,
         isHub: true,
-        connectedTo: ["fb-trinity", "fb-creation", "fb-salvation", "fb-law", "fb-sanctuary"],
-        anchorRefs: ["2 Timothy 3:16", "2 Peter 1:21"]
+        connectedTo: ["fb-godhead", "fb-humanity", "fb-salvation", "fb-church", "fb-life", "fb-lastthings"],
+        anchorRefs: ["2 Timothy 3:16", "2 Peter 1:21"],
+        beliefsIncluded: ["#1 The Holy Scriptures"]
       },
       {
-        id: "fb-trinity",
-        label: "The Godhead",
-        shortTag: "Fundamental #2",
-        summary: "One God: Father, Son, and Holy Spirit—a unity of three co-eternal Persons united in infinite love and redemptive purpose.",
+        id: "fb-godhead",
+        label: "Doctrine of God",
+        shortTag: "Beliefs #2–5",
+        summary: "One God—Father, Son, and Holy Spirit—a unity of three co-eternal Persons united in infinite love, sovereignty, and redemptive purpose.",
         sectionIndex: 1,
-        x: 305,
-        y: 165,
-        connectedTo: ["fb-hub", "fb-creation", "fb-salvation"],
-        anchorRefs: ["Deuteronomy 6:4", "Matthew 28:19"]
+        x: 315,
+        y: 155,
+        connectedTo: ["fb-hub", "fb-humanity", "fb-salvation"],
+        anchorRefs: ["Deuteronomy 6:4", "Matthew 28:19"],
+        beliefsIncluded: ["#2 The Trinity", "#3 God the Father", "#4 God the Son", "#5 God the Holy Spirit"]
       },
       {
-        id: "fb-creation",
-        label: "Creation & Image",
-        shortTag: "Fundamental #6",
-        summary: "God created the heavens and the earth in six literal days, forming humanity in His own image and crowning the week with the Sabbath.",
+        id: "fb-humanity",
+        label: "Creation & Humanity",
+        shortTag: "Beliefs #6–7",
+        summary: "God created the heavens and earth in six literal days, forming humanity in His image with moral freedom—now in need of restoration from sin.",
         sectionIndex: 2,
-        x: 700,
-        y: 165,
-        connectedTo: ["fb-hub", "fb-trinity", "fb-law"],
-        anchorRefs: ["Genesis 1:27", "Exodus 20:11"]
+        x: 685,
+        y: 155,
+        connectedTo: ["fb-hub", "fb-godhead", "fb-life"],
+        anchorRefs: ["Genesis 1:27", "Exodus 20:11"],
+        beliefsIncluded: ["#6 Creation", "#7 The Nature of Humanity"]
       },
       {
         id: "fb-salvation",
-        label: "Righteousness by Faith",
-        shortTag: "Fundamental #10",
-        summary: "In infinite love and mercy God made Christ to be sin for us, that in Him we might be made the righteousness of God through faith.",
+        label: "Doctrine of Salvation",
+        shortTag: "Beliefs #8–10",
+        summary: "In the cosmic Great Controversy, Christ's life, death, and resurrection provide complete justification, regeneration, and growing victory by faith.",
         sectionIndex: 0,
-        x: 250,
-        y: 385,
-        connectedTo: ["fb-hub", "fb-trinity", "fb-sanctuary"],
-        anchorRefs: ["Romans 1:16", "2 Corinthians 5:17"]
+        x: 245,
+        y: 360,
+        connectedTo: ["fb-hub", "fb-godhead", "fb-church"],
+        anchorRefs: ["Romans 1:16", "2 Corinthians 5:17"],
+        beliefsIncluded: ["#8 The Great Controversy", "#9 Life, Death & Resurrection of Christ", "#10 Experience of Salvation"]
       },
       {
-        id: "fb-law",
-        label: "Law & Sabbath",
-        shortTag: "Fundamental #19-20",
-        summary: "The great principles of God's law are embodied in the Ten Commandments and exemplified in the life of Christ, sealed by the seventh-day Sabbath.",
-        sectionIndex: 2,
-        x: 745,
-        y: 380,
-        connectedTo: ["fb-hub", "fb-creation", "fb-sanctuary"],
-        anchorRefs: ["Exodus 20:8-11", "Romans 3:31"]
-      },
-      {
-        id: "fb-sanctuary",
-        label: "Christ's Ministry",
-        shortTag: "Fundamental #24",
-        summary: "There is a sanctuary in heaven, the true tabernacle which the Lord pitched, where Christ ministers on our behalf as High Priest.",
+        id: "fb-church",
+        label: "Church & Mission",
+        shortTag: "Beliefs #11–18",
+        summary: "The body of Christ called out to proclaim the everlasting gospel, united in baptism, Lord's Supper, spiritual gifts, and the Spirit of Prophecy.",
         sectionIndex: 1,
-        x: 500,
-        y: 480,
-        connectedTo: ["fb-hub", "fb-salvation", "fb-law"],
-        anchorRefs: ["Hebrews 8:1-2", "Daniel 8:14"]
+        x: 380,
+        y: 475,
+        connectedTo: ["fb-hub", "fb-salvation", "fb-lastthings"],
+        anchorRefs: ["Revelation 12:17", "Ephesians 4:11-13"],
+        beliefsIncluded: ["#11 Growing in Christ", "#12 The Church", "#13 The Remnant & Its Mission", "#14 Unity in the Body", "#15 Baptism", "#16 The Lord's Supper", "#17 Spiritual Gifts", "#18 Gift of Prophecy"]
+      },
+      {
+        id: "fb-life",
+        label: "Law, Sabbath & Life",
+        shortTag: "Beliefs #19–23",
+        summary: "God's immutable Ten Commandments, the seventh-day Sabbath rest, faithful stewardship, healthful Christian living, and sacred marriage and family.",
+        sectionIndex: 2,
+        x: 755,
+        y: 360,
+        connectedTo: ["fb-hub", "fb-humanity", "fb-lastthings"],
+        anchorRefs: ["Exodus 20:8-11", "Romans 3:31"],
+        beliefsIncluded: ["#19 The Law of God", "#20 The Sabbath", "#21 Stewardship", "#22 Christian Behavior", "#23 Marriage and the Family"]
+      },
+      {
+        id: "fb-lastthings",
+        label: "Sanctuary & Last Things",
+        shortTag: "Beliefs #24–28",
+        summary: "Christ's heavenly sanctuary ministry, His literal Second Coming, sleep in death until the resurrection, the millennium, and the New Earth.",
+        sectionIndex: 1,
+        x: 620,
+        y: 475,
+        connectedTo: ["fb-hub", "fb-church", "fb-life"],
+        anchorRefs: ["Hebrews 8:1-2", "Daniel 8:14"],
+        beliefsIncluded: ["#24 Christ's Ministry in the Heavenly Sanctuary", "#25 The Second Coming", "#26 Death and Resurrection", "#27 The Millennium & End of Sin", "#28 The New Earth"]
       }
     ],
     scriptureNodes: [
@@ -128,17 +158,17 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         id: "fb-s1",
         reference: "2 Timothy 3:16",
         verseText: "All scripture is given by inspiration of God, and is profitable for doctrine, for reproof, for correction, for instruction in righteousness.",
-        parentNodeId: "fb-trinity",
-        x: 155,
-        y: 110
+        parentNodeId: "fb-godhead",
+        x: 165,
+        y: 95
       },
       {
         id: "fb-s2",
         reference: "Genesis 1:27",
         verseText: "So God created man in his own image, in the image of God created he him; male and female created he them.",
-        parentNodeId: "fb-creation",
-        x: 845,
-        y: 110
+        parentNodeId: "fb-humanity",
+        x: 835,
+        y: 95
       },
       {
         id: "fb-s3",
@@ -146,23 +176,52 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         verseText: "For I am not ashamed of the gospel of Christ: for it is the power of God unto salvation to every one that believeth.",
         parentNodeId: "fb-salvation",
         x: 110,
-        y: 445
+        y: 325
       },
       {
         id: "fb-s4",
         reference: "Exodus 20:11",
         verseText: "For in six days the LORD made heaven and earth, the sea, and all that in them is, and rested the seventh day: wherefore the LORD blessed the sabbath day, and hallowed it.",
-        parentNodeId: "fb-law",
-        x: 880,
-        y: 455
+        parentNodeId: "fb-life",
+        x: 890,
+        y: 325
       },
       {
         id: "fb-s5",
         reference: "Hebrews 8:1-2",
         verseText: "We have such an high priest, who is set on the right hand of the throne of the Majesty in the heavens; A minister of the sanctuary, and of the true tabernacle.",
-        parentNodeId: "fb-sanctuary",
-        x: 660,
-        y: 530
+        parentNodeId: "fb-lastthings",
+        x: 755,
+        y: 535
+      }
+    ],
+    portalNodes: [
+      {
+        id: "fb-p-sanctuary",
+        label: "Heavenly Sanctuary",
+        targetTrackId: "sanctuary-doctrine",
+        fromNodeId: "fb-lastthings",
+        relationTag: "Belief #24 Portal",
+        x: 500,
+        y: 555
+      },
+      {
+        id: "fb-p-angels",
+        label: "Three Angels' Messages",
+        targetTrackId: "three-angels",
+        fromNodeId: "fb-church",
+        relationTag: "Remnant Mission",
+        x: 195,
+        y: 520
+      },
+      {
+        id: "fb-p-covenant",
+        label: "Covenant Foundations",
+        targetTrackId: "priority-doctrines",
+        fromNodeId: "fb-life",
+        relationTag: "Law & Sabbath",
+        x: 880,
+        y: 470
       }
     ]
   },
@@ -283,6 +342,35 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         x: 685,
         y: 530
       }
+    ],
+    portalNodes: [
+      {
+        id: "ta-p-sanctuary",
+        label: "Heavenly Sanctuary",
+        targetTrackId: "sanctuary-doctrine",
+        fromNodeId: "ta-judgment",
+        relationTag: "Hour of Judgment",
+        x: 500,
+        y: 72
+      },
+      {
+        id: "ta-p-beliefs",
+        label: "28 Fundamental Beliefs",
+        targetTrackId: "fundamental-beliefs",
+        fromNodeId: "ta-remnant",
+        relationTag: "Full System",
+        x: 300,
+        y: 535
+      },
+      {
+        id: "ta-p-covenant",
+        label: "Covenant Foundations",
+        targetTrackId: "priority-doctrines",
+        fromNodeId: "ta-seal",
+        relationTag: "Sabbath Seal",
+        x: 895,
+        y: 440
+      }
     ]
   },
 
@@ -401,6 +489,35 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         parentNodeId: "sn-ark",
         x: 685,
         y: 530
+      }
+    ],
+    portalNodes: [
+      {
+        id: "sn-p-angels",
+        label: "Three Angels' Messages",
+        targetTrackId: "three-angels",
+        fromNodeId: "sn-2300",
+        relationTag: "1844 Proclamation",
+        x: 500,
+        y: 72
+      },
+      {
+        id: "sn-p-beliefs",
+        label: "28 Fundamental Beliefs",
+        targetTrackId: "fundamental-beliefs",
+        fromNodeId: "sn-ark",
+        relationTag: "Core System",
+        x: 310,
+        y: 535
+      },
+      {
+        id: "sn-p-scrolls",
+        label: "Sacred Scrolls Exegesis",
+        targetTrackId: "book-by-book",
+        fromNodeId: "sn-mostholy",
+        relationTag: "Daniel & Hebrews",
+        x: 895,
+        y: 445
       }
     ]
   },
@@ -521,6 +638,35 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         x: 685,
         y: 530
       }
+    ],
+    portalNodes: [
+      {
+        id: "bb-p-sanctuary",
+        label: "Heavenly Sanctuary",
+        targetTrackId: "sanctuary-doctrine",
+        fromNodeId: "bb-hebrews",
+        relationTag: "Hebrews Blueprint",
+        x: 895,
+        y: 455
+      },
+      {
+        id: "bb-p-angels",
+        label: "Three Angels' Messages",
+        targetTrackId: "three-angels",
+        fromNodeId: "bb-revelation",
+        relationTag: "Revelation 14",
+        x: 310,
+        y: 535
+      },
+      {
+        id: "bb-p-beliefs",
+        label: "28 Fundamental Beliefs",
+        targetTrackId: "fundamental-beliefs",
+        fromNodeId: "bb-daniel",
+        relationTag: "Systematic Truth",
+        x: 500,
+        y: 72
+      }
     ]
   },
 
@@ -640,6 +786,35 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         x: 685,
         y: 530
       }
+    ],
+    portalNodes: [
+      {
+        id: "pd-p-beliefs",
+        label: "28 Fundamental Beliefs",
+        targetTrackId: "fundamental-beliefs",
+        fromNodeId: "pd-grace",
+        relationTag: "Full Pillar Map",
+        x: 500,
+        y: 72
+      },
+      {
+        id: "pd-p-angels",
+        label: "Three Angels' Messages",
+        targetTrackId: "three-angels",
+        fromNodeId: "pd-sabbath",
+        relationTag: "Creator's Seal",
+        x: 895,
+        y: 300
+      },
+      {
+        id: "pd-p-zoom",
+        label: "Zoom Bible Studies",
+        targetTrackId: "zoom-studies",
+        fromNodeId: "pd-advent",
+        relationTag: "Small-Group Guide",
+        x: 310,
+        y: 535
+      }
     ]
   },
 
@@ -739,6 +914,35 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         parentNodeId: "zm-discipleship",
         x: 145,
         y: 475
+      }
+    ],
+    portalNodes: [
+      {
+        id: "zm-p-beliefs",
+        label: "28 Fundamental Beliefs",
+        targetTrackId: "fundamental-beliefs",
+        fromNodeId: "zm-prophecy",
+        relationTag: "Doctrinal Core",
+        x: 500,
+        y: 72
+      },
+      {
+        id: "zm-p-sanctuary",
+        label: "Heavenly Sanctuary",
+        targetTrackId: "sanctuary-doctrine",
+        fromNodeId: "zm-sanctuary",
+        relationTag: "Tabernacle Blueprint",
+        x: 880,
+        y: 460
+      },
+      {
+        id: "zm-p-covenant",
+        label: "Covenant Foundations",
+        targetTrackId: "priority-doctrines",
+        fromNodeId: "zm-gospel",
+        relationTag: "Grace & Obedience",
+        x: 500,
+        y: 540
       }
     ]
   }

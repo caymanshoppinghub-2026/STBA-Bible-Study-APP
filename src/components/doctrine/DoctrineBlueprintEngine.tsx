@@ -15,14 +15,20 @@ import {
   ExternalLink,
   X,
   CheckCircle2,
-  Bookmark
+  Bookmark,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Maximize2,
+  Minimize2
 } from "lucide-react";
 import {
   TRACK_BLUEPRINTS,
   TRACK_BLUEPRINT_ORDER,
   BlueprintPillarChip,
   ConstellationDoctrineNode,
-  ConstellationScriptureNode
+  ConstellationScriptureNode,
+  ConstellationPortalNode
 } from "../../data/doctrineBlueprintGraph";
 import { DEFAULT_DOCTRINE_TRACKS } from "../../data/doctrineTracksDb";
 
@@ -122,19 +128,66 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
   const activeSpec = TRACK_BLUEPRINTS[selectedTrackId] || TRACK_BLUEPRINTS["fundamental-beliefs"];
   const activeTrackDb = DEFAULT_DOCTRINE_TRACKS[selectedTrackId] || DEFAULT_DOCTRINE_TRACKS["fundamental-beliefs"];
 
-  // Stage 2 Interactive Constellation state
+  // Stage 2 Interactive Constellation state (Progressive Revelation + Pan & Zoom + Portals)
   const [focusedNodeId, setFocusedNodeId] = useState<string>(activeSpec.nodes[0]?.id || "");
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [previewScripture, setPreviewScripture] = useState<ConstellationScriptureNode | null>(null);
   const [breadcrumbPath, setBreadcrumbPath] = useState<string[]>([activeSpec.shortTitle]);
+  const [constellationExpanded, setConstellationExpanded] = useState<boolean>(false);
+  const [zoom, setZoom] = useState<number>(1);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const panStartRef = React.useRef<{ x: number; y: number; origX: number; origY: number } | null>(null);
 
-  // Keep focused node synced when track changes
+  // Keep focused node & progressive revelation synced when track changes
   React.useEffect(() => {
     const hub = activeSpec.nodes.find((n) => n.isHub) || activeSpec.nodes[0];
     setFocusedNodeId(hub?.id || "");
     setPreviewScripture(null);
-    setBreadcrumbPath([activeSpec.shortTitle]);
+    setConstellationExpanded(false);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setBreadcrumbPath((prev) => (prev.length > 1 && stage === "constellation" ? [activeSpec.shortTitle, hub?.label || ""] : [activeSpec.shortTitle]));
   }, [selectedTrackId]);
+
+  const handleResetViewport = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const handleWheelZoom = (e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.12 : -0.12;
+    setZoom((z) => Math.min(2.2, Math.max(0.65, Number((z + delta).toFixed(2)))));
+  };
+
+  const handlePointerDownCanvas = (e: React.PointerEvent<SVGSVGElement>) => {
+    // Only pan when dragging background (not clicking a node)
+    if ((e.target as HTMLElement).closest("[data-constellation-node='true']")) return;
+    setIsPanning(true);
+    panStartRef.current = { x: e.clientX, y: e.clientY, origX: pan.x, origY: pan.y };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const handlePointerMoveCanvas = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!isPanning || !panStartRef.current) return;
+    const dx = (e.clientX - panStartRef.current.x) / zoom;
+    const dy = (e.clientY - panStartRef.current.y) / zoom;
+    setPan({ x: panStartRef.current.origX + dx, y: panStartRef.current.origY + dy });
+  };
+
+  const handlePointerUpCanvas = () => {
+    setIsPanning(false);
+    panStartRef.current = null;
+  };
+
+  const handlePortalTransition = (portal: ConstellationPortalNode) => {
+    setPreviewScripture(null);
+    onSelectTrack(portal.targetTrackId);
+    setStage("constellation");
+  };
 
   const focusedNode: ConstellationDoctrineNode = useMemo(() => {
     return activeSpec.nodes.find((n) => n.id === focusedNodeId) || activeSpec.nodes[0];
@@ -165,12 +218,22 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
   const handleEnterConstellation = () => {
     const hub = activeSpec.nodes.find((n) => n.isHub) || activeSpec.nodes[0];
     setFocusedNodeId(hub.id);
+    setConstellationExpanded(false);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
     setBreadcrumbPath([activeSpec.shortTitle, hub.label]);
     setStage("constellation");
   };
 
   const handleConstellationNodeClick = (node: ConstellationDoctrineNode) => {
     setPreviewScripture(null);
+    // Progressive Revelation: first click on central core pillar radiates the tailored network outward!
+    if (node.isHub && !constellationExpanded) {
+      setConstellationExpanded(true);
+      setFocusedNodeId(node.id);
+      setBreadcrumbPath([activeSpec.shortTitle, node.label]);
+      return;
+    }
     if (focusedNodeId === node.id) {
       // Second click on already-focused node drills smoothly into Stage 3 Architectural View
       setBreadcrumbPath([activeSpec.shortTitle, node.label, "Architectural Blueprint"]);
@@ -484,16 +547,67 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                   transition={{ duration: 0.25 }}
                   className="flex-1 flex flex-col gap-4"
                 >
-                  {/* Constellation SVG Viewport */}
+                  {/* Constellation SVG Viewport with Progressive Revelation, Pan/Zoom & Cross-Doctrine Portals */}
                   <div className="relative rounded-2xl border border-[#D4AF37]/25 bg-[#050D1E]/80 overflow-hidden">
-                    <div className="absolute top-3 left-4 z-10 flex items-center gap-2 text-[11px] font-mono text-[#9FB0CD]">
-                      <Sparkles className="w-3.5 h-3.5 text-[#E5C158]" />
-                      <span>Click a doctrine node to illuminate its gold paths • Click again to open its Architectural Blueprint</span>
+                    {/* Top Left Progressive Revelation Hint */}
+                    <div className="absolute top-3 left-4 z-10 flex items-center gap-2 text-[11px] font-mono text-[#B7C5DE] bg-[#071328]/80 px-3 py-1.5 rounded-full border border-[#D4AF37]/25 backdrop-blur-xs">
+                      <Sparkles className="w-3.5 h-3.5 text-[#E5C158] shrink-0" />
+                      <span>
+                        {!constellationExpanded
+                          ? `Click ${activeSpec.nodes[0]?.label || "Core Pillar"} to radiate interconnected truths outward`
+                          : "Drag to pan • Scroll to zoom • Click teal portals to cross into linked doctrines"}
+                      </span>
+                    </div>
+
+                    {/* Top Right Pan & Zoom + Progressive Expand Controls */}
+                    <div className="absolute top-3 right-3 z-20 flex items-center gap-1 bg-[#071328]/90 border border-[#D4AF37]/30 rounded-xl p-1 shadow-lg backdrop-blur-md">
+                      <button
+                        type="button"
+                        onClick={() => setConstellationExpanded((v) => !v)}
+                        title={constellationExpanded ? "Collapse to Core Pillar" : "Reveal Full Network"}
+                        className="px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-semibold text-[#F6E29B] hover:bg-[#D4AF37]/20 transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        {constellationExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                        <span className="hidden sm:inline">{constellationExpanded ? "Core" : "Reveal"}</span>
+                      </button>
+                      <div className="w-px h-4 bg-[#D4AF37]/25" />
+                      <button
+                        type="button"
+                        onClick={() => setZoom((z) => Math.min(2.2, Number((z + 0.2).toFixed(2))))}
+                        title="Zoom In"
+                        className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
+                      >
+                        <ZoomIn className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-[10px] font-mono text-[#9FB0CD] px-1 min-w-[36px] text-center">
+                        {Math.round(zoom * 100)}%
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setZoom((z) => Math.max(0.65, Number((z - 0.2).toFixed(2))))}
+                        title="Zoom Out"
+                        className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
+                      >
+                        <ZoomOut className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetViewport}
+                        title="Reset Pan & Zoom"
+                        className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
                     </div>
 
                     <svg
-                      viewBox="0 0 1000 580"
-                      className="w-full h-[410px] md:h-[460px] select-none"
+                      viewBox="0 0 1000 600"
+                      onWheel={handleWheelZoom}
+                      onPointerDown={handlePointerDownCanvas}
+                      onPointerMove={handlePointerMoveCanvas}
+                      onPointerUp={handlePointerUpCanvas}
+                      onPointerLeave={handlePointerUpCanvas}
+                      className={`w-full h-[430px] md:h-[490px] select-none touch-none ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
                       role="img"
                       aria-label={`${activeSpec.shortTitle} Interactive Doctrine Constellation`}
                     >
@@ -504,6 +618,11 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                           <stop offset="75%" stopColor="#C9973A" stopOpacity="0.28" />
                           <stop offset="100%" stopColor="#C9973A" stopOpacity="0" />
                         </radialGradient>
+                        <radialGradient id="portalGlow" cx="50%" cy="50%" r="50%">
+                          <stop offset="0%" stopColor="#99F6E4" stopOpacity="0.95" />
+                          <stop offset="50%" stopColor="#2DD4BF" stopOpacity="0.45" />
+                          <stop offset="100%" stopColor="#2DD4BF" stopOpacity="0" />
+                        </radialGradient>
                         <filter id="goldSoftGlow" x="-40%" y="-40%" width="180%" height="180%">
                           <feGaussianBlur stdDeviation="4" result="blur" />
                           <feMerge>
@@ -513,143 +632,237 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                         </filter>
                       </defs>
 
-                      {/* Subtle concentric astrolabe rings */}
-                      <circle cx="500" cy="300" r="145" fill="none" stroke="#D4AF37" strokeOpacity="0.09" strokeDasharray="4 6" />
-                      <circle cx="500" cy="300" r="255" fill="none" stroke="#D4AF37" strokeOpacity="0.07" strokeDasharray="3 8" />
+                      {/* Interactive Pan & Zoom Group */}
+                      <g transform={`translate(${500 + pan.x}, ${300 + pan.y}) scale(${zoom}) translate(-500, -300)`}>
+                        {/* Subtle concentric astrolabe rings */}
+                        <circle cx="500" cy="300" r="145" fill="none" stroke="#D4AF37" strokeOpacity="0.1" strokeDasharray="4 6" />
+                        <circle cx="500" cy="300" r="255" fill="none" stroke="#D4AF37" strokeOpacity="0.08" strokeDasharray="3 8" />
 
-                      {/* 1. Doctrine-to-Doctrine Connectors with Gold Path Highlighting */}
-                      {doctrineEdges.map(({ from, to, key }) => {
-                        const highlighted = isEdgeHighlighted(from.id, to.id);
-                        return (
-                          <line
-                            key={key}
-                            x1={from.x}
-                            y1={from.y}
-                            x2={to.x}
-                            y2={to.y}
-                            stroke={highlighted ? "#F3D77D" : "#5D7499"}
-                            strokeWidth={highlighted ? 2.4 : 1.1}
-                            strokeOpacity={highlighted ? 0.95 : 0.35}
-                            filter={highlighted ? "url(#goldSoftGlow)" : undefined}
-                            style={{ transition: "all 220ms ease" }}
-                          />
-                        );
-                      })}
+                        {/* 1. Doctrine-to-Doctrine Connectors (only revealed after Progressive Revelation expansion) */}
+                        {constellationExpanded &&
+                          doctrineEdges.map(({ from, to, key }) => {
+                            const highlighted = isEdgeHighlighted(from.id, to.id);
+                            return (
+                              <motion.line
+                                key={key}
+                                initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
+                                animate={{ x1: from.x, y1: from.y, x2: to.x, y2: to.y, opacity: highlighted ? 0.95 : 0.38 }}
+                                transition={{ type: "spring", stiffness: 120, damping: 18 }}
+                                stroke={highlighted ? "#F3D77D" : "#5D7499"}
+                                strokeWidth={highlighted ? 2.4 : 1.1}
+                                filter={highlighted ? "url(#goldSoftGlow)" : undefined}
+                              />
+                            );
+                          })}
 
-                      {/* 2. Outer Scripture Anchor Connectors */}
-                      {activeSpec.scriptureNodes.map((sn) => {
-                        const parent = activeSpec.nodes.find((n) => n.id === sn.parentNodeId);
-                        if (!parent) return null;
-                        const highlighted = activeHighlightId === parent.id || previewScripture?.id === sn.id;
-                        return (
-                          <line
-                            key={`edge-${sn.id}`}
-                            x1={parent.x}
-                            y1={parent.y}
-                            x2={sn.x}
-                            y2={sn.y}
-                            stroke={highlighted ? "#E5C158" : "#4A6187"}
-                            strokeWidth={highlighted ? 1.8 : 1}
-                            strokeDasharray="4 4"
-                            strokeOpacity={highlighted ? 0.9 : 0.35}
-                            style={{ transition: "all 220ms ease" }}
-                          />
-                        );
-                      })}
+                        {/* 2. Outer Scripture Anchor Connectors */}
+                        {constellationExpanded &&
+                          activeSpec.scriptureNodes.map((sn) => {
+                            const parent = activeSpec.nodes.find((n) => n.id === sn.parentNodeId);
+                            if (!parent) return null;
+                            const highlighted = activeHighlightId === parent.id || previewScripture?.id === sn.id;
+                            return (
+                              <motion.line
+                                key={`edge-${sn.id}`}
+                                initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
+                                animate={{ x1: parent.x, y1: parent.y, x2: sn.x, y2: sn.y, opacity: highlighted ? 0.92 : 0.35 }}
+                                transition={{ type: "spring", stiffness: 110, damping: 18, delay: 0.08 }}
+                                stroke={highlighted ? "#E5C158" : "#4A6187"}
+                                strokeWidth={highlighted ? 1.8 : 1}
+                                strokeDasharray="4 4"
+                              />
+                            );
+                          })}
 
-                      {/* 3. Outer Scripture Anchor Nodes (Click to preview KJV verse inline) */}
-                      {activeSpec.scriptureNodes.map((sn) => {
-                        const isSelectedRef = previewScripture?.id === sn.id;
-                        const parentHighlighted = activeHighlightId === sn.parentNodeId;
-                        return (
-                          <g
-                            key={sn.id}
-                            onClick={() => setPreviewScripture(sn)}
-                            className="cursor-pointer"
-                          >
-                            <circle
-                              cx={sn.x}
-                              cy={sn.y}
-                              r={isSelectedRef ? 11 : 7}
-                              fill={isSelectedRef || parentHighlighted ? "#E5C158" : "#15294A"}
-                              stroke="#F3D77D"
-                              strokeWidth={isSelectedRef ? 2.2 : 1.2}
-                              filter={isSelectedRef ? "url(#goldSoftGlow)" : undefined}
-                            />
-                            <text
-                              x={sn.x}
-                              y={sn.y + 24}
-                              textAnchor="middle"
-                              fill={isSelectedRef || parentHighlighted ? "#FDF0BE" : "#A7B8D4"}
-                              fontSize="12"
-                              fontFamily="monospace"
-                              fontWeight={isSelectedRef ? "700" : "500"}
+                        {/* 3. Outer Perimeter Cross-Doctrine Portal Paths (Dashed Teal-Tinted Links) */}
+                        {constellationExpanded &&
+                          (activeSpec.portalNodes || []).map((portal) => {
+                            const parent = activeSpec.nodes.find((n) => n.id === portal.fromNodeId);
+                            if (!parent) return null;
+                            const highlighted = activeHighlightId === parent.id;
+                            return (
+                              <motion.line
+                                key={`portal-edge-${portal.id}`}
+                                initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
+                                animate={{ x1: parent.x, y1: parent.y, x2: portal.x, y2: portal.y, opacity: highlighted ? 0.95 : 0.55 }}
+                                transition={{ type: "spring", stiffness: 100, damping: 18, delay: 0.14 }}
+                                stroke="#2DD4BF"
+                                strokeWidth={highlighted ? 2.1 : 1.3}
+                                strokeDasharray="6 5"
+                              />
+                            );
+                          })}
+
+                        {/* 4. Outer Scripture Anchor Nodes (Click to trigger inline KJV Scripture Pop-up) */}
+                        {constellationExpanded &&
+                          activeSpec.scriptureNodes.map((sn) => {
+                            const isSelectedRef = previewScripture?.id === sn.id;
+                            const parentHighlighted = activeHighlightId === sn.parentNodeId;
+                            return (
+                              <motion.g
+                                key={sn.id}
+                                data-constellation-node="true"
+                                initial={{ x: 500 - sn.x, y: 300 - sn.y, opacity: 0, scale: 0.4 }}
+                                animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                                transition={{ type: "spring", stiffness: 120, damping: 16, delay: 0.1 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewScripture(sn);
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <circle
+                                  cx={sn.x}
+                                  cy={sn.y}
+                                  r={isSelectedRef ? 11 : 7.5}
+                                  fill={isSelectedRef || parentHighlighted ? "#E5C158" : "#15294A"}
+                                  stroke="#F3D77D"
+                                  strokeWidth={isSelectedRef ? 2.2 : 1.3}
+                                  filter={isSelectedRef ? "url(#goldSoftGlow)" : undefined}
+                                />
+                                <text
+                                  x={sn.x}
+                                  y={sn.y + 23}
+                                  textAnchor="middle"
+                                  fill={isSelectedRef || parentHighlighted ? "#FDF0BE" : "#A7B8D4"}
+                                  fontSize="11.5"
+                                  fontFamily="monospace"
+                                  fontWeight={isSelectedRef ? "700" : "500"}
+                                >
+                                  {sn.reference}
+                                </text>
+                              </motion.g>
+                            );
+                          })}
+
+                        {/* 5. Distinct Outer Perimeter Cross-Doctrine Portal Nodes */}
+                        {constellationExpanded &&
+                          (activeSpec.portalNodes || []).map((portal) => (
+                            <motion.g
+                              key={portal.id}
+                              data-constellation-node="true"
+                              initial={{ x: 500 - portal.x, y: 300 - portal.y, opacity: 0, scale: 0.4 }}
+                              animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                              transition={{ type: "spring", stiffness: 110, damping: 16, delay: 0.16 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePortalTransition(portal);
+                              }}
+                              className="cursor-pointer group"
                             >
-                              {sn.reference}
-                            </text>
-                          </g>
-                        );
-                      })}
+                              <circle cx={portal.x} cy={portal.y} r="24" fill="url(#portalGlow)" opacity="0.55" />
+                              {/* Distinct Diamond Portal Shape */}
+                              <polygon
+                                points={`${portal.x},${portal.y - 12} ${portal.x + 12},${portal.y} ${portal.x},${portal.y + 12} ${portal.x - 12},${portal.y}`}
+                                fill="#0B2A3A"
+                                stroke="#5EEAD4"
+                                strokeWidth="2"
+                              />
+                              <circle cx={portal.x} cy={portal.y} r="3.5" fill="#F3D77D" />
+                              <text
+                                x={portal.x}
+                                y={portal.y + 26}
+                                textAnchor="middle"
+                                fill="#99F6E4"
+                                fontSize="11.5"
+                                fontWeight="700"
+                              >
+                                ↗ {portal.label}
+                              </text>
+                              <text
+                                x={portal.x}
+                                y={portal.y + 39}
+                                textAnchor="middle"
+                                fill="#5EEAD4"
+                                fillOpacity="0.8"
+                                fontSize="9.5"
+                                fontFamily="monospace"
+                              >
+                                {portal.relationTag}
+                              </text>
+                            </motion.g>
+                          ))}
 
-                      {/* 4. Primary Doctrine & Central Hub Nodes */}
-                      {activeSpec.nodes.map((node) => {
-                        const isFocused = focusedNodeId === node.id;
-                        const isConnected = isNodeConnectedToHighlight(node.id);
-                        const radius = node.isHub ? 24 : isFocused ? 18 : 14;
-                        return (
-                          <g
-                            key={node.id}
-                            onClick={() => handleConstellationNodeClick(node)}
-                            onMouseEnter={() => setHoveredNodeId(node.id)}
-                            onMouseLeave={() => setHoveredNodeId(null)}
-                            className="cursor-pointer"
-                          >
-                            {/* Halo glow for hub or focused node */}
-                            {(node.isHub || isFocused) && (
+                        {/* 6. Primary Doctrine Nodes (Radiate outward upon clicking Core Pillar) & Central Core Hub */}
+                        {activeSpec.nodes.map((node) => {
+                          if (!node.isHub && !constellationExpanded) return null;
+                          const isFocused = focusedNodeId === node.id;
+                          const isConnected = isNodeConnectedToHighlight(node.id);
+                          const radius = node.isHub ? (constellationExpanded ? 24 : 32) : isFocused ? 18 : 14;
+                          return (
+                            <motion.g
+                              key={node.id}
+                              data-constellation-node="true"
+                              initial={node.isHub ? { opacity: 1, scale: 1 } : { x: 500 - node.x, y: 300 - node.y, opacity: 0, scale: 0.35 }}
+                              animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                              transition={{ type: "spring", stiffness: 130, damping: 17 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleConstellationNodeClick(node);
+                              }}
+                              onMouseEnter={() => setHoveredNodeId(node.id)}
+                              onMouseLeave={() => setHoveredNodeId(null)}
+                              className="cursor-pointer"
+                            >
+                              {/* Halo glow for hub or focused node */}
+                              {(node.isHub || isFocused) && (
+                                <circle
+                                  cx={node.x}
+                                  cy={node.y}
+                                  r={node.isHub ? (constellationExpanded ? 50 : 72) : 34}
+                                  fill="url(#hubGlow)"
+                                  opacity={isFocused ? 0.95 : 0.7}
+                                />
+                              )}
+                              {/* Pulsing ring before initial progressive expansion */}
+                              {node.isHub && !constellationExpanded && (
+                                <circle
+                                  cx={node.x}
+                                  cy={node.y}
+                                  r="46"
+                                  fill="none"
+                                  stroke="#F3D77D"
+                                  strokeWidth="1.5"
+                                  strokeOpacity="0.65"
+                                  strokeDasharray="5 5"
+                                />
+                              )}
                               <circle
                                 cx={node.x}
                                 cy={node.y}
-                                r={node.isHub ? 48 : 34}
-                                fill="url(#hubGlow)"
-                                opacity={isFocused ? 0.95 : 0.65}
+                                r={radius}
+                                fill={node.isHub || isFocused ? "#E5C158" : isConnected ? "#19345F" : "#0D1E3B"}
+                                stroke={isFocused || isConnected || node.isHub ? "#FDF0BE" : "#4A6187"}
+                                strokeWidth={isFocused || node.isHub ? 2.6 : 1.5}
+                                filter={isFocused || node.isHub ? "url(#goldSoftGlow)" : undefined}
                               />
-                            )}
-                            <circle
-                              cx={node.x}
-                              cy={node.y}
-                              r={radius}
-                              fill={node.isHub || isFocused ? "#E5C158" : isConnected ? "#19345F" : "#0D1E3B"}
-                              stroke={isFocused || isConnected || node.isHub ? "#FDF0BE" : "#4A6187"}
-                              strokeWidth={isFocused || node.isHub ? 2.6 : 1.5}
-                              filter={isFocused || node.isHub ? "url(#goldSoftGlow)" : undefined}
-                              style={{ transition: "all 220ms ease" }}
-                            />
-                            <text
-                              x={node.x}
-                              y={node.y + (node.isHub ? 44 : 33)}
-                              textAnchor="middle"
-                              fill={isFocused || node.isHub ? "#FDF0BE" : isConnected ? "#FFFFFF" : "#B7C5DE"}
-                              fontSize={node.isHub ? "15" : "13"}
-                              fontWeight={isFocused || node.isHub ? "700" : "600"}
-                            >
-                              {node.label}
-                            </text>
-                            <text
-                              x={node.x}
-                              y={node.y + (node.isHub ? 59 : 48)}
-                              textAnchor="middle"
-                              fill="#8FA2C2"
-                              fontSize="10"
-                              fontFamily="monospace"
-                            >
-                              {node.shortTag}
-                            </text>
-                          </g>
-                        );
-                      })}
+                              <text
+                                x={node.x}
+                                y={node.y + (node.isHub ? (constellationExpanded ? 44 : 54) : 33)}
+                                textAnchor="middle"
+                                fill={isFocused || node.isHub ? "#FDF0BE" : isConnected ? "#FFFFFF" : "#B7C5DE"}
+                                fontSize={node.isHub ? (constellationExpanded ? "15" : "18") : "13"}
+                                fontWeight={isFocused || node.isHub ? "700" : "600"}
+                              >
+                                {node.label}
+                              </text>
+                              <text
+                                x={node.x}
+                                y={node.y + (node.isHub ? (constellationExpanded ? 59 : 72) : 48)}
+                                textAnchor="middle"
+                                fill={node.isHub && !constellationExpanded ? "#F3D77D" : "#8FA2C2"}
+                                fontSize={node.isHub && !constellationExpanded ? "11.5" : "10"}
+                                fontFamily="monospace"
+                              >
+                                {node.isHub && !constellationExpanded ? "Click to Expand Blueprint Network" : node.shortTag}
+                              </text>
+                            </motion.g>
+                          );
+                        })}
+                      </g>
                     </svg>
 
-                    {/* Inline KJV Scripture Preview Popover when an outer Scripture node is clicked */}
+                    {/* Inline KJV Scripture Preview Pop-up when an outer Scripture node is clicked */}
                     <AnimatePresence>
                       {previewScripture && (
                         <motion.div
@@ -687,9 +900,9 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                     </AnimatePresence>
                   </div>
 
-                  {/* Focused Doctrine Inspector Bar */}
+                  {/* Focused Doctrine Inspector Bar (includes Fundamental Beliefs pills when traversing all 28 Beliefs) */}
                   <div className="p-4 md:p-5 rounded-xl bg-[#091833]/90 border border-[#D4AF37]/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1.5 max-w-2xl">
+                    <div className="space-y-2 max-w-2xl">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-[#D4AF37]/15 border border-[#D4AF37]/40 text-[#F6E29B]">
                           {focusedNode.shortTag}
@@ -697,6 +910,18 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                         <h3 className="font-serif text-lg font-bold text-[#FDF0BE]">{focusedNode.label}</h3>
                       </div>
                       <p className="text-sm text-[#CFD9EC] leading-relaxed">{focusedNode.summary}</p>
+                      {focusedNode.beliefsIncluded && focusedNode.beliefsIncluded.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {focusedNode.beliefsIncluded.map((b) => (
+                            <span
+                              key={b}
+                              className="text-[11px] px-2 py-0.5 rounded-md bg-[#0D2144] border border-[#D4AF37]/25 text-[#E5C158]"
+                            >
+                              {b}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex flex-wrap items-center gap-1.5 pt-1">
                         {focusedNode.anchorRefs.map((ref) => (
                           <button
