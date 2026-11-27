@@ -736,7 +736,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                     );
                   })}
 
-                  {/* 4b. Interconnected Seventh-day Adventist Theological Concepts (Revealed on Click 3!) */}
+                  {/* 4b. Interconnected Seventh-day Adventist Theological Concepts — Emerald Green Trace Lines (Revealed on Click 3) */}
                   {focusedConceptSatellites.map((item) => {
                     const parent = activeSpec.nodes.find((n) => n.id === item.parentNodeId);
                     if (!parent) return null;
@@ -745,11 +745,11 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                       <React.Fragment key={item.id}>
                         <motion.line
                           initial={{ x1: parent.x, y1: parent.y, x2: parent.x, y2: parent.y, opacity: 0 }}
-                          animate={{ x1: parent.x, y1: parent.y, x2: item.x, y2: item.y, opacity: 0.78 }}
+                          animate={{ x1: parent.x, y1: parent.y, x2: item.x, y2: item.y, opacity: 0.85 }}
                           transition={{ type: "spring", stiffness: 115, damping: 18 }}
-                          stroke="#C084FC"
-                          strokeWidth={1.4}
-                          strokeDasharray="3 4"
+                          stroke="#34D399"
+                          strokeWidth={isSelectedConcept ? 2.2 : 1.5}
+                          strokeDasharray="4 4"
                         />
                         <motion.g
                           data-constellation-node="true"
@@ -763,25 +763,23 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                           }}
                           className="cursor-pointer"
                         >
-                          <rect
-                            x={item.x - 72}
-                            y={item.y - 14}
-                            width={144}
-                            height={28}
-                            rx={14}
-                            fill={isSelectedConcept ? "#3B1D5E" : "#151133"}
-                            stroke={isSelectedConcept ? "#F3D77D" : "#C084FC"}
-                            strokeWidth={isSelectedConcept ? 2 : 1.3}
+                          <circle
+                            cx={item.x}
+                            cy={item.y}
+                            r={isSelectedConcept ? 10 : 7.5}
+                            fill={isSelectedConcept ? "#10B981" : "#064E3B"}
+                            stroke="#6EE7B7"
+                            strokeWidth={isSelectedConcept ? 2.2 : 1.5}
                           />
                           <text
                             x={item.x}
-                            y={item.y + 4}
+                            y={item.y + 21}
                             textAnchor="middle"
-                            fill="#F3E8FF"
-                            fontSize="9.8"
+                            fill="#A7F3D0"
+                            fontSize="10"
                             fontWeight="600"
                           >
-                            ✦ {item.concept.label}
+                            {item.concept.label}
                           </text>
                         </motion.g>
                       </React.Fragment>
@@ -935,18 +933,18 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                 </g>
               </svg>
 
-              {/* Inline SDA Interconnected Concept Pop-up */}
+              {/* Inline SDA Interconnected Concept Pop-up (Emerald Green Trace Theme + Clickable Supporting Scriptures) */}
               <AnimatePresence>
                 {previewConcept && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
-                    className="absolute bottom-4 right-4 left-4 sm:left-auto sm:w-96 p-4 rounded-xl bg-[#110D28]/95 border border-[#C084FC]/60 shadow-2xl backdrop-blur-md z-20"
+                    className="absolute bottom-4 right-4 left-4 sm:left-auto sm:w-96 p-4 rounded-xl bg-[#06221B]/95 border border-[#34D399]/60 shadow-2xl backdrop-blur-md z-20"
                   >
                     <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-[#E9D5FF]">
-                        <Sparkles className="w-3.5 h-3.5 text-[#F3D77D]" />
+                      <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-[#A7F3D0]">
+                        <Sparkles className="w-3.5 h-3.5 text-[#34D399]" />
                         SDA Concept • {previewConcept.label}
                       </span>
                       <button
@@ -957,10 +955,32 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                         <X className="w-4 h-4" />
                       </button>
                     </div>
-                    <p className="text-xs sm:text-sm text-[#EFE9DC] leading-relaxed border-l-2 border-[#C084FC] pl-3 my-2">
+                    <p className="text-xs sm:text-sm text-[#EFE9DC] leading-relaxed border-l-2 border-[#34D399] pl-3 my-2">
                       {previewConcept.explanation}
                     </p>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#C084FC]">
+                    {(() => {
+                      const extractedRefs =
+                        previewConcept.explanation.match(/\b(?:[1-3]\s+)?[A-Z][a-z]+(?:\s+of\s+[A-Z][a-z]+)?\s+\d+:\d+(?:-\d+)?\b/g) ||
+                        focusedNode.anchorRefs.slice(0, 2);
+                      return extractedRefs.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1 mb-2">
+                          {extractedRefs.map((ref) => (
+                            <button
+                              key={ref}
+                              type="button"
+                              onClick={() => {
+                                setPreviewConcept(null);
+                                openScripturePopup(ref);
+                              }}
+                              className="text-[11px] font-mono px-2.5 py-0.5 rounded-md bg-[#064E3B]/80 border border-[#34D399]/50 text-[#A7F3D0] hover:bg-[#10B981]/30 transition-colors cursor-pointer"
+                            >
+                              {ref} (KJV)
+                            </button>
+                          ))}
+                        </div>
+                      ) : null;
+                    })()}
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#6EE7B7]">
                       Connected to {focusedNode.label} • Seventh-day Adventist Theology
                     </span>
                   </motion.div>

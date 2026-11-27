@@ -501,15 +501,15 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
     nodes: [
       {
         id: "ta-hub",
-        label: "Everlasting Gospel",
-        shortTag: "Revelation 14:6",
-        summary: "The unchanging covenant of redemptive grace proclaimed to every nation, kindred, tongue, and people before Christ's return.",
+        label: "Three Angels' Messages",
+        shortTag: "Revelation 14:6-12",
+        summary: "God's final global proclamation—uniting the everlasting gospel, the hour of judgment, Babylon's fall, and the remnant who keep God's commandments and the faith of Jesus.",
         sectionIndex: 0,
         x: 500,
         y: 300,
         isHub: true,
         connectedTo: ["ta-judgment", "ta-creator", "ta-babylon", "ta-seal", "ta-remnant"],
-        anchorRefs: ["Revelation 14:6", "Matthew 24:14"]
+        anchorRefs: ["Revelation 14:6-7", "Revelation 14:8", "Revelation 14:9-11", "Revelation 14:12"]
       },
       {
         id: "ta-judgment",
