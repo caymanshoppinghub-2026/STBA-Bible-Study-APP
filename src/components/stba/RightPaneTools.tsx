@@ -4761,7 +4761,7 @@ export const WordStudy: React.FC<ToolProps> = ({
     const isNT = isNewTestamentReference(activeRef);
     const hasExplicitScript = /[\u0370-\u03FF\u1F00-\u1FFF\u0590-\u05FF]/.test(trimmed) || /^\s*[gh]\d{1,4}\s*$/i.test(trimmed);
     const expectedPrefix = isNT ? "G" : "H";
-    const cacheKey = hasExplicitScript ? `v2:${trimmed.toLowerCase()}` : `v2:${isNT ? "greek" : "hebrew"}:${trimmed.toLowerCase()}`;
+    const cacheKey = hasExplicitScript ? `v3:${trimmed.toLowerCase()}` : `v3:${isNT ? "greek" : "hebrew"}:${trimmed.toLowerCase()}`;
 
     // 1. Check IndexedDB persistent study resource cache (< 2ms), scoped by testament language
     try {
@@ -4916,7 +4916,9 @@ export const WordStudy: React.FC<ToolProps> = ({
       }
       setVerseKeywords(unique);
       setExtracting(false);
-      if (unique[0]) {
+      // Do NOT overwrite an explicitly selected/double-clicked word (e.g. double-clicking a word in the Bible reader)
+      const currentSelected = (selectedWord || "").trim().toLowerCase();
+      if (unique[0] && !currentSelected) {
         handleWordSelect(unique[0]);
       }
     };
@@ -5415,13 +5417,15 @@ export const WordStudy: React.FC<ToolProps> = ({
               {/* Lemma and translation header */}
               <div className="mb-3 pr-20">
                 <span className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider block mb-0.5">
-                  {String(studyData.strongs || "").toUpperCase().startsWith("G")
-                    ? "GREEK"
-                    : String(studyData.strongs || "").toUpperCase().startsWith("H")
-                      ? "HEBREW"
-                      : isNewTestamentReference(report?.reference || "Revelation 14:12")
-                        ? "GREEK"
-                        : "HEBREW"} LEXICAL CORE WORD
+                  {studyData.language === "Aramaic"
+                    ? "ARAMAIC"
+                    : String(studyData.strongs || "").toUpperCase().startsWith("G")
+                      ? "GREEK"
+                      : String(studyData.strongs || "").toUpperCase().startsWith("H")
+                        ? "HEBREW"
+                        : isNewTestamentReference(report?.reference || "Revelation 14:12")
+                          ? "GREEK"
+                          : "HEBREW"} LEXICAL CORE WORD
                 </span>
                 <div className="flex items-center gap-2 mb-1">
                   <span

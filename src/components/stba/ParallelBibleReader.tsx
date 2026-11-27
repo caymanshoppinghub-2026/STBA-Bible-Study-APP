@@ -554,6 +554,65 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
     clearSelection();
   };
 
+  // Double-clicking any word in the Bible text immediately opens Word Study synced to that exact word
+  const handleBibleWordDoubleClick = (
+    e: React.MouseEvent<HTMLSpanElement>,
+    verseNum: number,
+    verseRefStr: string,
+    verseObj: any
+  ) => {
+    if (!onWordStudyTrigger) return;
+    e.stopPropagation();
+
+    let rawWord = "";
+    try {
+      const sel = window.getSelection();
+      if (sel && sel.toString().trim()) {
+        rawWord = sel.toString().trim();
+      }
+    } catch {}
+
+    // Fallback: extract word under pointer via caretRangeFromPoint / caretPositionFromPoint if selection was empty
+    if (!rawWord) {
+      try {
+        const doc: any = document;
+        let node: Node | null = null;
+        let offset = 0;
+        if (typeof doc.caretPositionFromPoint === "function") {
+          const pos = doc.caretPositionFromPoint(e.clientX, e.clientY);
+          if (pos) { node = pos.offsetNode; offset = pos.offset; }
+        } else if (typeof doc.caretRangeFromPoint === "function") {
+          const range = doc.caretRangeFromPoint(e.clientX, e.clientY);
+          if (range) { node = range.startContainer; offset = range.startOffset; }
+        }
+        if (node && node.nodeType === Node.TEXT_NODE && node.textContent) {
+          const txt = node.textContent;
+          let start = offset;
+          let end = offset;
+          while (start > 0 && /[\p{L}\p{N}']/u.test(txt[start - 1])) start--;
+          while (end < txt.length && /[\p{L}\p{N}']/u.test(txt[end])) end++;
+          rawWord = txt.slice(start, end).trim();
+        }
+      } catch {}
+    }
+
+    const cleanWord = rawWord
+      .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+      .trim()
+      .split(/\s+/)[0] || "";
+
+    if (!cleanWord || cleanWord.length < 2) return;
+
+    // Sync active verse + immediately open Word Study for this exact word
+    setActiveVerseIndex(verseNum);
+    panelSyncBus.selectVerse(verseNum, verseRefStr, "ParallelBibleReader");
+    if (onVerseSelect) {
+      onVerseSelect(verseNum, verseRefStr, verseObj);
+    }
+    clearSelection();
+    onWordStudyTrigger(cleanWord);
+  };
+
   const getGridColsClass = (count: number) => {
     switch (count) {
       case 1: return "grid-cols-1";
@@ -1381,7 +1440,12 @@ export const ParallelBibleReader: React.FC<ParallelBibleReaderProps> = ({
                             </sup>
                           )}
                           {/* Render biblical verse text inside explicit data-biblical-text container */}
-                          <span data-biblical-text="true" className="select-text">
+                          <span
+                            data-biblical-text="true"
+                            className="select-text cursor-text"
+                            title="Double-click any word to open Greek/Hebrew Word Study"
+                            onDoubleClick={(e) => handleBibleWordDoubleClick(e, verse.verseNumber, (verse as any).reference || rowVerseRef, verse)}
+                          >
                             {cellHighlights.length === 0 && !isSpeakingThis && isTopicSearchActive && topicHighlightTerms.length > 0
                               ? highlightSearchTerms(columnText)
                               : renderTextWithUserHighlights(

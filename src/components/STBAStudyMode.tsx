@@ -230,9 +230,19 @@ export function STBAStudyMode() {
   };
 
   const handleWordStudyTrigger = (word: string) => {
-    setSelectedWord(word);
+    const clean = word.trim();
+    if (!clean) return;
+    setSelectedWord(clean);
     setActiveRightTab("word");
+    if (viewMode === "bible") {
+      setViewMode("split");
+    }
     setRightPanelCollapsed(false);
+    panelSyncBus.publish("WORD_SELECTED", {
+      word: clean,
+      reference: customReference || report?.reference || queryRef || "",
+      verseNumber: activeVerseIndex
+    });
   };
 
   // Preset Tracks configuration

@@ -9255,7 +9255,7 @@ function normalizeReadableTranslit(raw: string, isGreek: boolean): string {
     .trim();
 }
 
-function buildStrongsPayload(key: string, rawWord: string): any | null {
+function buildStrongsPayload(key: string, rawWord: string, reference?: string): any | null {
   const store = loadStrongsStore();
   if (!store) return null;
   const lang = key[0] === "G" ? "G" : "H";
@@ -9263,21 +9263,36 @@ function buildStrongsPayload(key: string, rawWord: string): any | null {
   if (!row) return null;
   const [rawLemma, rawTranslit, pron, def, deriv, kjv] = row;
   const isGk = lang === "G";
+  const isAramaic = !isGk && /\b(aramaic|chaldee)\b/i.test(String(deriv || ""));
+  const langName = isGk ? "Greek" : isAramaic ? "Aramaic" : "Hebrew";
+  const langFull = isGk ? "Koine Greek" : isAramaic ? "Biblical Aramaic (Hebrew Lexicon)" : "Biblical Hebrew";
   const lemma = isGk ? String(rawLemma || "").normalize("NFC").trim() : normalizeHebrewLemma(String(rawLemma || ""));
   const translit = normalizeReadableTranslit(String(rawTranslit || ""), isGk);
   const definition = def ? def.replace(/^[\s,;:]+/, "") : "No definition recorded.";
+  const cleanDef = definition.charAt(0).toUpperCase() + definition.slice(1) + (definition.endsWith(".") ? "" : ".");
+  const cleanDeriv = deriv ? deriv.replace(/[;,\s]+$/, "") : "";
+  const cleanKjv = kjv ? kjv.replace(/[.\s]+$/, "") : "";
+  const refNote = reference ? ` in the context of ${reference}` : "";
+  const exegeticalInsight = [
+    `In ${langFull}, **${translit}** (${lemma}, Strong's ${key}) carries the lexical weight of “${cleanDef.replace(/\.$/, "")}”${refNote}.`,
+    cleanDeriv ? `Root/derivation: ${cleanDeriv}.` : "",
+    cleanKjv ? `Across the King James Version, this root is rendered as: ${cleanKjv}.` : "",
+    `Following historic Seventh-day Adventist *Sola Scriptura* exegesis (Isaiah 28:10; 2 Timothy 2:15), compare how this exact root functions across parallel passages to let Scripture interpret Scripture.`
+  ].filter(Boolean).join(" ");
+
   return {
     word: rawWord,
+    language: langName,
     strongs: key,
     lemma,
     transliteration: translit,
-    morphology: `${isGk ? "Koine Greek" : "Biblical Hebrew"} lexical entry — Strong's ${key}`,
+    morphology: `${langFull} lexical entry — Strong's ${key}`,
     pronunciation: pron || translit,
-    dictionaryDefinition: definition.charAt(0).toUpperCase() + definition.slice(1) + (definition.endsWith(".") ? "" : "."),
-    usageNote: `${deriv ? `Root/derivation: ${deriv.replace(/[;,\s]+$/, "")}. ` : ""}${kjv ? `Rendered in the KJV as: ${kjv.replace(/[.\s]+$/, "")}.` : ""}`.trim() || `Strong's ${key}.`,
+    dictionaryDefinition: cleanDef,
+    usageNote: exegeticalInsight,
     versesCount: 0,
     occurrences: [] as string[],
-    sdaDictionaryEntries: [{ entry: definition, source: `Strong's ${isGk ? "Greek" : "Hebrew"} Dictionary (${key})` }]
+    sdaDictionaryEntries: [{ entry: cleanDef, source: `Strong's ${isGk ? "Greek" : isAramaic ? "Aramaic / Hebrew" : "Hebrew"} Dictionary (${key})` }]
   };
 }
 
@@ -9333,7 +9348,7 @@ function getEnglishStemCandidates(raw: string): string[] {
 }
 
 /** Instant lookup by Strong's number, original-script lemma, transliteration, or English KJV rendering. */
-function lookupStrongsEntry(rawWord: string, preferLang: "Greek" | "Hebrew"): { primary: any; alternatives: any[] } | null {
+function lookupStrongsEntry(rawWord: string, preferLang: "Greek" | "Hebrew", reference?: string): { primary: any; alternatives: any[] } | null {
   const store = loadStrongsStore();
   if (!store) return null;
   const q = String(rawWord || "").trim();
@@ -9345,7 +9360,7 @@ function lookupStrongsEntry(rawWord: string, preferLang: "Greek" | "Hebrew"): { 
   if (numMatch) {
     const lang = (numMatch[1] || prefer).toUpperCase();
     const key = `${lang}${numMatch[2]}`;
-    const payload = buildStrongsPayload(key, rawWord);
+    const payload = buildStrongsPayload(key, rawWord, reference);
     if (payload) return { primary: payload, alternatives: [] };
   }
 
@@ -9357,7 +9372,7 @@ function lookupStrongsEntry(rawWord: string, preferLang: "Greek" | "Hebrew"): { 
   // 2. Original-script lemma or transliteration
   const exact = pickPreferred(store.byLemma.get(folded)) || pickPreferred(store.byTranslit.get(folded));
   if (exact) {
-    const primary = buildStrongsPayload(exact, rawWord);
+    const primary = buildStrongsPayload(exact, rawWord, reference);
     if (primary) return { primary, alternatives: [] };
   }
 
@@ -9381,9 +9396,9 @@ function lookupStrongsEntry(rawWord: string, preferLang: "Greek" | "Hebrew"): { 
       const langB = b.key[0] === prefer ? 0 : 1;
       return langA - langB || a.stemRank - b.stemRank || a.pos - b.pos || a.n - b.n || Number(a.key.slice(1)) - Number(b.key.slice(1));
     });
-    const primary = buildStrongsPayload(ranked[0].key, rawWord);
+    const primary = buildStrongsPayload(ranked[0].key, rawWord, reference);
     if (primary) {
-      const alternatives = ranked.slice(1, 6).map((h) => buildStrongsPayload(h.key, rawWord)).filter(Boolean).map((p: any) => ({
+      const alternatives = ranked.slice(1, 6).map((h) => buildStrongsPayload(h.key, rawWord, reference)).filter(Boolean).map((p: any) => ({
         strongs: p.strongs, lemma: p.lemma, transliteration: p.transliteration, pronunciation: p.pronunciation, definition: p.dictionaryDefinition
       }));
       return { primary, alternatives };
@@ -9964,8 +9979,8 @@ app.post("/api/study/word-study", async (req, res) => {
     }
   }
 
-  // Instant offline lookup from the full Strong's lexicon (5,523 Greek + 8,674 Hebrew) — no network or AI round-trip required
-  const offlineHit = lookupStrongsEntry(rawWord, detectedLang);
+  // Instant offline lookup from the full Strong's lexicon (5,523 Greek + 8,674 Hebrew/Aramaic) — no network or AI round-trip required
+  const offlineHit = lookupStrongsEntry(rawWord, detectedLang, reference);
   if (offlineHit) {
     return res.json({
       ...offlineHit.primary,
