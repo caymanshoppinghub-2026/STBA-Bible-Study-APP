@@ -32,7 +32,6 @@ interface DoctrineBlueprintEngineProps {
   selectedTrackId: string;
   onSelectTrack: (trackId: string) => void;
   onLaunchBibleStudy: (reference: string, topic: string) => void;
-  onSwitchToClassic: () => void;
 }
 
 const renderChipIcon = (iconKey: BlueprintPillarChip["iconKey"]) => {
@@ -117,8 +116,7 @@ const SacredGeometricEmblem: React.FC = () => (
 export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = ({
   selectedTrackId,
   onSelectTrack,
-  onLaunchBibleStudy,
-  onSwitchToClassic
+  onLaunchBibleStudy
 }) => {
   const [stage, setStage] = useState<BlueprintStage>("overview");
   const activeSpec = TRACK_BLUEPRINTS[selectedTrackId] || TRACK_BLUEPRINTS["fundamental-beliefs"];
