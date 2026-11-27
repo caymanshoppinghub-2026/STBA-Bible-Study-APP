@@ -129,48 +129,97 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
   const activeSpec = TRACK_BLUEPRINTS[selectedTrackId] || TRACK_BLUEPRINTS["fundamental-beliefs"];
   const activeTrackDb = DEFAULT_DOCTRINE_TRACKS[selectedTrackId] || DEFAULT_DOCTRINE_TRACKS["fundamental-beliefs"];
 
-  // Stage 2 Interactive Constellation state (Progressive Multi-Ring Revelation + Pan & Zoom + Smooth Portal Zoom-Recenter)
+  // Stage 2 Interactive Constellation state (Consistent 3-Click Progressive Flow + Recenter + Pan/Zoom + Portals)
   const [focusedNodeId, setFocusedNodeId] = useState<string>(activeSpec.nodes[0]?.id || "");
+  const [focusStep, setFocusStep] = useState<0 | 1 | 2>(0); // 0=initial core, 1=scriptures revealed, 2=connections revealed, 3rd click=blueprint
+  const [revealedNodeIds, setRevealedNodeIds] = useState<Set<string>>(() => new Set([activeSpec.nodes[0]?.id || ""]));
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [previewScripture, setPreviewScripture] = useState<ConstellationScriptureNode | null>(null);
   const [breadcrumbPath, setBreadcrumbPath] = useState<string[]>([activeSpec.shortTitle]);
-  const [revealRing, setRevealRing] = useState<number>(0); // 0 = Core Pillar only, 1..maxRing = progressively built outward
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState<boolean>(false);
   const [portalTransitionLabel, setPortalTransitionLabel] = useState<string | null>(null);
   const panStartRef = React.useRef<{ x: number; y: number; origX: number; origY: number } | null>(null);
 
-  const maxRing = useMemo(() => {
-    let m = 1;
-    for (const n of activeSpec.nodes) {
-      if (typeof n.ring === "number" && n.ring > m) m = n.ring;
-    }
-    return m;
-  }, [activeSpec]);
-
-  const constellationExpanded = revealRing > 0;
+  const allRevealed = revealedNodeIds.size >= activeSpec.nodes.length;
+  const constellationExpanded = revealedNodeIds.size > 1 || focusStep > 0;
   const isNodeVisible = (node: ConstellationDoctrineNode) => {
     if (node.isHub) return true;
-    const r = typeof node.ring === "number" ? node.ring : 1;
-    return r <= revealRing;
+    return revealedNodeIds.has(node.id);
   };
   const visibleNodeCount = useMemo(
     () => activeSpec.nodes.filter((n) => isNodeVisible(n)).length,
-    [activeSpec, revealRing]
+    [activeSpec, revealedNodeIds]
   );
 
-  // Keep focused node & progressive revelation synced when track changes
+  // Keep focused node & progressive state synced when track changes
   React.useEffect(() => {
     const hub = activeSpec.nodes.find((n) => n.isHub) || activeSpec.nodes[0];
     setFocusedNodeId(hub?.id || "");
+    setFocusStep(0);
+    setRevealedNodeIds(new Set(hub ? [hub.id] : []));
     setPreviewScripture(null);
-    setRevealRing(0);
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setPortalTransitionLabel(null);
     setBreadcrumbPath((prev) => (prev.length > 1 && stage === "constellation" ? [activeSpec.shortTitle, hub?.label || ""] : [activeSpec.shortTitle]));
   }, [selectedTrackId]);
+
+  // Built-in KJV lookup helper for dynamically radiated anchor scriptures on any doctrine node
+  const getInlineKjvText = (refStr: string): string => {
+    const fromStatic = activeSpec.scriptureNodes.find(
+      (s) => s.reference.toLowerCase() === refStr.toLowerCase()
+    );
+    if (fromStatic) return fromStatic.verseText;
+    const fromTrack = activeTrackDb.key_references.find(
+      (kr) => kr.reference.toLowerCase() === refStr.toLowerCase()
+    );
+    if (fromTrack) return fromTrack.text;
+    const QUICK_KJV: Record<string, string> = {
+      "2 timothy 3:16-17": "All scripture is given by inspiration of God, and is profitable for doctrine, for reproof, for correction, for instruction in righteousness: That the man of God may be perfect, throughly furnished unto all good works.",
+      "2 peter 1:20-21": "For the prophecy came not in old time by the will of man: but holy men of God spake as they were moved by the Holy Ghost.",
+      "deuteronomy 6:4": "Hear, O Israel: The LORD our God is one LORD.",
+      "matthew 28:19": "Go ye therefore, and teach all nations, baptizing them in the name of the Father, and of the Son, and of the Holy Ghost.",
+      "genesis 1:1": "In the beginning God created the heaven and the earth.",
+      "john 3:16": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+      "john 1:1-3": "In the beginning was the Word, and the Word was with God, and the Word was God. All things were made by him.",
+      "philippians 2:5-11": "Let this mind be in you, which was also in Christ Jesus: Who, being in the form of God, thought it not robbery to be equal with God.",
+      "john 14:16-17": "And I will pray the Father, and he shall give you another Comforter, that he may abide with you for ever; Even the Spirit of truth.",
+      "genesis 1:1-27": "So God created man in his own image, in the image of God created he him; male and female created he them.",
+      "exodus 20:8-11": "Remember the sabbath day, to keep it holy. Six days shalt thou labour, and do all thy work: But the seventh day is the sabbath of the LORD thy God.",
+      "revelation 12:4-9": "And there was war in heaven: Michael and his angels fought against the dragon; and the dragon fought and his angels.",
+      "revelation 14:6-12": "Here is the patience of the saints: here are they that keep the commandments of God, and the faith of Jesus.",
+      "hebrews 8:1-5": "We have such an high priest, who is set on the right hand of the throne of the Majesty in the heavens; A minister of the sanctuary, and of the true tabernacle.",
+      "titus 2:13": "Looking for that blessed hope, and the glorious appearing of the great God and our Saviour Jesus Christ.",
+      "revelation 21:1-7": "And I saw a new heaven and a new earth: for the first heaven and the first earth were passed away."
+    };
+    return (
+      QUICK_KJV[refStr.toLowerCase()] ||
+      `Explore ${refStr} in the Split Bible Reader to examine its full KJV/NKJV parallel context and original Greek/Hebrew word roots.`
+    );
+  };
+
+  // Dynamically compute ONLY the currently focused node's specific anchor scriptures in a clean orbit around it!
+  const focusedScriptureSatellites = useMemo<ConstellationScriptureNode[]>(() => {
+    if (focusStep < 1 || !focusedNodeId) return [];
+    const node = activeSpec.nodes.find((n) => n.id === focusedNodeId);
+    if (!node || !node.anchorRefs || node.anchorRefs.length === 0) return [];
+    const count = node.anchorRefs.length;
+    const radius = 84;
+    return node.anchorRefs.map((ref, idx) => {
+      // Spread satellites cleanly in an arc above/around the focused node
+      const angle = (-Math.PI * 0.78) + (count === 1 ? Math.PI * 0.28 : (idx / (count - 1)) * (Math.PI * 0.56));
+      return {
+        id: `sat-${node.id}-${idx}`,
+        reference: ref,
+        verseText: getInlineKjvText(ref),
+        parentNodeId: node.id,
+        x: Math.round(node.x + Math.cos(angle) * radius),
+        y: Math.round(node.y + Math.sin(angle) * radius)
+      };
+    });
+  }, [activeSpec, focusedNodeId, focusStep]);
 
   // Lock body scroll & allow ESC to exit dedicated full-screen Stage 2 constellation
   React.useEffect(() => {
@@ -268,30 +317,50 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
   const handleEnterConstellation = () => {
     const hub = activeSpec.nodes.find((n) => n.isHub) || activeSpec.nodes[0];
     setFocusedNodeId(hub.id);
-    setRevealRing(0);
+    setFocusStep(0);
+    setRevealedNodeIds(new Set([hub.id]));
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setBreadcrumbPath([activeSpec.shortTitle, hub.label]);
     setStage("constellation");
   };
 
+  /**
+   * Consistent 3-Click Interaction for ALL Doctrine Nodes:
+   * - Click 1 (on any node, or on hub at step 0): Recenters focus on that node as the new center & reveals ONLY its specific anchor scriptures.
+   * - Click 2 (on the already-focused node at step 1): Reveals & highlights its connected doctrines (progressively expanding outward) and linked portals.
+   * - Click 3 (on the already-focused node at step 2): Transitions directly into Stage 3 Detailed Architectural Blueprint.
+   */
   const handleConstellationNodeClick = (node: ConstellationDoctrineNode) => {
     setPreviewScripture(null);
-    // Progressive Revelation: clicking the central core pillar builds & connects the next ring until all beliefs are revealed!
-    if (node.isHub && revealRing < maxRing) {
-      setRevealRing((r) => Math.min(maxRing, r + 1));
+
+    // Click 1: Selecting a new node (or first click on initial core hub) -> Recenter & reveal its specific scriptures
+    if (focusedNodeId !== node.id || focusStep === 0) {
       setFocusedNodeId(node.id);
+      setFocusStep(1);
+      setRevealedNodeIds((prev) => new Set([...prev, node.id]));
+      setPan({ x: 500 - node.x, y: 300 - node.y });
+      setZoom((z) => (z < 1.1 ? 1.15 : z));
       setBreadcrumbPath([activeSpec.shortTitle, node.label]);
       return;
     }
-    if (focusedNodeId === node.id) {
-      // Second click on already-focused node drills smoothly into Stage 3 Architectural View
-      setBreadcrumbPath([activeSpec.shortTitle, node.label, "Architectural Blueprint"]);
-      setStage("blueprint");
+
+    // Click 2: Already focused at Step 1 -> Expand & illuminate connected doctrines outward!
+    if (focusStep === 1) {
+      setFocusStep(2);
+      setRevealedNodeIds((prev) => {
+        const next = new Set(prev);
+        next.add(node.id);
+        for (const connId of node.connectedTo) next.add(connId);
+        return next;
+      });
+      setBreadcrumbPath([activeSpec.shortTitle, node.label, "Connected Doctrines"]);
       return;
     }
-    setFocusedNodeId(node.id);
-    setBreadcrumbPath([activeSpec.shortTitle, node.label]);
+
+    // Click 3: Already focused at Step 2 -> Transition to Stage 3 Detailed Architectural Blueprint!
+    setBreadcrumbPath([activeSpec.shortTitle, node.label, "Architectural Blueprint"]);
+    setStage("blueprint");
   };
 
   const handleOpenBlueprint = () => {
@@ -369,11 +438,11 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                     {visibleNodeCount}/{activeSpec.nodes.length}
                   </span>
                   <span className="hidden lg:inline text-[#9FB0CD]">
-                    {revealRing === 0
-                      ? `— Click ${activeSpec.nodes[0]?.label || "Core Pillar"} to radiate truths outward`
-                      : revealRing < maxRing
-                        ? `— Click ${activeSpec.nodes[0]?.label} again for Ring ${revealRing + 1}/${maxRing}`
-                        : "— Drag to pan • Scroll to zoom • Click teal portals to cross doctrines"}
+                    {focusStep === 0
+                      ? `— Click 1: Reveal ${focusedNode.label} Scriptures`
+                      : focusStep === 1
+                        ? `— Click 2 on ${focusedNode.label}: Expand Connected Doctrines`
+                        : `— Click 3 on ${focusedNode.label}: Open Architectural Blueprint`}
                   </span>
                 </div>
               </div>
@@ -398,13 +467,25 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
               <div className="absolute top-4 right-4 z-20 flex items-center gap-1 bg-[#071328]/90 border border-[#D4AF37]/35 rounded-xl p-1.5 shadow-xl backdrop-blur-md">
                 <button
                   type="button"
-                  onClick={() => setRevealRing((r) => (r < maxRing ? maxRing : 0))}
-                  title={revealRing < maxRing ? `Reveal All ${activeSpec.nodes.length} Nodes` : "Collapse to Core Pillar"}
+                  onClick={() => {
+                    if (!allRevealed) {
+                      setRevealedNodeIds(new Set(activeSpec.nodes.map((n) => n.id)));
+                      setFocusStep(2);
+                      handleResetViewport();
+                    } else {
+                      const hub = activeSpec.nodes.find((n) => n.isHub) || activeSpec.nodes[0];
+                      setFocusedNodeId(hub.id);
+                      setFocusStep(0);
+                      setRevealedNodeIds(new Set([hub.id]));
+                      handleResetViewport();
+                    }
+                  }}
+                  title={!allRevealed ? `Reveal All ${activeSpec.nodes.length} Nodes` : "Collapse to Core Pillar"}
                   className="px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-semibold text-[#F6E29B] hover:bg-[#D4AF37]/20 transition-colors cursor-pointer flex items-center gap-1"
                 >
-                  {revealRing < maxRing ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+                  {!allRevealed ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
                   <span className="hidden sm:inline">
-                    {revealRing < maxRing ? `Build All (${activeSpec.nodes.length})` : "Core"}
+                    {!allRevealed ? `Build All (${activeSpec.nodes.length})` : "Core"}
                   </span>
                 </button>
                 <div className="w-px h-4 bg-[#D4AF37]/25" />
@@ -498,35 +579,34 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                       );
                     })}
 
-                  {/* 2. Outer Scripture Anchor Connectors */}
-                  {activeSpec.scriptureNodes.map((sn) => {
+                  {/* 2. Focused Node's Specific Anchor Scripture Connectors (Step 1+: Only the focused node's scriptures radiate outward!) */}
+                  {focusedScriptureSatellites.map((sn) => {
                     const parent = activeSpec.nodes.find((n) => n.id === sn.parentNodeId);
-                    if (!parent || !isNodeVisible(parent)) return null;
-                    const highlighted = activeHighlightId === parent.id || previewScripture?.id === sn.id;
+                    if (!parent) return null;
                     return (
                       <motion.line
                         key={`edge-${sn.id}`}
-                        initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
-                        animate={{ x1: parent.x, y1: parent.y, x2: sn.x, y2: sn.y, opacity: highlighted ? 0.92 : 0.38 }}
-                        transition={{ type: "spring", stiffness: 110, damping: 18, delay: 0.08 }}
-                        stroke={highlighted ? "#E5C158" : "#4A6187"}
-                        strokeWidth={highlighted ? 1.8 : 1}
+                        initial={{ x1: parent.x, y1: parent.y, x2: parent.x, y2: parent.y, opacity: 0 }}
+                        animate={{ x1: parent.x, y1: parent.y, x2: sn.x, y2: sn.y, opacity: 0.92 }}
+                        transition={{ type: "spring", stiffness: 130, damping: 18 }}
+                        stroke="#E5C158"
+                        strokeWidth={1.8}
                         strokeDasharray="4 4"
                       />
                     );
                   })}
 
-                  {/* 3. Outer Perimeter Cross-Doctrine Portal Bridge Edges (Dashed Teal) */}
+                  {/* 3. Outer Perimeter Cross-Doctrine Portal Bridge Edges (visible once parent node is revealed at Step 2+) */}
                   {(activeSpec.portalNodes || []).map((portal) => {
                     const parent = activeSpec.nodes.find((n) => n.id === portal.fromNodeId);
-                    if (!parent || !isNodeVisible(parent)) return null;
+                    if (!parent || !isNodeVisible(parent) || (focusStep < 2 && !allRevealed)) return null;
                     const highlighted = activeHighlightId === parent.id;
                     return (
                       <motion.line
                         key={`portal-edge-${portal.id}`}
-                        initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
+                        initial={{ x1: parent.x, y1: parent.y, x2: parent.x, y2: parent.y, opacity: 0 }}
                         animate={{ x1: parent.x, y1: parent.y, x2: portal.x, y2: portal.y, opacity: highlighted ? 0.95 : 0.65 }}
-                        transition={{ type: "spring", stiffness: 100, damping: 18, delay: 0.14 }}
+                        transition={{ type: "spring", stiffness: 100, damping: 18, delay: 0.1 }}
                         stroke="#2DD4BF"
                         strokeWidth={highlighted ? 2.2 : 1.4}
                         strokeDasharray="6 5"
@@ -534,19 +614,18 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                     );
                   })}
 
-                  {/* 4. Outer Scripture Anchor Nodes */}
-                  {activeSpec.scriptureNodes.map((sn) => {
+                  {/* 4. Focused Node's Specific Anchor Scripture Satellites (Click to trigger inline KJV Pop-up) */}
+                  {focusedScriptureSatellites.map((sn) => {
                     const parent = activeSpec.nodes.find((n) => n.id === sn.parentNodeId);
-                    if (!parent || !isNodeVisible(parent)) return null;
+                    if (!parent) return null;
                     const isSelectedRef = previewScripture?.id === sn.id;
-                    const parentHighlighted = activeHighlightId === sn.parentNodeId;
                     return (
                       <motion.g
                         key={sn.id}
                         data-constellation-node="true"
-                        initial={{ x: 500 - sn.x, y: 300 - sn.y, opacity: 0, scale: 0.4 }}
+                        initial={{ x: parent.x - sn.x, y: parent.y - sn.y, opacity: 0, scale: 0.4 }}
                         animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-                        transition={{ type: "spring", stiffness: 120, damping: 16, delay: 0.1 }}
+                        transition={{ type: "spring", stiffness: 130, damping: 16 }}
                         onClick={(e) => {
                           e.stopPropagation();
                           setPreviewScripture(sn);
@@ -556,20 +635,20 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                         <circle
                           cx={sn.x}
                           cy={sn.y}
-                          r={isSelectedRef ? 10 : 7}
-                          fill={isSelectedRef || parentHighlighted ? "#E5C158" : "#15294A"}
+                          r={isSelectedRef ? 10.5 : 8}
+                          fill={isSelectedRef ? "#F6E29B" : "#15294A"}
                           stroke="#F3D77D"
-                          strokeWidth={isSelectedRef ? 2.2 : 1.3}
-                          filter={isSelectedRef ? "url(#goldSoftGlow)" : undefined}
+                          strokeWidth={isSelectedRef ? 2.4 : 1.6}
+                          filter="url(#goldSoftGlow)"
                         />
                         <text
                           x={sn.x}
-                          y={sn.y + 21}
+                          y={sn.y - 14}
                           textAnchor="middle"
-                          fill={isSelectedRef || parentHighlighted ? "#FDF0BE" : "#A7B8D4"}
+                          fill="#FDF0BE"
                           fontSize="10.5"
                           fontFamily="monospace"
-                          fontWeight={isSelectedRef ? "700" : "500"}
+                          fontWeight="700"
                         >
                           {sn.reference}
                         </text>
@@ -580,14 +659,14 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                   {/* 5. Outer Perimeter Cross-Doctrine Portal Nodes */}
                   {(activeSpec.portalNodes || []).map((portal) => {
                     const parent = activeSpec.nodes.find((n) => n.id === portal.fromNodeId);
-                    if (!parent || !isNodeVisible(parent)) return null;
+                    if (!parent || !isNodeVisible(parent) || (focusStep < 2 && !allRevealed)) return null;
                     return (
                       <motion.g
                         key={portal.id}
                         data-constellation-node="true"
-                        initial={{ x: 500 - portal.x, y: 300 - portal.y, opacity: 0, scale: 0.4 }}
+                        initial={{ x: parent.x - portal.x, y: parent.y - portal.y, opacity: 0, scale: 0.4 }}
                         animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-                        transition={{ type: "spring", stiffness: 110, damping: 16, delay: 0.16 }}
+                        transition={{ type: "spring", stiffness: 110, damping: 16, delay: 0.12 }}
                         onClick={(e) => {
                           e.stopPropagation();
                           handlePortalTransition(portal);
@@ -627,25 +706,30 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                     );
                   })}
 
-                  {/* 6. Primary Doctrine Nodes & Central Core Hub */}
+                  {/* 6. Primary Doctrine Nodes & Central Core Hub (Consistent 3-Click Cue on Focused Node) */}
                   {activeSpec.nodes.map((node) => {
                     if (!isNodeVisible(node)) return null;
                     const isFocused = focusedNodeId === node.id;
                     const isConnected = isNodeConnectedToHighlight(node.id);
                     const isDense = activeSpec.nodes.length > 10;
-                    const radius = node.isHub
-                      ? constellationExpanded
+                    const radius = isFocused
+                      ? isDense
+                        ? 20
+                        : 24
+                      : node.isHub
                         ? isDense
-                          ? 20
-                          : 24
-                        : 32
-                      : isFocused
-                        ? isDense
-                          ? 14
+                          ? 15
                           : 18
                         : isDense
-                          ? 10.5
+                          ? 11
                           : 14;
+                    const subLabel = isFocused
+                      ? focusStep === 0
+                        ? "Click 1/3 • Reveal Scriptures"
+                        : focusStep === 1
+                          ? "Click 2/3 • Show Connections"
+                          : "Click 3/3 • Open Blueprint"
+                      : node.shortTag;
                     return (
                       <motion.g
                         key={node.id}
@@ -665,20 +749,20 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                           <circle
                             cx={node.x}
                             cy={node.y}
-                            r={node.isHub ? (constellationExpanded ? 44 : 72) : isDense ? 26 : 34}
+                            r={isFocused ? 52 : isDense ? 26 : 34}
                             fill="url(#hubGlow)"
-                            opacity={isFocused ? 0.95 : 0.7}
+                            opacity={isFocused ? 0.95 : 0.45}
                           />
                         )}
-                        {node.isHub && revealRing < maxRing && (
+                        {isFocused && (
                           <circle
                             cx={node.x}
                             cy={node.y}
-                            r={constellationExpanded ? 32 : 46}
+                            r={radius + 10}
                             fill="none"
                             stroke="#F3D77D"
                             strokeWidth="1.5"
-                            strokeOpacity="0.65"
+                            strokeOpacity="0.7"
                             strokeDasharray="5 5"
                           />
                         )}
@@ -686,34 +770,30 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                           cx={node.x}
                           cy={node.y}
                           r={radius}
-                          fill={node.isHub || isFocused ? "#E5C158" : isConnected ? "#19345F" : "#0D1E3B"}
+                          fill={isFocused ? "#E5C158" : isConnected ? "#19345F" : "#0D1E3B"}
                           stroke={isFocused || isConnected || node.isHub ? "#FDF0BE" : "#4A6187"}
-                          strokeWidth={isFocused || node.isHub ? 2.4 : 1.4}
-                          filter={isFocused || node.isHub ? "url(#goldSoftGlow)" : undefined}
+                          strokeWidth={isFocused ? 2.6 : 1.4}
+                          filter={isFocused ? "url(#goldSoftGlow)" : undefined}
                         />
                         <text
                           x={node.x}
-                          y={node.y + (node.isHub ? (constellationExpanded ? 36 : 54) : isDense ? 24 : 32)}
+                          y={node.y + (isFocused ? 38 : isDense ? 24 : 32)}
                           textAnchor="middle"
-                          fill={isFocused || node.isHub ? "#FDF0BE" : isConnected ? "#FFFFFF" : "#B7C5DE"}
-                          fontSize={node.isHub ? (constellationExpanded ? (isDense ? "13" : "15") : "18") : isDense ? "10.5" : "13"}
-                          fontWeight={isFocused || node.isHub ? "700" : "600"}
+                          fill={isFocused ? "#FDF0BE" : isConnected ? "#FFFFFF" : "#B7C5DE"}
+                          fontSize={isFocused ? "14" : isDense ? "10.5" : "13"}
+                          fontWeight={isFocused ? "700" : "600"}
                         >
                           {node.label}
                         </text>
                         <text
                           x={node.x}
-                          y={node.y + (node.isHub ? (constellationExpanded ? 49 : 72) : isDense ? 35 : 46)}
+                          y={node.y + (isFocused ? 52 : isDense ? 35 : 46)}
                           textAnchor="middle"
-                          fill={node.isHub && revealRing < maxRing ? "#F3D77D" : "#8FA2C2"}
-                          fontSize={node.isHub && !constellationExpanded ? "11.5" : isDense ? "8.5" : "10"}
+                          fill={isFocused ? "#F3D77D" : "#8FA2C2"}
+                          fontSize={isFocused ? "9.5" : isDense ? "8.5" : "10"}
                           fontFamily="monospace"
                         >
-                          {node.isHub && revealRing < maxRing
-                            ? revealRing === 0
-                              ? "Click to Reveal Ring 1"
-                              : `Click to Build Ring ${revealRing + 1}/${maxRing}`
-                            : node.shortTag}
+                          {subLabel}
                         </text>
                       </motion.g>
                     );
