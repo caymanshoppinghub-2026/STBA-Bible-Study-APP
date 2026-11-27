@@ -29,7 +29,9 @@ import {
   BlueprintPillarChip,
   ConstellationDoctrineNode,
   ConstellationScriptureNode,
-  ConstellationPortalNode
+  ConstellationPortalNode,
+  SdaInterconnectedConcept,
+  getSdaConceptsForNode
 } from "../../data/doctrineBlueprintGraph";
 import { DEFAULT_DOCTRINE_TRACKS } from "../../data/doctrineTracksDb";
 
@@ -129,12 +131,14 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
   const activeSpec = TRACK_BLUEPRINTS[selectedTrackId] || TRACK_BLUEPRINTS["fundamental-beliefs"];
   const activeTrackDb = DEFAULT_DOCTRINE_TRACKS[selectedTrackId] || DEFAULT_DOCTRINE_TRACKS["fundamental-beliefs"];
 
-  // Stage 2 Interactive Constellation state (Consistent 3-Click Progressive Flow + Recenter + Pan/Zoom + Portals)
+  // Stage 2 Interactive Constellation state (Unified 4-Click Adventist Theology Progression on ALL Doctrine Nodes)
+  // Click 1: Anchor Scriptures | Click 2: Connected Doctrines | Click 3: Interconnected SDA Concepts | Click 4: Architectural Blueprint
   const [focusedNodeId, setFocusedNodeId] = useState<string>(activeSpec.nodes[0]?.id || "");
-  const [focusStep, setFocusStep] = useState<0 | 1 | 2>(0); // 0=initial core, 1=scriptures revealed, 2=connections revealed, 3rd click=blueprint
+  const [focusStep, setFocusStep] = useState<0 | 1 | 2 | 3>(0);
   const [revealedNodeIds, setRevealedNodeIds] = useState<Set<string>>(() => new Set([activeSpec.nodes[0]?.id || ""]));
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [previewScripture, setPreviewScripture] = useState<ConstellationScriptureNode | null>(null);
+  const [previewConcept, setPreviewConcept] = useState<SdaInterconnectedConcept | null>(null);
   const [breadcrumbPath, setBreadcrumbPath] = useState<string[]>([activeSpec.shortTitle]);
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -162,6 +166,27 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     [activeSpec, revealedNodeIds]
   );
 
+  // Dynamically compute Interconnected SDA Concepts around the focused node on Click 3!
+  const focusedConceptSatellites = useMemo(() => {
+    if (focusStep < 3 || !focusedNodeId) return [];
+    const node = activeSpec.nodes.find((n) => n.id === focusedNodeId);
+    if (!node) return [];
+    const concepts = getSdaConceptsForNode(node);
+    const count = concepts.length;
+    const radius = node.anchorRefs.length >= 7 ? 220 : 186;
+    return concepts.map((concept, idx) => {
+      // Offset angles cleanly between scripture satellites so zero labels collide
+      const angle = -Math.PI / 4 + (idx / count) * (Math.PI * 2);
+      return {
+        id: `concept-${node.id}-${idx}`,
+        concept,
+        parentNodeId: node.id,
+        x: Math.round(node.x + Math.cos(angle) * radius),
+        y: Math.round(node.y + Math.sin(angle) * radius)
+      };
+    });
+  }, [activeSpec, focusedNodeId, focusStep]);
+
   // Keep focused node & progressive state synced when track changes
   React.useEffect(() => {
     const hub = activeSpec.nodes.find((n) => n.isHub) || activeSpec.nodes[0];
@@ -170,6 +195,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     setHubRingLevel(0);
     setRevealedNodeIds(new Set(hub ? [hub.id] : []));
     setPreviewScripture(null);
+    setPreviewConcept(null);
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setPortalTransitionLabel(null);
@@ -359,63 +385,28 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
   };
 
   /**
-   * Progressive Node Interaction:
-   * - Central Hub (e.g., Sola Scriptura):
-   *   • Click 1: Reveals its 8 foundational anchor scriptures.
-   *   • Click 2, 3, (4): Sequentially reveals Ring 1 -> Ring 2 -> Ring 3 until all 28 Fundamental Beliefs are connected!
-   *   • Final Click (after all rings revealed): Opens Stage 3 Architectural Blueprint.
-   * - Secondary Doctrine Nodes (e.g., God the Father):
-   *   • Click 1: Recenters focus on that node & reveals ONLY its specific supporting scriptures.
-   *   • Click 2: Expands & illuminates its connected doctrines outward.
-   *   • Click 3: Transitions directly into Stage 3 Detailed Architectural Blueprint.
+   * Unified 4-Click Adventist Theology Progression for ALL Doctrine Nodes:
+   * - Click 1: Recenters focus on the node & reveals its supporting KJV Anchor Scriptures.
+   * - Click 2: Expands & illuminates its Connected SDA Doctrines outward with glowing gold paths.
+   * - Click 3: Reveals its Interconnected Seventh-day Adventist Theological Concepts (non-doctrine supporting concepts).
+   * - Click 4: Transitions directly into Stage 3 Detailed Architectural Blueprint.
    */
   const handleConstellationNodeClick = (node: ConstellationDoctrineNode) => {
     setPreviewScripture(null);
+    setPreviewConcept(null);
 
-    // Central Hub sequential ring-by-ring expansion
-    if (node.isHub) {
-      if (focusedNodeId !== node.id || focusStep === 0) {
-        setFocusedNodeId(node.id);
-        setFocusStep(1);
-        setPan({ x: 500 - node.x, y: 300 - node.y });
-        setZoom(1);
-        setBreadcrumbPath([activeSpec.shortTitle, node.label, "Anchor Scriptures"]);
-        return;
-      }
-      if (hubRingLevel < maxRing) {
-        const nextRing = hubRingLevel + 1;
-        setHubRingLevel(nextRing);
-        setFocusStep(2);
-        setRevealedNodeIds((prev) => {
-          const next = new Set(prev);
-          for (const n of activeSpec.nodes) {
-            const r = typeof n.ring === "number" ? n.ring : 1;
-            if (n.isHub || r <= nextRing) next.add(n.id);
-          }
-          return next;
-        });
-        // Gently zoom out slightly on outer rings so the full expanding constellation stays framed cleanly
-        setPan({ x: 0, y: 0 });
-        setZoom(nextRing >= 3 ? 0.88 : nextRing === 2 ? 0.94 : 1);
-        setBreadcrumbPath([activeSpec.shortTitle, node.label, `Layer ${nextRing} of ${maxRing}`]);
-        return;
-      }
-      setBreadcrumbPath([activeSpec.shortTitle, node.label, "Architectural Blueprint"]);
-      setStage("blueprint");
-      return;
-    }
-
-    // Secondary Doctrine Node: consistent 3-click interaction
+    // Click 1: Selecting any new node (or initial click on core hub) -> Recenter & reveal its specific Anchor Scriptures
     if (focusedNodeId !== node.id || focusStep === 0) {
       setFocusedNodeId(node.id);
       setFocusStep(1);
       setRevealedNodeIds((prev) => new Set([...prev, node.id]));
       setPan({ x: 500 - node.x, y: 300 - node.y });
-      setZoom((z) => (z < 1.1 ? 1.15 : z));
-      setBreadcrumbPath([activeSpec.shortTitle, node.label]);
+      setZoom(node.isHub ? 1 : 1.1);
+      setBreadcrumbPath([activeSpec.shortTitle, node.label, "1/4 Anchor Scriptures"]);
       return;
     }
 
+    // Click 2: Expand & illuminate Connected Doctrines outward (for hub, reveals Ring 1; for any node, reveals all connected doctrines)
     if (focusStep === 1) {
       setFocusStep(2);
       setRevealedNodeIds((prev) => {
@@ -424,10 +415,28 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
         for (const connId of node.connectedTo) next.add(connId);
         return next;
       });
-      setBreadcrumbPath([activeSpec.shortTitle, node.label, "Connected Doctrines"]);
+      if (node.isHub) {
+        setHubRingLevel((r) => Math.max(r, 1));
+        setPan({ x: 0, y: 0 });
+        setZoom(0.95);
+      }
+      setBreadcrumbPath([activeSpec.shortTitle, node.label, "2/4 Connected Doctrines"]);
       return;
     }
 
+    // Click 3: Reveal Interconnected Seventh-day Adventist Theological Concepts around this doctrine!
+    if (focusStep === 2) {
+      setFocusStep(3);
+      if (node.isHub && hubRingLevel < maxRing) {
+        setHubRingLevel(maxRing);
+      }
+      setPan({ x: 500 - node.x, y: 300 - node.y });
+      setZoom(0.92);
+      setBreadcrumbPath([activeSpec.shortTitle, node.label, "3/4 SDA Concepts"]);
+      return;
+    }
+
+    // Click 4: Transition directly into Stage 3 Detailed Architectural Blueprint!
     setBreadcrumbPath([activeSpec.shortTitle, node.label, "Architectural Blueprint"]);
     setStage("blueprint");
   };
@@ -508,10 +517,12 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                   </span>
                   <span className="hidden lg:inline text-[#9FB0CD]">
                     {focusStep === 0
-                      ? `— Click 1: Reveal ${focusedNode.label} Scriptures`
+                      ? `— Click 1/4: Reveal ${focusedNode.label} Scriptures`
                       : focusStep === 1
-                        ? `— Click 2 on ${focusedNode.label}: Expand Connected Doctrines`
-                        : `— Click 3 on ${focusedNode.label}: Open Architectural Blueprint`}
+                        ? `— Click 2/4: Expand Connected Doctrines`
+                        : focusStep === 2
+                          ? `— Click 3/4: Reveal Interconnected SDA Concepts`
+                          : `— Click 4/4: Open Architectural Blueprint`}
                   </span>
                 </div>
               </div>
@@ -725,6 +736,58 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                     );
                   })}
 
+                  {/* 4b. Interconnected Seventh-day Adventist Theological Concepts (Revealed on Click 3!) */}
+                  {focusedConceptSatellites.map((item) => {
+                    const parent = activeSpec.nodes.find((n) => n.id === item.parentNodeId);
+                    if (!parent) return null;
+                    const isSelectedConcept = previewConcept?.label === item.concept.label;
+                    return (
+                      <React.Fragment key={item.id}>
+                        <motion.line
+                          initial={{ x1: parent.x, y1: parent.y, x2: parent.x, y2: parent.y, opacity: 0 }}
+                          animate={{ x1: parent.x, y1: parent.y, x2: item.x, y2: item.y, opacity: 0.78 }}
+                          transition={{ type: "spring", stiffness: 115, damping: 18 }}
+                          stroke="#C084FC"
+                          strokeWidth={1.4}
+                          strokeDasharray="3 4"
+                        />
+                        <motion.g
+                          data-constellation-node="true"
+                          initial={{ x: parent.x - item.x, y: parent.y - item.y, opacity: 0, scale: 0.4 }}
+                          animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                          transition={{ type: "spring", stiffness: 120, damping: 16 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewScripture(null);
+                            setPreviewConcept(item.concept);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <rect
+                            x={item.x - 72}
+                            y={item.y - 14}
+                            width={144}
+                            height={28}
+                            rx={14}
+                            fill={isSelectedConcept ? "#3B1D5E" : "#151133"}
+                            stroke={isSelectedConcept ? "#F3D77D" : "#C084FC"}
+                            strokeWidth={isSelectedConcept ? 2 : 1.3}
+                          />
+                          <text
+                            x={item.x}
+                            y={item.y + 4}
+                            textAnchor="middle"
+                            fill="#F3E8FF"
+                            fontSize="9.8"
+                            fontWeight="600"
+                          >
+                            ✦ {item.concept.label}
+                          </text>
+                        </motion.g>
+                      </React.Fragment>
+                    );
+                  })}
+
                   {/* 5. Outer Perimeter Cross-Doctrine Portal Nodes */}
                   {(activeSpec.portalNodes || []).map((portal) => {
                     const parent = activeSpec.nodes.find((n) => n.id === portal.fromNodeId);
@@ -793,15 +856,13 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                           ? 11
                           : 14;
                     const subLabel = isFocused
-                      ? node.isHub
-                        ? focusStep === 0
-                          ? "Click 1 • Reveal 8 Scriptures"
-                          : hubRingLevel < maxRing
-                            ? `Click • Expand Layer ${hubRingLevel + 1}/${maxRing}`
-                            : "Click • Open Blueprint"
+                      ? focusStep === 0
+                        ? "Click 1/4 • Scriptures"
                         : focusStep === 1
-                          ? "Click 2/3 • Show Connections"
-                          : "Click 3/3 • Open Blueprint"
+                          ? "Click 2/4 • Doctrines"
+                          : focusStep === 2
+                            ? "Click 3/4 • SDA Concepts"
+                            : "Click 4/4 • Blueprint"
                       : node.shortTag;
                     return (
                       <motion.g
@@ -873,6 +934,38 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                   })}
                 </g>
               </svg>
+
+              {/* Inline SDA Interconnected Concept Pop-up */}
+              <AnimatePresence>
+                {previewConcept && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute bottom-4 right-4 left-4 sm:left-auto sm:w-96 p-4 rounded-xl bg-[#110D28]/95 border border-[#C084FC]/60 shadow-2xl backdrop-blur-md z-20"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-[#E9D5FF]">
+                        <Sparkles className="w-3.5 h-3.5 text-[#F3D77D]" />
+                        SDA Concept • {previewConcept.label}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewConcept(null)}
+                        className="text-[#9FB0CD] hover:text-white cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-xs sm:text-sm text-[#EFE9DC] leading-relaxed border-l-2 border-[#C084FC] pl-3 my-2">
+                      {previewConcept.explanation}
+                    </p>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#C084FC]">
+                      Connected to {focusedNode.label} • Seventh-day Adventist Theology
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Inline KJV Scripture Preview Pop-up */}
               <AnimatePresence>

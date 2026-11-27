@@ -1206,6 +1206,164 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
   }
 };
 
+export interface SdaInterconnectedConcept {
+  label: string;
+  explanation: string;
+}
+
+export const SDA_NODE_CONCEPTS: Record<string, SdaInterconnectedConcept[]> = {
+  "fb-1": [
+    { label: "Thought Inspiration", explanation: "God inspired the prophets' thoughts and impressions rather than mechanical verbal dictation (2 Peter 1:21)." },
+    { label: "Scripture Interprets Scripture", explanation: "Comparing spiritual things with spiritual—line upon line, precept upon precept (Isaiah 28:9-10)." },
+    { label: "Historicist Hermeneutics", explanation: "Prophecy unfolds continuously across human history from the prophet's day to Christ's eternal kingdom." },
+    { label: "Lesser Light Test", explanation: "Every spiritual claim and prophetic gift is tested against the supreme standard of the Law and the Testimony (Isaiah 8:20)." }
+  ],
+  "fb-2": [
+    { label: "Eternal Self-Giving Love", explanation: "The unity of Father, Son, and Spirit proves that love existed eternally before creation (1 John 4:8)." },
+    { label: "Council of Peace", explanation: "The eternal covenant plan of redemption agreed upon within the Godhead before the foundation of the world (Zechariah 6:13)." },
+    { label: "Co-Eternal Unity", explanation: "Three distinct divine Persons united in nature, character, and redemptive purpose (Matthew 28:19)." }
+  ],
+  "fb-3": [
+    { label: "Character Vindication", explanation: "The Great Controversy centers on revealing the Father's true character of justice and mercy against Satan's slander." },
+    { label: "Transcript of Love", explanation: "God's moral law flows directly from the Father's unchanging character of self-sacrificing love." },
+    { label: "Covenant Fatherhood", explanation: "Through Christ we receive adoption as sons and daughters of the heavenly Father (1 John 3:1)." }
+  ],
+  "fb-4": [
+    { label: "Kenosis (Self-Emptying)", explanation: "Christ voluntarily laid aside the independent exercise of His divine attributes to become our Savior (Philippians 2:6-8)." },
+    { label: "Substitutionary Atonement", explanation: "The sinless Lamb of God bore the penalty of human transgression on Calvary (2 Corinthians 5:21)." },
+    { label: "Heavenly High Priest", explanation: "Risen and ascended, Christ continuously mediates His merits in the heavenly sanctuary (Hebrews 7:25)." }
+  ],
+  "fb-5": [
+    { label: "Former & Latter Rain", explanation: "The outpouring of the Spirit at Pentecost and the final end-time empowerment for the Loud Cry (Joel 2:23, 28)." },
+    { label: "Conviction & Regeneration", explanation: "The Spirit convicts of sin, righteousness, and judgment, producing the new birth (John 16:8)." },
+    { label: "Sealing Ministry", explanation: "Settling believers into truth intellectually and spiritually so they cannot be moved (Ephesians 4:30)." }
+  ],
+  "fb-6": [
+    { label: "Literal Six-Day Week", explanation: "The evening-and-morning creation week establishes the foundation for the seventh-day Sabbath." },
+    { label: "Imago Dei (Image of God)", explanation: "Every human being carries inherent dignity, moral freedom, and stewardship over creation." },
+    { label: "Earth's Original Perfection", explanation: "Death and suffering entered only after the Fall—never as God's original method of creation." }
+  ],
+  "fb-7": [
+    { label: "Wholistic Anthropology", explanation: "Humanity is an indivisible unity of body, mind, and spirit—not a disembodied immortal soul (Genesis 2:7)." },
+    { label: "Moral Freedom of Choice", explanation: "True love requires free will; God never coerces the human conscience." },
+    { label: "Restoration of the Image", explanation: "The overarching goal of redemption is restoring God's image in fallen humanity." }
+  ],
+  "fb-8": [
+    { label: "Cosmic Conflict Lens", explanation: "Viewing all Scripture and history through the battle between Christ's government of love and Satan's rebellion." },
+    { label: "Watching Universe", explanation: "Unfallen worlds and angels observe how God's justice and mercy triumph at the Cross (1 Corinthians 4:9)." },
+    { label: "End of Rebellion Forever", explanation: "Once God's character is fully vindicated, sin will never rise up a second time (Nahum 1:9)." }
+  ],
+  "fb-9": [
+    { label: "Calvary as Cosmic Center", explanation: "The Cross simultaneously satisfies divine justice and reveals the boundless depth of God's love." },
+    { label: "Firstfruits of Resurrection", explanation: "Christ's empty tomb guarantees the bodily resurrection of all who sleep in Jesus (1 Corinthians 15:20)." },
+    { label: "Active & Passive Obedience", explanation: "Both Christ's sinless life and His atoning death are credited to the believing sinner." }
+  ],
+  "fb-10": [
+    { label: "Righteousness by Faith", explanation: "Justification (imputed righteousness) and sanctification (imparted righteousness) are both gifts of grace through faith." },
+    { label: "New Birth (Regeneration)", explanation: "A radical transformation of heart and affections wrought by the Holy Spirit (John 3:3-6)." },
+    { label: "Covenant Heart-Law", explanation: "God writes His law into the mind and heart under the New Covenant (Hebrews 8:10)." }
+  ],
+  "fb-11": [
+    { label: "Daily Surrender", explanation: "Dying to self each morning through prayer, Bible study, and abiding in the Vine (John 15:5)." },
+    { label: "Armor of God", explanation: "Spiritual readiness against deception and temptation through truth, faith, and the Word (Ephesians 6:10-18)." },
+    { label: "Fruit of the Spirit", explanation: "Christlike character maturing organically as the Spirit dwells within (Galatians 5:22-23)." }
+  ],
+  "fb-12": [
+    { label: "Priesthood of All Believers", explanation: "Every baptized disciple is called to active ministry and witness—not only ordained clergy (1 Peter 2:9)." },
+    { label: "Body of Christ", explanation: "Christ alone is the Head of the church; members serve in harmonious interdependence." },
+    { label: "Pillar & Ground of Truth", explanation: "The church is entrusted with guarding and proclaiming the everlasting gospel worldwide." }
+  ],
+  "fb-13": [
+    { label: "Three Angels' Messages", explanation: "The final global warning of Revelation 14:6-12 preparing the world for Christ's return." },
+    { label: "Faith of Jesus", explanation: "Holding both loyalty to God's commandments and the enduring faith that Jesus Himself lived (Revelation 14:12)." },
+    { label: "Loud Cry Proclamation", explanation: "The Spirit-empowered final invitation calling God's sincere people out of spiritual Babylon (Revelation 18:1-4)." }
+  ],
+  "fb-14": [
+    { label: "Reconciled Community", explanation: "The gospel dissolves ethnic, cultural, and social divisions at the foot of the Cross (Galatians 3:28)." },
+    { label: "Unity in Truth", explanation: "Biblical unity is anchored in shared loyalty to Christ and Scripture—never compromising doctrine." },
+    { label: "Global Fellowship", explanation: "Every nation, kindred, tongue, and people united in one worldwide Adventist family." }
+  ],
+  "fb-15": [
+    { label: "Death & Resurrection Symbol", explanation: "Immersion in water publicly enacts burial of the old life and rising to walk in newness of life (Romans 6:4)." },
+    { label: "Public Covenant Vow", explanation: "Declaring personal allegiance to the Father, Son, and Holy Spirit before witnesses." },
+    { label: "Believer's Conscious Choice", explanation: "Preceded by instruction, repentance, and personal faith in Jesus Christ." }
+  ],
+  "fb-16": [
+    { label: "Ordinance of Humility", explanation: "Foot-washing before communion fosters reconciliation, servant leadership, and heart cleansing (John 13:14-15)." },
+    { label: "Unleavened & Unfermented", explanation: "Pure emblems symbolizing Christ's sinless body and spotless shed blood." },
+    { label: "Proclaiming Until He Comes", explanation: "Looking back in gratitude to Calvary and forward in hope to the marriage supper of the Lamb." }
+  ],
+  "fb-17": [
+    { label: "Spirit-Distributed Ministry", explanation: "Gifts are sovereignly given by the Holy Spirit to build up the whole church in love." },
+    { label: "Equipping the Saints", explanation: "Pastors and teachers train every member for joyful, effective discipleship (Ephesians 4:12)." },
+    { label: "Humility in Service", explanation: "Every gift is exercised for God's glory, never personal status." }
+  ],
+  "fb-18": [
+    { label: "Testimony of Jesus", explanation: "Defined by Scripture itself as the spirit of prophecy identifying the end-time remnant (Revelation 19:10)." },
+    { label: "Biblical Tests of a Prophet", explanation: "Harmony with the Law and Testimony, fulfilled predictions, confession of Christ, and righteous fruit." },
+    { label: "Lesser Light to Greater Light", explanation: "The writings of Ellen G. White always point believers back to the supreme authority of the Bible." }
+  ],
+  "fb-19": [
+    { label: "Mirror of Character", explanation: "The law reveals sin and points us to Christ for cleansing, like a mirror showing what needs washing (James 1:23-25)." },
+    { label: "Harmony of Law & Grace", explanation: "Grace never abolishes God's law—it empowers joyous obedience to it (Romans 3:31)." },
+    { label: "Ark of the Covenant", explanation: "The Ten Commandments rest beneath the mercy seat in heaven's sanctuary (Revelation 11:19)." }
+  ],
+  "fb-20": [
+    { label: "Sanctuary in Time", explanation: "Twenty-four sacred hours from Friday sundown to Saturday sundown set apart for fellowship with God." },
+    { label: "Seal of the Living God", explanation: "The fourth commandment carries God's Name, Title (Creator), and Territory (heaven and earth)." },
+    { label: "Rest from Self-Works", explanation: "Ceasing from our own labor symbolizes resting completely in Christ's finished work of salvation (Hebrews 4:9-10)." }
+  ],
+  "fb-21": [
+    { label: "God's Ownership", explanation: "The earth is the Lord's; we manage time, talents, body, and resources as His faithful stewards." },
+    { label: "Tithe & Freewill Offerings", explanation: "Returning a faithful tenth acknowledges God as Provider and sustains gospel ministry worldwide (Malachi 3:10)." },
+    { label: "Generous Heart", explanation: "Cheerful giving breaks selfishness and reflects the self-giving character of Christ." }
+  ],
+  "fb-22": [
+    { label: "Adventist Health Message", explanation: "Caring for body and mind through clean nutrition, rest, temperance, and trust in God (1 Corinthians 6:19-20)." },
+    { label: "Sanctified Influence", explanation: "Guarding what we watch, read, and practice so the mind stays clear to hear the Holy Spirit." },
+    { label: "Wholesome Witness", explanation: "Simplicity, modesty, and kindness that make the gospel attractive to others." }
+  ],
+  "fb-23": [
+    { label: "Edenic Institution", explanation: "Established alongside the Sabbath at Creation as a lifelong covenant of mutual love and faithfulness." },
+    { label: "Home as Little Church", explanation: "Family worship and Deuteronomy 6 discipleship nurture the next generation in Christ." },
+    { label: "Christ & Church Reflection", explanation: "Self-sacrificing love and mutual respect mirror Christ's devotion to His bride (Ephesians 5:25)." }
+  ],
+  "fb-24": [
+    { label: "Day-Year Principle (1844)", explanation: "The 2,300 prophetic days of Daniel 8:14 point to 1844 and the antitypical Day of Atonement." },
+    { label: "Investigative Judgment", explanation: "Pre-advent review of heavenly records vindicating the saints before Christ returns with His reward." },
+    { label: "Two-Apartment Ministry", explanation: "Holy Place daily mediation (forgiveness) and Most Holy Place cleansing (blotting out of sin)." }
+  ],
+  "fb-25": [
+    { label: "Literal, Visible & Audible", explanation: "Every eye shall see Him—never a secret rapture, but a glorious worldwide appearing (Revelation 1:7)." },
+    { label: "Signs of the Times", explanation: "Prophetic fulfillment in world events awakens watchful readiness without setting dates (Matthew 24)." },
+    { label: "Blessed Hope", explanation: "The crowning reunion of the redeemed with Jesus and resurrected loved ones (1 Thessalonians 4:16-17)." }
+  ],
+  "fb-26": [
+    { label: "Conditional Immortality", explanation: "God alone has inherent immortality; eternal life is a gift bestowed on believers at Christ's coming (1 Timothy 6:16)." },
+    { label: "Unconscious Sleep in Death", explanation: "The dead rest peacefully without consciousness, shielding believers from spiritism (Ecclesiastes 9:5)." },
+    { label: "Two Resurrections", explanation: "The resurrection of life at Christ's Second Coming and the resurrection of judgment after the millennium." }
+  ],
+  "fb-27": [
+    { label: "Heavenly Review Judgment", explanation: "During the 1,000 years in heaven, the redeemed review God's righteous judgments (1 Corinthians 6:2-3)." },
+    { label: "Desolate Earth & Bound Satan", explanation: "Satan is confined by circumstances on an uninhabited earth for 1,000 years (Revelation 20:1-3)." },
+    { label: "Final Eradication of Sin", explanation: "After the millennium, the purifying fire destroys sin and evil forever—never eternal torment." }
+  ],
+  "fb-28": [
+    { label: "New Jerusalem Descends", explanation: "The Holy City becomes the capital of the renewed earth where God dwells personally with His people." },
+    { label: "Tree of Life Restored", explanation: "Eden restored in fuller glory—eternal learning, creative joy, and unbroken fellowship." },
+    { label: "Eternal Sabbath Worship", explanation: "From one Sabbath to another, all redeemed creation gathers to worship the Creator forever (Isaiah 66:23)." }
+  ]
+};
+
+export function getSdaConceptsForNode(node: ConstellationDoctrineNode): SdaInterconnectedConcept[] {
+  if (SDA_NODE_CONCEPTS[node.id]) return SDA_NODE_CONCEPTS[node.id];
+  return [
+    { label: "Sola Scriptura Witness", explanation: `Anchored in comparing Scripture with Scripture to illuminate ${node.label} (Isaiah 28:9-10).` },
+    { label: "Great Controversy Lens", explanation: `Reveals how ${node.label} vindicates God's loving character in the cosmic conflict.` },
+    { label: "Sanctuary & Christ-Centered", explanation: `Points directly to Jesus Christ's atoning cross and heavenly high-priestly ministry.` }
+  ];
+}
+
 export const TRACK_BLUEPRINT_ORDER = [
   "fundamental-beliefs",
   "three-angels",
