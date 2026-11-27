@@ -46,6 +46,7 @@ import { saveNoteToSupabase, ensureSupabaseAuth } from "../lib/notebookSync";
 import { StudyNote } from "../types/notebook";
 import { notifyLiveSectionUpdate } from "../utils/contentUpdatesWatcher";
 import { playReminderPingSound } from "../utils/audioFeedback";
+import { DoctrineBlueprintEngine } from "./doctrine/DoctrineBlueprintEngine";
 
 // Elevated Track metadata mapping for sacred architectural exploration
 const TRACK_METADATA: Record<string, { title: string; icon: string; tagline: string; category: string; blueprintType: string }> = {
@@ -98,6 +99,27 @@ export const DoctrineNavigator: React.FC = () => {
   const { sabbathMode } = useSabbathMode();
   
   // Track state
+  const [navigatorViewMode, setNavigatorViewMode] = useState<"blueprint" | "classic">(() => {
+    try {
+      const saved = localStorage.getItem("stba_doctrine_view_mode");
+      return saved === "classic" ? "classic" : "blueprint";
+    } catch {
+      return "blueprint";
+    }
+  });
+  const handleSetViewMode = (mode: "blueprint" | "classic") => {
+    setNavigatorViewMode(mode);
+    try {
+      localStorage.setItem("stba_doctrine_view_mode", mode);
+    } catch {}
+  };
+  const handleLaunchBibleStudyFromBlueprint = (reference: string, topic: string) => {
+    try {
+      localStorage.setItem("stba_pending_search_ref", reference);
+      localStorage.setItem("stba_pending_search_topic", topic);
+    } catch {}
+    navigate("/study");
+  };
   const [selectedTrackId, setSelectedTrackId] = useState<string>("fundamental-beliefs");
   const [selectedSectionIndex, setSelectedSectionIndex] = useState<number>(0);
   const [selectedChipRef, setSelectedChipRef] = useState<string | null>(null);
@@ -265,8 +287,8 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
       <div className="flex flex-col gap-5 text-left border-b border-[#DFC57B]/20 pb-6 font-lato font-normal not-italic">
         <div className="space-y-3 max-w-4xl">
           
-          {/* Top Intelligent Companion Badges */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          {/* Top Intelligent Companion Badges + Mode Toggle */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Cognitive Scripture Guidance Companion Badge */}
             <div 
               className="inline-flex items-center gap-2 px-3 py-1 bg-[#081e3a]/90 border border-[#DFC57B]/50 rounded-full text-[#DFC57B] text-[10px] font-lato font-normal not-italic tracking-wider shadow-xs backdrop-blur-xs"
@@ -274,6 +296,42 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
             >
               <Brain className="w-3.5 h-3.5 text-[#DFC57B] animate-pulse" />
               <span>INTELLIGENT BIBLICAL REASONING ENGINE</span>
+            </div>
+
+            {/* Header Toggle: Blueprint Engine <-> Classic View */}
+            <div
+              className="inline-flex items-center p-1 rounded-full bg-[#07152E]/90 border border-[#DFC57B]/35 shadow-sm"
+              role="tablist"
+              aria-label="Doctrine Navigator View Mode"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={navigatorViewMode === "blueprint"}
+                onClick={() => handleSetViewMode("blueprint")}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                  navigatorViewMode === "blueprint"
+                    ? "bg-gradient-to-b from-[#F1D37A] to-[#C9973A] text-[#081326] shadow-sm"
+                    : "text-[#C5D1E6] hover:text-[#FDF0BE]"
+                }`}
+              >
+                <Network className="w-3.5 h-3.5" />
+                <span>Blueprint Engine</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={navigatorViewMode === "classic"}
+                onClick={() => handleSetViewMode("classic")}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                  navigatorViewMode === "classic"
+                    ? "bg-gradient-to-b from-[#F1D37A] to-[#C9973A] text-[#081326] shadow-sm"
+                    : "text-[#C5D1E6] hover:text-[#FDF0BE]"
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>Classic View</span>
+              </button>
             </div>
           </div>
 
@@ -342,6 +400,19 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
         </div>
       </div>
 
+      {/* MODE SWITCH: NEW 3-STAGE ROYAL NAVY & GOLD BLUEPRINT ENGINE vs CLASSIC VIEW */}
+      {navigatorViewMode === "blueprint" ? (
+        <DoctrineBlueprintEngine
+          selectedTrackId={selectedTrackId}
+          onSelectTrack={(tid) => {
+            setSelectedTrackId(tid);
+            setSelectedSectionIndex(0);
+          }}
+          onLaunchBibleStudy={handleLaunchBibleStudyFromBlueprint}
+          onSwitchToClassic={() => handleSetViewMode("classic")}
+        />
+      ) : (
+        <>
       {/* 2. CHOOSE BLUEPRINT FOCUS */}
       <div className="space-y-3.5 text-left font-lato font-normal not-italic" id="track-selector-section">
         <div className="flex items-center justify-between">
@@ -1245,6 +1316,8 @@ Track: ${trackMeta?.title || "Systematic Doctrine"} • Divine Architecture Expl
           </div>
         )}
       </AnimatePresence>
+        </>
+      )}
 
     </div>
   );
