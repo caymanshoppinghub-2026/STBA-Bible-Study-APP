@@ -80,7 +80,16 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         ring: 0,
         isHub: true,
         connectedTo: ["fb-2", "fb-3", "fb-4", "fb-5", "fb-6", "fb-7"],
-        anchorRefs: ["2 Timothy 3:16-17", "2 Peter 1:20-21"]
+        anchorRefs: [
+          "2 Timothy 3:16-17",
+          "2 Peter 1:20-21",
+          "Isaiah 28:9-10",
+          "Isaiah 8:20",
+          "1 Timothy 4:15",
+          "2 Timothy 2:15",
+          "Psalm 119:105",
+          "Acts 17:11"
+        ]
       },
       // RING 1: DOCTRINE OF GOD & HUMANITY (#2 - #7)
       {

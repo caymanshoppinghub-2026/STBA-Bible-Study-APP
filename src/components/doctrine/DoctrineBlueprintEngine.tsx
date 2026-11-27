@@ -178,7 +178,13 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     if (fromTrack) return fromTrack.text;
     const QUICK_KJV: Record<string, string> = {
       "2 timothy 3:16-17": "All scripture is given by inspiration of God, and is profitable for doctrine, for reproof, for correction, for instruction in righteousness: That the man of God may be perfect, throughly furnished unto all good works.",
-      "2 peter 1:20-21": "For the prophecy came not in old time by the will of man: but holy men of God spake as they were moved by the Holy Ghost.",
+      "2 peter 1:20-21": "Knowing this first, that no prophecy of the scripture is of any private interpretation. For the prophecy came not in old time by the will of man: but holy men of God spake as they were moved by the Holy Ghost.",
+      "isaiah 28:9-10": "Whom shall he teach knowledge? and whom shall he make to understand doctrine? For precept must be upon precept, precept upon precept; line upon line, line upon line; here a little, and there a little.",
+      "isaiah 8:20": "To the law and to the testimony: if they speak not according to this word, it is because there is no light in them.",
+      "1 timothy 4:15": "Meditate upon these things; give thyself wholly to them; that thy profiting may appear to all.",
+      "2 timothy 2:15": "Study to shew thyself approved unto God, a workman that needeth not to be ashamed, rightly dividing the word of truth.",
+      "psalm 119:105": "Thy word is a lamp unto my feet, and a light unto my path.",
+      "acts 17:11": "These were more noble than those in Thessalonica, in that they received the word with all readiness of mind, and searched the scriptures daily, whether those things were so.",
       "deuteronomy 6:4": "Hear, O Israel: The LORD our God is one LORD.",
       "matthew 28:19": "Go ye therefore, and teach all nations, baptizing them in the name of the Father, and of the Son, and of the Holy Ghost.",
       "genesis 1:1": "In the beginning God created the heaven and the earth.",
@@ -206,10 +212,13 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     const node = activeSpec.nodes.find((n) => n.id === focusedNodeId);
     if (!node || !node.anchorRefs || node.anchorRefs.length === 0) return [];
     const count = node.anchorRefs.length;
-    const radius = 84;
+    const radius = count >= 7 ? 124 : count >= 4 ? 108 : 84;
     return node.anchorRefs.map((ref, idx) => {
-      // Spread satellites cleanly in an arc above/around the focused node
-      const angle = (-Math.PI * 0.78) + (count === 1 ? Math.PI * 0.28 : (idx / (count - 1)) * (Math.PI * 0.56));
+      // For 4+ anchor verses, distribute evenly around a full balanced ring; for 1–3, fan cleanly above the node
+      const angle =
+        count >= 4
+          ? -Math.PI / 2 + (idx / count) * (Math.PI * 2)
+          : -Math.PI * 0.78 + (count === 1 ? Math.PI * 0.28 : (idx / (count - 1)) * (Math.PI * 0.56));
       return {
         id: `sat-${node.id}-${idx}`,
         reference: ref,
