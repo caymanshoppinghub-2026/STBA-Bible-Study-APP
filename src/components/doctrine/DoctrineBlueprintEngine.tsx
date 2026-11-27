@@ -62,7 +62,7 @@ const renderChipIcon = (iconKey: BlueprintPillarChip["iconKey"]) => {
   }
 };
 
-/** Sacred Geometric Gold Hexagonal Emblem inspired by the Stage 1 Hero Visual */
+/** Sacred Hexagonal Gold Crest with Seventh-day Adventist Emblem rendered in luminous gold */
 const SacredGeometricEmblem: React.FC = () => (
   <div className="relative w-28 h-28 md:w-32 md:h-32 mx-auto flex items-center justify-center select-none">
     <div
@@ -74,51 +74,75 @@ const SacredGeometricEmblem: React.FC = () => (
     <svg viewBox="0 0 120 120" className="w-full h-full relative z-10 drop-shadow-[0_0_18px_rgba(212,175,55,0.45)]">
       <defs>
         <linearGradient id="stbaGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#F6E29B" />
-          <stop offset="50%" stopColor="#D4AF37" />
-          <stop offset="100%" stopColor="#A67C23" />
+          <stop offset="0%" stopColor="#FDF0BE" />
+          <stop offset="48%" stopColor="#E5C158" />
+          <stop offset="100%" stopColor="#B58624" />
         </linearGradient>
         <linearGradient id="stbaNavyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#122647" stopOpacity="0.92" />
-          <stop offset="100%" stopColor="#071124" stopOpacity="0.96" />
+          <stop offset="0%" stopColor="#122647" stopOpacity="0.94" />
+          <stop offset="100%" stopColor="#071124" stopOpacity="0.98" />
         </linearGradient>
       </defs>
-      {/* Outer & inner sacred hexagon */}
+      {/* Outer & inner six-sided hexagon frame */}
       <polygon
         points="60,8 106,34 106,86 60,112 14,86 14,34"
         fill="url(#stbaNavyGrad)"
         stroke="url(#stbaGoldGrad)"
-        strokeWidth="2"
+        strokeWidth="2.2"
       />
       <polygon
         points="60,15 100,38 100,82 60,105 20,82 20,38"
         fill="none"
         stroke="url(#stbaGoldGrad)"
-        strokeWidth="0.8"
-        strokeOpacity="0.55"
+        strokeWidth="0.9"
+        strokeOpacity="0.6"
       />
-      {/* Faceted geometric rays */}
-      <line x1="60" y1="8" x2="60" y2="112" stroke="url(#stbaGoldGrad)" strokeWidth="0.6" strokeOpacity="0.35" />
-      <line x1="14" y1="34" x2="106" y2="86" stroke="url(#stbaGoldGrad)" strokeWidth="0.6" strokeOpacity="0.28" />
-      <line x1="106" y1="34" x2="14" y2="86" stroke="url(#stbaGoldGrad)" strokeWidth="0.6" strokeOpacity="0.28" />
-      {/* Central Cross */}
-      <line x1="60" y1="28" x2="60" y2="76" stroke="url(#stbaGoldGrad)" strokeWidth="3.2" strokeLinecap="round" />
-      <line x1="46" y1="44" x2="74" y2="44" stroke="url(#stbaGoldGrad)" strokeWidth="3.2" strokeLinecap="round" />
-      {/* Flowing Spirit ribbon / flame at base */}
-      <path
-        d="M60 95 C49 84, 52 72, 60 64 C68 72, 71 84, 60 95 Z"
-        fill="url(#stbaGoldGrad)"
-        fillOpacity="0.25"
-        stroke="url(#stbaGoldGrad)"
-        strokeWidth="1.4"
-      />
-      {/* Olive branch accents left & right */}
-      <path d="M30 74 Q36 60 44 54" fill="none" stroke="url(#stbaGoldGrad)" strokeWidth="1.2" strokeOpacity="0.8" />
-      <ellipse cx="34" cy="64" rx="3.5" ry="1.8" transform="rotate(-35 34 64)" fill="url(#stbaGoldGrad)" fillOpacity="0.8" />
-      <ellipse cx="39" cy="58" rx="3.5" ry="1.8" transform="rotate(-35 39 58)" fill="url(#stbaGoldGrad)" fillOpacity="0.8" />
-      <path d="M90 74 Q84 60 76 54" fill="none" stroke="url(#stbaGoldGrad)" strokeWidth="1.2" strokeOpacity="0.8" />
-      <ellipse cx="86" cy="64" rx="3.5" ry="1.8" transform="rotate(35 86 64)" fill="url(#stbaGoldGrad)" fillOpacity="0.8" />
-      <ellipse cx="81" cy="58" rx="3.5" ry="1.8" transform="rotate(35 81 58)" fill="url(#stbaGoldGrad)" fillOpacity="0.8" />
+
+      {/* Luminous Gold Seventh-day Adventist Emblem (Three Flames, Open Bible & Cross) */}
+      <g transform="translate(0, 1)">
+        {/* Left Three Rising Flames (sweeping upward to the central peak) */}
+        <path
+          d="M 46.5 55.5 C 43 47, 50 40, 56 34 C 60 30, 62.5 26.5, 63.5 22.5 C 65 28, 64.5 34.5, 60.5 39.5 C 55.5 45.5, 49.5 49, 46.5 55.5 Z"
+          fill="url(#stbaGoldGrad)"
+        />
+        <path
+          d="M 46.5 63.5 C 43.5 56, 49.5 49.5, 55.5 44 C 59.5 40.5, 62.5 36.5, 63.5 32.5 C 64.8 37.5, 64 43.5, 60 48.2 C 55.5 53.5, 49.5 57.5, 46.5 63.5 Z"
+          fill="url(#stbaGoldGrad)"
+        />
+        <path
+          d="M 48.5 70 C 45.8 63.5, 51 57.5, 56 52.8 C 59.5 49.5, 62.2 46, 63.5 42.5 C 64.5 47, 63.5 52, 60 56.5 C 56 61.5, 51 64.8, 48.5 70 Z"
+          fill="url(#stbaGoldGrad)"
+        />
+
+        {/* Right Three Rising Flames (interlocking beneath the peak) */}
+        <path
+          d="M 61.5 63 C 62 56.5, 66.5 52, 69 47.5 C 70.5 44.8, 70 42, 68.5 40 C 72.5 42.2, 74.2 47, 72 52.2 C 70 57, 65 60, 61.5 63 Z"
+          fill="url(#stbaGoldGrad)"
+        />
+        <path
+          d="M 61.5 70.5 C 62.2 64.5, 67.5 60.2, 71.2 55.5 C 73.2 53, 73.8 50, 73.2 47.5 C 76.2 50.5, 76.5 55.5, 73.5 60.5 C 70.8 65, 65.5 67.8, 61.5 70.5 Z"
+          fill="url(#stbaGoldGrad)"
+        />
+        <path
+          d="M 61.5 77.5 C 62.5 72, 68 68, 72 63.8 C 74.2 61.5, 75.5 58.8, 75.5 56 C 77.8 59.2, 77.2 64.2, 74 68.8 C 71 73, 66 75.2, 61.5 77.5 Z"
+          fill="url(#stbaGoldGrad)"
+        />
+
+        {/* Open Bible — Left Page */}
+        <path
+          d="M 27 87.5 L 39 76.5 C 44.5 74.5, 52 74.2, 58.2 76 L 58.2 87.5 C 52.5 84.8, 43.5 85.2, 27 87.5 Z"
+          fill="url(#stbaGoldGrad)"
+        />
+        {/* Open Bible — Right Page */}
+        <path
+          d="M 93 87.5 L 81 76.5 C 75.5 74.5, 68 74.2, 61.8 76 L 61.8 87.5 C 67.5 84.8, 76.5 85.2, 93 87.5 Z"
+          fill="url(#stbaGoldGrad)"
+        />
+
+        {/* Iconic Negative-Space Cross at the heart of the Open Bible & Flames */}
+        <rect x="58.7" y="71.5" width="2.6" height="17.2" fill="#091831" />
+        <rect x="54.2" y="77.2" width="11.6" height="2.4" fill="#091831" />
+      </g>
     </svg>
   </div>
 );
