@@ -85,13 +85,13 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
           "2 Peter 1:20-21",
           "Isaiah 28:9-10",
           "Isaiah 8:20",
-          "1 Timothy 4:15",
+          "1 Timothy 4:15-16",
           "2 Timothy 2:15",
           "Psalm 119:105",
           "Acts 17:11"
         ]
       },
-      // RING 1: DOCTRINE OF GOD & HUMANITY (#2 - #7)
+      // RING 1: DOCTRINE OF GOD & HUMANITY (#2 - #7) — expanded spacing
       {
         id: "fb-2",
         label: "The Trinity",
@@ -99,10 +99,10 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         summary: "There is one God: Father, Son, and Holy Spirit, a unity of three co-eternal Persons—immortal, all-powerful, all-knowing, and infinitely loving.",
         sectionIndex: 1,
         x: 500,
-        y: 165,
+        y: 120,
         ring: 1,
         connectedTo: ["fb-1", "fb-3", "fb-4", "fb-5"],
-        anchorRefs: ["Deuteronomy 6:4", "Matthew 28:19"]
+        anchorRefs: ["Deuteronomy 6:4", "Matthew 28:19", "2 Corinthians 13:14", "Ephesians 4:4-6"]
       },
       {
         id: "fb-3",
@@ -110,11 +110,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #3",
         summary: "God the eternal Father is the Creator, Source, Sustainer, and Sovereign of all creation—just, holy, merciful, and gracious.",
         sectionIndex: 1,
-        x: 375,
-        y: 225,
+        x: 335,
+        y: 205,
         ring: 1,
         connectedTo: ["fb-1", "fb-2", "fb-6", "fb-8"],
-        anchorRefs: ["Genesis 1:1", "John 3:16"]
+        anchorRefs: ["Genesis 1:1", "John 3:16", "John 14:9", "1 John 4:8"]
       },
       {
         id: "fb-4",
@@ -122,11 +122,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #4",
         summary: "God the eternal Son became incarnate in Jesus Christ—forever truly God and truly human—who died for our sins and ministers for us in heaven.",
         sectionIndex: 1,
-        x: 625,
-        y: 225,
+        x: 665,
+        y: 205,
         ring: 1,
         connectedTo: ["fb-1", "fb-2", "fb-9", "fb-10"],
-        anchorRefs: ["John 1:1-3", "Philippians 2:5-11"]
+        anchorRefs: ["John 1:1-3", "Philippians 2:5-11", "Colossians 1:15-19", "Hebrews 1:1-3"]
       },
       {
         id: "fb-5",
@@ -134,11 +134,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #5",
         summary: "God the eternal Spirit was active with the Father and the Son in Creation, incarnation, and redemption—inspiring Scripture and transforming believers.",
         sectionIndex: 1,
-        x: 625,
-        y: 375,
+        x: 665,
+        y: 395,
         ring: 1,
         connectedTo: ["fb-1", "fb-2", "fb-11", "fb-17"],
-        anchorRefs: ["John 14:16-17", "2 Peter 1:21"]
+        anchorRefs: ["John 14:16-17", "John 16:13", "2 Peter 1:21", "Acts 1:8"]
       },
       {
         id: "fb-6",
@@ -146,11 +146,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #6",
         summary: "God has revealed in Scripture the authentic and historical account of His six-day creative activity, resting on the seventh day as a perpetual memorial.",
         sectionIndex: 2,
-        x: 375,
-        y: 375,
+        x: 335,
+        y: 395,
         ring: 1,
         connectedTo: ["fb-1", "fb-3", "fb-7", "fb-20"],
-        anchorRefs: ["Genesis 1:1-27", "Exodus 20:8-11"]
+        anchorRefs: ["Genesis 1:1-2", "Exodus 20:8-11", "Psalm 33:6", "Hebrews 11:3"]
       },
       {
         id: "fb-7",
@@ -159,23 +159,23 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         summary: "Made in God's image with individuality and freedom of choice, humanity fell into sin and depends wholly on God's grace for restoration.",
         sectionIndex: 2,
         x: 500,
-        y: 435,
+        y: 480,
         ring: 1,
         connectedTo: ["fb-1", "fb-6", "fb-8", "fb-10"],
-        anchorRefs: ["Genesis 1:26-28", "Romans 5:12-17"]
+        anchorRefs: ["Genesis 1:26-27", "Genesis 2:7", "Psalm 8:4-6", "Romans 5:12"]
       },
-      // RING 2: SALVATION & THE CHURCH (#8 - #18)
+      // RING 2: SALVATION & THE CHURCH (#8 - #18) — expanded spacing
       {
         id: "fb-8",
         label: "Great Controversy",
         shortTag: "Belief #8",
         summary: "All humanity is involved in a great controversy between Christ and Satan regarding the character of God, His law, and His sovereignty over the universe.",
         sectionIndex: 0,
-        x: 245,
-        y: 190,
+        x: 190,
+        y: 155,
         ring: 2,
         connectedTo: ["fb-3", "fb-7", "fb-9", "fb-24"],
-        anchorRefs: ["Revelation 12:4-9", "Job 1:6-12"]
+        anchorRefs: ["Revelation 12:7-9", "Isaiah 14:12-14", "Ezekiel 28:14-15", "Job 1:6-12"]
       },
       {
         id: "fb-9",
@@ -183,11 +183,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #9",
         summary: "In Christ's life of perfect obedience, His suffering, death, and resurrection, God provided the only means of atonement for human sin.",
         sectionIndex: 0,
-        x: 755,
-        y: 190,
+        x: 810,
+        y: 155,
         ring: 2,
         connectedTo: ["fb-4", "fb-8", "fb-10", "fb-16"],
-        anchorRefs: ["John 3:16", "1 Corinthians 15:3-4"]
+        anchorRefs: ["John 3:16", "Isaiah 53:5-6", "1 Corinthians 15:3-4", "2 Corinthians 5:21"]
       },
       {
         id: "fb-10",
@@ -195,11 +195,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #10",
         summary: "Through Christ we are justified, adopted as God's sons and daughters, and delivered from the lordship of sin by faith and the new birth.",
         sectionIndex: 0,
-        x: 785,
-        y: 285,
+        x: 865,
+        y: 280,
         ring: 2,
         connectedTo: ["fb-4", "fb-7", "fb-9", "fb-11"],
-        anchorRefs: ["2 Corinthians 5:17-21", "Ephesians 2:8-10"]
+        anchorRefs: ["2 Corinthians 5:17", "Ephesians 2:8-10", "John 3:3-6", "Titus 3:5"]
       },
       {
         id: "fb-11",
@@ -207,11 +207,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #11",
         summary: "By His death on the cross Jesus triumphed over the forces of evil; as we abide in Him daily through Word and prayer, we grow into His likeness.",
         sectionIndex: 1,
-        x: 765,
-        y: 385,
+        x: 840,
+        y: 410,
         ring: 2,
         connectedTo: ["fb-5", "fb-10", "fb-12", "fb-22"],
-        anchorRefs: ["Colossians 2:6-15", "Galatians 5:22-25"]
+        anchorRefs: ["Colossians 2:6-7", "Galatians 5:22-23", "Psalm 1:1-2", "Philippians 4:8"]
       },
       {
         id: "fb-12",
@@ -219,11 +219,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #12",
         summary: "The church is the community of believers who confess Jesus Christ as Lord and Saviour, called out for worship, fellowship, and worldwide proclamation.",
         sectionIndex: 1,
-        x: 690,
-        y: 475,
+        x: 745,
+        y: 525,
         ring: 2,
         connectedTo: ["fb-11", "fb-13", "fb-14"],
-        anchorRefs: ["Matthew 16:18", "1 Peter 2:9"]
+        anchorRefs: ["Matthew 16:18", "1 Peter 2:9", "Ephesians 1:22-23", "Acts 2:42"]
       },
       {
         id: "fb-13",
@@ -231,11 +231,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #13",
         summary: "In the last days a remnant has been called out to keep the commandments of God and the faith of Jesus, proclaiming the Three Angels' Messages.",
         sectionIndex: 1,
-        x: 590,
-        y: 530,
+        x: 615,
+        y: 585,
         ring: 2,
         connectedTo: ["fb-12", "fb-18", "fb-19", "fb-24"],
-        anchorRefs: ["Revelation 12:17", "Revelation 14:6-12"]
+        anchorRefs: ["Revelation 12:17", "Revelation 14:6-12", "Matthew 28:19-20", "2 Corinthians 5:20"]
       },
       {
         id: "fb-14",
@@ -243,11 +243,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #14",
         summary: "The church is one body with many members called from every nation, kindred, tongue, and people—all equal in Christ without distinction.",
         sectionIndex: 1,
-        x: 410,
-        y: 530,
+        x: 385,
+        y: 585,
         ring: 2,
         connectedTo: ["fb-12", "fb-15", "fb-16"],
-        anchorRefs: ["Galatians 3:27-29", "Ephesians 4:1-6"]
+        anchorRefs: ["Galatians 3:27-28", "Ephesians 4:3-6", "John 17:20-21", "Psalm 133:1"]
       },
       {
         id: "fb-15",
@@ -255,11 +255,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #15",
         summary: "By baptism by immersion we confess our faith in the death and resurrection of Jesus Christ and testify of our death to sin and newness of life.",
         sectionIndex: 1,
-        x: 310,
-        y: 475,
+        x: 255,
+        y: 525,
         ring: 2,
         connectedTo: ["fb-14", "fb-10", "fb-16"],
-        anchorRefs: ["Romans 6:1-6", "Matthew 28:19-20"]
+        anchorRefs: ["Romans 6:1-6", "Matthew 28:19", "Acts 2:38", "Colossians 2:12"]
       },
       {
         id: "fb-16",
@@ -267,11 +267,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #16",
         summary: "Participation in the emblems of Christ's body and blood, preceded by foot-washing, proclaims His death until He comes again.",
         sectionIndex: 1,
-        x: 235,
-        y: 385,
+        x: 160,
+        y: 410,
         ring: 2,
         connectedTo: ["fb-9", "fb-14", "fb-15"],
-        anchorRefs: ["1 Corinthians 11:23-30", "John 13:1-17"]
+        anchorRefs: ["1 Corinthians 11:23-26", "John 13:14-15", "Matthew 26:26-28", "1 Corinthians 10:16"]
       },
       {
         id: "fb-17",
@@ -279,11 +279,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #17",
         summary: "God bestows upon all members of His church spiritual gifts to be employed in loving ministry for the common good and maturity of the church.",
         sectionIndex: 1,
-        x: 215,
-        y: 285,
+        x: 135,
+        y: 280,
         ring: 2,
         connectedTo: ["fb-5", "fb-12", "fb-18"],
-        anchorRefs: ["Ephesians 4:8-16", "1 Corinthians 12:4-11"]
+        anchorRefs: ["Ephesians 4:11-13", "1 Corinthians 12:4-7", "Romans 12:4-8", "1 Peter 4:10-11"]
       },
       {
         id: "fb-18",
@@ -291,24 +291,24 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #18",
         summary: "The Scriptures testify that one of the gifts of the Holy Spirit is prophecy—an identifying mark of the remnant church, tested by the Bible.",
         sectionIndex: 1,
-        x: 350,
-        y: 115,
+        x: 335,
+        y: 55,
         ring: 2,
         connectedTo: ["fb-1", "fb-13", "fb-17"],
-        anchorRefs: ["Joel 2:28-29", "Revelation 19:10"]
+        anchorRefs: ["Joel 2:28-29", "Revelation 12:17", "Revelation 19:10", "2 Chronicles 20:20"]
       },
-      // RING 3: CHRISTIAN LIFE & LAST THINGS (#19 - #28)
+      // RING 3: CHRISTIAN LIFE & LAST THINGS (#19 - #28) — expanded outer ring
       {
         id: "fb-19",
         label: "Law of God",
         shortTag: "Belief #19",
         summary: "The great principles of God's law are embodied in the Ten Commandments and exemplified in the life of Christ, expressing God's love and will.",
         sectionIndex: 2,
-        x: 650,
-        y: 115,
+        x: 665,
+        y: 55,
         ring: 3,
         connectedTo: ["fb-2", "fb-13", "fb-20"],
-        anchorRefs: ["Exodus 20:1-17", "Romans 3:31"]
+        anchorRefs: ["Exodus 20:1-17", "Matthew 5:17-19", "Romans 3:31", "Psalm 40:8"]
       },
       {
         id: "fb-20",
@@ -316,11 +316,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #20",
         summary: "The beneficent Creator rested on the seventh day and instituted the Sabbath as a perpetual memorial of Creation and sign of sanctification.",
         sectionIndex: 2,
-        x: 845,
-        y: 135,
+        x: 945,
+        y: 80,
         ring: 3,
         connectedTo: ["fb-6", "fb-19", "fb-21"],
-        anchorRefs: ["Exodus 20:8-11", "Isaiah 58:13-14"]
+        anchorRefs: ["Exodus 20:8-11", "Genesis 2:1-3", "Isaiah 58:13-14", "Mark 2:27-28", "Luke 4:16"]
       },
       {
         id: "fb-21",
@@ -328,11 +328,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #21",
         summary: "We are God's stewards, entrusted with time, opportunities, abilities, possessions, and the blessings of the earth, returning faithful tithes and offerings.",
         sectionIndex: 2,
-        x: 915,
-        y: 250,
+        x: 1030,
+        y: 230,
         ring: 3,
         connectedTo: ["fb-20", "fb-22"],
-        anchorRefs: ["Malachi 3:8-12", "2 Corinthians 9:6-8"]
+        anchorRefs: ["Malachi 3:8-10", "2 Corinthians 9:6-7", "Psalm 24:1", "Matthew 23:23"]
       },
       {
         id: "fb-22",
@@ -340,11 +340,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #22",
         summary: "Called to be a godly people, we care for our bodies as temples of the Holy Spirit—practicing temperance, healthful living, and Christlike conduct.",
         sectionIndex: 2,
-        x: 910,
-        y: 365,
+        x: 1020,
+        y: 385,
         ring: 3,
         connectedTo: ["fb-11", "fb-21", "fb-23"],
-        anchorRefs: ["1 Corinthians 6:19-20", "Romans 12:1-2"]
+        anchorRefs: ["1 Corinthians 6:19-20", "Romans 12:1-2", "1 Corinthians 10:31", "3 John 1:2"]
       },
       {
         id: "fb-23",
@@ -352,11 +352,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #23",
         summary: "Marriage was divinely established in Eden as a lifelong union in loving companionship, reflecting Christ's covenant love for His church.",
         sectionIndex: 2,
-        x: 840,
-        y: 475,
+        x: 930,
+        y: 525,
         ring: 3,
         connectedTo: ["fb-6", "fb-22"],
-        anchorRefs: ["Genesis 2:18-25", "Ephesians 5:21-33"]
+        anchorRefs: ["Genesis 2:24", "Ephesians 5:25", "Deuteronomy 6:6-7", "Proverbs 22:6"]
       },
       {
         id: "fb-24",
@@ -364,11 +364,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #24",
         summary: "Christ ministers as High Priest in the true heavenly sanctuary, entering the Most Holy Place in 1844 to perform the investigative judgment.",
         sectionIndex: 1,
-        x: 155,
-        y: 135,
+        x: 55,
+        y: 80,
         ring: 3,
         connectedTo: ["fb-8", "fb-13", "fb-25"],
-        anchorRefs: ["Hebrews 8:1-5", "Daniel 8:14"]
+        anchorRefs: ["Hebrews 8:1-5", "Daniel 8:14", "Exodus 25:8", "Leviticus 16:30", "Revelation 11:19"]
       },
       {
         id: "fb-25",
@@ -376,11 +376,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #25",
         summary: "The second coming of Christ is the blessed hope of the church—literal, personal, visible, and worldwide, when the righteous dead are raised.",
         sectionIndex: 1,
-        x: 85,
-        y: 250,
+        x: -30,
+        y: 230,
         ring: 3,
         connectedTo: ["fb-24", "fb-26"],
-        anchorRefs: ["Titus 2:13", "John 14:1-3"]
+        anchorRefs: ["Titus 2:13", "John 14:1-3", "Acts 1:11", "Revelation 1:7", "1 Thessalonians 4:16"]
       },
       {
         id: "fb-26",
@@ -388,11 +388,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #26",
         summary: "The wages of sin is death, an unconscious state for all until the resurrection at Christ's return when immortality is bestowed on the redeemed.",
         sectionIndex: 1,
-        x: 90,
-        y: 365,
+        x: -20,
+        y: 385,
         ring: 3,
         connectedTo: ["fb-7", "fb-25", "fb-27"],
-        anchorRefs: ["Ecclesiastes 9:5-6", "1 Thessalonians 4:13-18"]
+        anchorRefs: ["Ecclesiastes 9:5-6", "John 11:11-14", "1 Thessalonians 4:13-17", "1 Corinthians 15:51-54"]
       },
       {
         id: "fb-27",
@@ -400,11 +400,11 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Belief #27",
         summary: "The millennium is the 1,000-year reign of Christ with His saints in heaven between the first and second resurrections, culminating in the end of sin.",
         sectionIndex: 1,
-        x: 160,
-        y: 475,
+        x: 70,
+        y: 525,
         ring: 3,
         connectedTo: ["fb-26", "fb-28"],
-        anchorRefs: ["Revelation 20:1-15", "1 Corinthians 6:2-3"]
+        anchorRefs: ["Revelation 20:1-6", "1 Corinthians 6:2-3", "Jeremiah 4:23-26", "Malachi 4:1"]
       },
       {
         id: "fb-28",
@@ -413,10 +413,10 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         summary: "On the New Earth, in which righteousness dwells, God will provide an eternal home for the redeemed—where sin and death will be no more.",
         sectionIndex: 2,
         x: 500,
-        y: 570,
+        y: 655,
         ring: 3,
         connectedTo: ["fb-6", "fb-27", "fb-13"],
-        anchorRefs: ["Revelation 21:1-7", "Isaiah 65:17-25"]
+        anchorRefs: ["Revelation 21:1-4", "Isaiah 65:17", "2 Peter 3:13", "Isaiah 66:22-23"]
       }
     ],
     scriptureNodes: [
@@ -426,31 +426,31 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         verseText: "All scripture is given by inspiration of God, and is profitable for doctrine, for reproof, for correction, for instruction in righteousness.",
         parentNodeId: "fb-2",
         x: 500,
-        y: 62
+        y: -15
       },
       {
         id: "fb-s2",
         reference: "Exodus 20:11",
         verseText: "For in six days the LORD made heaven and earth, the sea, and all that in them is, and rested the seventh day: wherefore the LORD blessed the sabbath day, and hallowed it.",
         parentNodeId: "fb-20",
-        x: 945,
-        y: 80
+        x: 1060,
+        y: 30
       },
       {
         id: "fb-s3",
         reference: "Daniel 8:14",
         verseText: "And he said unto me, Unto two thousand and three hundred days; then shall the sanctuary be cleansed.",
         parentNodeId: "fb-24",
-        x: 55,
-        y: 80
+        x: -60,
+        y: 30
       },
       {
         id: "fb-s4",
         reference: "Revelation 21:4",
         verseText: "And God shall wipe away all tears from their eyes; and there shall be no more death, neither sorrow, nor crying.",
         parentNodeId: "fb-28",
-        x: 685,
-        y: 575
+        x: 700,
+        y: 660
       }
     ],
     portalNodes: [
@@ -460,8 +460,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "sanctuary-doctrine",
         fromNodeId: "fb-24",
         relationTag: "Belief #24 Bridge",
-        x: 65,
-        y: 175
+        x: -75,
+        y: 145
       },
       {
         id: "fb-p-angels",
@@ -469,8 +469,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "three-angels",
         fromNodeId: "fb-13",
         relationTag: "Remnant Bridge",
-        x: 315,
-        y: 575
+        x: 270,
+        y: 655
       },
       {
         id: "fb-p-covenant",
@@ -478,8 +478,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "priority-doctrines",
         fromNodeId: "fb-20",
         relationTag: "Sabbath Bridge",
-        x: 935,
-        y: 175
+        x: 1075,
+        y: 145
       }
     ]
   },

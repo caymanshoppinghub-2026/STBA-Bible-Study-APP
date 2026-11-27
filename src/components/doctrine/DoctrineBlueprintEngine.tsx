@@ -142,6 +142,15 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
   const [portalTransitionLabel, setPortalTransitionLabel] = useState<string | null>(null);
   const panStartRef = React.useRef<{ x: number; y: number; origX: number; origY: number } | null>(null);
 
+  const maxRing = useMemo(() => {
+    let m = 1;
+    for (const n of activeSpec.nodes) {
+      if (typeof n.ring === "number" && n.ring > m) m = n.ring;
+    }
+    return m;
+  }, [activeSpec]);
+  const [hubRingLevel, setHubRingLevel] = useState<number>(0); // 0 = hub only, 1..maxRing = sequential layers revealed by clicking hub
+
   const allRevealed = revealedNodeIds.size >= activeSpec.nodes.length;
   const constellationExpanded = revealedNodeIds.size > 1 || focusStep > 0;
   const isNodeVisible = (node: ConstellationDoctrineNode) => {
@@ -158,6 +167,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     const hub = activeSpec.nodes.find((n) => n.isHub) || activeSpec.nodes[0];
     setFocusedNodeId(hub?.id || "");
     setFocusStep(0);
+    setHubRingLevel(0);
     setRevealedNodeIds(new Set(hub ? [hub.id] : []));
     setPreviewScripture(null);
     setZoom(1);
@@ -166,8 +176,39 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     setBreadcrumbPath((prev) => (prev.length > 1 && stage === "constellation" ? [activeSpec.shortTitle, hub?.label || ""] : [activeSpec.shortTitle]));
   }, [selectedTrackId]);
 
-  // Built-in KJV lookup helper for dynamically radiated anchor scriptures on any doctrine node
+  const [liveKjvCache, setLiveKjvCache] = useState<Record<string, string>>({});
+
+  // Live 1ms KJV lookup via /api/study/quick-verse so EVERY supporting scripture across all 28 beliefs & tracks shows real KJV text!
+  const openScripturePopup = async (refStr: string, fallbackNode?: ConstellationScriptureNode) => {
+    const cached = liveKjvCache[refStr.toLowerCase()];
+    const initialText = cached || fallbackNode?.verseText || getInlineKjvText(refStr);
+    const nodeObj: ConstellationScriptureNode = fallbackNode
+      ? { ...fallbackNode, verseText: initialText }
+      : { id: `ref-${refStr}`, reference: refStr, verseText: initialText, parentNodeId: focusedNodeId, x: 500, y: 300 };
+    setPreviewScripture(nodeObj);
+
+    if (cached) return;
+    try {
+      const resp = await fetch("/api/study/quick-verse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ references: [refStr] })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const hit = data?.results?.[refStr] || (data?.results ? Object.values(data.results)[0] : null) as any;
+        if (hit?.combinedText) {
+          const kjvText = String(hit.combinedText).trim();
+          setLiveKjvCache((prev) => ({ ...prev, [refStr.toLowerCase()]: kjvText }));
+          setPreviewScripture((cur) => (cur && cur.reference === refStr ? { ...cur, verseText: kjvText } : cur));
+        }
+      }
+    } catch {}
+  };
+
+  // Built-in KJV lookup helper for instant initial render before live /api/study/quick-verse resolves
   const getInlineKjvText = (refStr: string): string => {
+    if (liveKjvCache[refStr.toLowerCase()]) return liveKjvCache[refStr.toLowerCase()];
     const fromStatic = activeSpec.scriptureNodes.find(
       (s) => s.reference.toLowerCase() === refStr.toLowerCase()
     );
@@ -181,44 +222,26 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
       "2 peter 1:20-21": "Knowing this first, that no prophecy of the scripture is of any private interpretation. For the prophecy came not in old time by the will of man: but holy men of God spake as they were moved by the Holy Ghost.",
       "isaiah 28:9-10": "Whom shall he teach knowledge? and whom shall he make to understand doctrine? For precept must be upon precept, precept upon precept; line upon line, line upon line; here a little, and there a little.",
       "isaiah 8:20": "To the law and to the testimony: if they speak not according to this word, it is because there is no light in them.",
-      "1 timothy 4:15": "Meditate upon these things; give thyself wholly to them; that thy profiting may appear to all.",
+      "1 timothy 4:15-16": "Meditate upon these things; give thyself wholly to them; that thy profiting may appear to all. Take heed unto thyself, and unto the doctrine; continue in them: for in doing this thou shalt both save thyself, and them that hear thee.",
       "2 timothy 2:15": "Study to shew thyself approved unto God, a workman that needeth not to be ashamed, rightly dividing the word of truth.",
       "psalm 119:105": "Thy word is a lamp unto my feet, and a light unto my path.",
-      "acts 17:11": "These were more noble than those in Thessalonica, in that they received the word with all readiness of mind, and searched the scriptures daily, whether those things were so.",
-      "deuteronomy 6:4": "Hear, O Israel: The LORD our God is one LORD.",
-      "matthew 28:19": "Go ye therefore, and teach all nations, baptizing them in the name of the Father, and of the Son, and of the Holy Ghost.",
-      "genesis 1:1": "In the beginning God created the heaven and the earth.",
-      "john 3:16": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
-      "john 1:1-3": "In the beginning was the Word, and the Word was with God, and the Word was God. All things were made by him.",
-      "philippians 2:5-11": "Let this mind be in you, which was also in Christ Jesus: Who, being in the form of God, thought it not robbery to be equal with God.",
-      "john 14:16-17": "And I will pray the Father, and he shall give you another Comforter, that he may abide with you for ever; Even the Spirit of truth.",
-      "genesis 1:1-27": "So God created man in his own image, in the image of God created he him; male and female created he them.",
-      "exodus 20:8-11": "Remember the sabbath day, to keep it holy. Six days shalt thou labour, and do all thy work: But the seventh day is the sabbath of the LORD thy God.",
-      "revelation 12:4-9": "And there was war in heaven: Michael and his angels fought against the dragon; and the dragon fought and his angels.",
-      "revelation 14:6-12": "Here is the patience of the saints: here are they that keep the commandments of God, and the faith of Jesus.",
-      "hebrews 8:1-5": "We have such an high priest, who is set on the right hand of the throne of the Majesty in the heavens; A minister of the sanctuary, and of the true tabernacle.",
-      "titus 2:13": "Looking for that blessed hope, and the glorious appearing of the great God and our Saviour Jesus Christ.",
-      "revelation 21:1-7": "And I saw a new heaven and a new earth: for the first heaven and the first earth were passed away."
+      "acts 17:11": "These were more noble than those in Thessalonica, in that they received the word with all readiness of mind, and searched the scriptures daily, whether those things were so."
     };
-    return (
-      QUICK_KJV[refStr.toLowerCase()] ||
-      `Explore ${refStr} in the Split Bible Reader to examine its full KJV/NKJV parallel context and original Greek/Hebrew word roots.`
-    );
+    return QUICK_KJV[refStr.toLowerCase()] || `Loading ${refStr} (KJV)…`;
   };
 
-  // Dynamically compute ONLY the currently focused node's specific anchor scriptures in a clean orbit around it!
+  // Dynamically compute ONLY the currently focused node's specific anchor scriptures in a wide, non-overlapping orbit!
   const focusedScriptureSatellites = useMemo<ConstellationScriptureNode[]>(() => {
     if (focusStep < 1 || !focusedNodeId) return [];
     const node = activeSpec.nodes.find((n) => n.id === focusedNodeId);
     if (!node || !node.anchorRefs || node.anchorRefs.length === 0) return [];
     const count = node.anchorRefs.length;
-    const radius = count >= 7 ? 124 : count >= 4 ? 108 : 84;
+    const radius = count >= 7 ? 152 : count >= 5 ? 136 : count >= 4 ? 124 : 108;
     return node.anchorRefs.map((ref, idx) => {
-      // For 4+ anchor verses, distribute evenly around a full balanced ring; for 1–3, fan cleanly above the node
       const angle =
         count >= 4
           ? -Math.PI / 2 + (idx / count) * (Math.PI * 2)
-          : -Math.PI * 0.78 + (count === 1 ? Math.PI * 0.28 : (idx / (count - 1)) * (Math.PI * 0.56));
+          : -Math.PI * 0.8 + (count === 1 ? Math.PI * 0.3 : (idx / (count - 1)) * (Math.PI * 0.6));
       return {
         id: `sat-${node.id}-${idx}`,
         reference: ref,
@@ -228,7 +251,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
         y: Math.round(node.y + Math.sin(angle) * radius)
       };
     });
-  }, [activeSpec, focusedNodeId, focusStep]);
+  }, [activeSpec, focusedNodeId, focusStep, liveKjvCache]);
 
   // Lock body scroll & allow ESC to exit dedicated full-screen Stage 2 constellation
   React.useEffect(() => {
@@ -327,6 +350,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     const hub = activeSpec.nodes.find((n) => n.isHub) || activeSpec.nodes[0];
     setFocusedNodeId(hub.id);
     setFocusStep(0);
+    setHubRingLevel(0);
     setRevealedNodeIds(new Set([hub.id]));
     setZoom(1);
     setPan({ x: 0, y: 0 });
@@ -335,15 +359,53 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
   };
 
   /**
-   * Consistent 3-Click Interaction for ALL Doctrine Nodes:
-   * - Click 1 (on any node, or on hub at step 0): Recenters focus on that node as the new center & reveals ONLY its specific anchor scriptures.
-   * - Click 2 (on the already-focused node at step 1): Reveals & highlights its connected doctrines (progressively expanding outward) and linked portals.
-   * - Click 3 (on the already-focused node at step 2): Transitions directly into Stage 3 Detailed Architectural Blueprint.
+   * Progressive Node Interaction:
+   * - Central Hub (e.g., Sola Scriptura):
+   *   • Click 1: Reveals its 8 foundational anchor scriptures.
+   *   • Click 2, 3, (4): Sequentially reveals Ring 1 -> Ring 2 -> Ring 3 until all 28 Fundamental Beliefs are connected!
+   *   • Final Click (after all rings revealed): Opens Stage 3 Architectural Blueprint.
+   * - Secondary Doctrine Nodes (e.g., God the Father):
+   *   • Click 1: Recenters focus on that node & reveals ONLY its specific supporting scriptures.
+   *   • Click 2: Expands & illuminates its connected doctrines outward.
+   *   • Click 3: Transitions directly into Stage 3 Detailed Architectural Blueprint.
    */
   const handleConstellationNodeClick = (node: ConstellationDoctrineNode) => {
     setPreviewScripture(null);
 
-    // Click 1: Selecting a new node (or first click on initial core hub) -> Recenter & reveal its specific scriptures
+    // Central Hub sequential ring-by-ring expansion
+    if (node.isHub) {
+      if (focusedNodeId !== node.id || focusStep === 0) {
+        setFocusedNodeId(node.id);
+        setFocusStep(1);
+        setPan({ x: 500 - node.x, y: 300 - node.y });
+        setZoom(1);
+        setBreadcrumbPath([activeSpec.shortTitle, node.label, "Anchor Scriptures"]);
+        return;
+      }
+      if (hubRingLevel < maxRing) {
+        const nextRing = hubRingLevel + 1;
+        setHubRingLevel(nextRing);
+        setFocusStep(2);
+        setRevealedNodeIds((prev) => {
+          const next = new Set(prev);
+          for (const n of activeSpec.nodes) {
+            const r = typeof n.ring === "number" ? n.ring : 1;
+            if (n.isHub || r <= nextRing) next.add(n.id);
+          }
+          return next;
+        });
+        // Gently zoom out slightly on outer rings so the full expanding constellation stays framed cleanly
+        setPan({ x: 0, y: 0 });
+        setZoom(nextRing >= 3 ? 0.88 : nextRing === 2 ? 0.94 : 1);
+        setBreadcrumbPath([activeSpec.shortTitle, node.label, `Layer ${nextRing} of ${maxRing}`]);
+        return;
+      }
+      setBreadcrumbPath([activeSpec.shortTitle, node.label, "Architectural Blueprint"]);
+      setStage("blueprint");
+      return;
+    }
+
+    // Secondary Doctrine Node: consistent 3-click interaction
     if (focusedNodeId !== node.id || focusStep === 0) {
       setFocusedNodeId(node.id);
       setFocusStep(1);
@@ -354,7 +416,6 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
       return;
     }
 
-    // Click 2: Already focused at Step 1 -> Expand & illuminate connected doctrines outward!
     if (focusStep === 1) {
       setFocusStep(2);
       setRevealedNodeIds((prev) => {
@@ -367,7 +428,6 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
       return;
     }
 
-    // Click 3: Already focused at Step 2 -> Transition to Stage 3 Detailed Architectural Blueprint!
     setBreadcrumbPath([activeSpec.shortTitle, node.label, "Architectural Blueprint"]);
     setStage("blueprint");
   };
@@ -528,7 +588,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
               </div>
 
               <svg
-                viewBox="0 0 1000 600"
+                viewBox="-140 -90 1280 800"
                 preserveAspectRatio="xMidYMid meet"
                 onWheel={handleWheelZoom}
                 onPointerDown={handlePointerDownCanvas}
@@ -566,9 +626,9 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                   style={{ transition: isPanning ? "none" : "transform 340ms cubic-bezier(0.22, 1, 0.36, 1)" }}
                 >
                   {/* Concentric astrolabe rings */}
-                  <circle cx="500" cy="300" r="135" fill="none" stroke="#D4AF37" strokeOpacity="0.12" strokeDasharray="4 6" />
-                  <circle cx="500" cy="300" r="240" fill="none" stroke="#D4AF37" strokeOpacity="0.09" strokeDasharray="3 8" />
-                  <circle cx="500" cy="300" r="345" fill="none" stroke="#D4AF37" strokeOpacity="0.07" strokeDasharray="2 10" />
+                  <circle cx="500" cy="300" r="185" fill="none" stroke="#D4AF37" strokeOpacity="0.12" strokeDasharray="4 6" />
+                  <circle cx="500" cy="300" r="345" fill="none" stroke="#D4AF37" strokeOpacity="0.09" strokeDasharray="3 8" />
+                  <circle cx="500" cy="300" r="515" fill="none" stroke="#D4AF37" strokeOpacity="0.07" strokeDasharray="2 10" />
 
                   {/* 1. Doctrine-to-Doctrine Connectors */}
                   {doctrineEdges
@@ -637,7 +697,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                         transition={{ type: "spring", stiffness: 130, damping: 16 }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setPreviewScripture(sn);
+                          openScripturePopup(sn.reference, sn);
                         }}
                         className="cursor-pointer"
                       >
@@ -733,8 +793,12 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                           ? 11
                           : 14;
                     const subLabel = isFocused
-                      ? focusStep === 0
-                        ? "Click 1/3 • Reveal Scriptures"
+                      ? node.isHub
+                        ? focusStep === 0
+                          ? "Click 1 • Reveal 8 Scriptures"
+                          : hubRingLevel < maxRing
+                            ? `Click • Expand Layer ${hubRingLevel + 1}/${maxRing}`
+                            : "Click • Open Blueprint"
                         : focusStep === 1
                           ? "Click 2/3 • Show Connections"
                           : "Click 3/3 • Open Blueprint"
@@ -863,7 +927,8 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                     <button
                       key={ref}
                       type="button"
-                      onClick={() => onLaunchBibleStudy(ref, focusedNode.label)}
+                      onClick={() => openScripturePopup(ref)}
+                      title={`Preview ${ref} (KJV)`}
                       className="text-[11px] font-mono px-2.5 py-0.5 rounded-md bg-white/5 border border-[#D4AF37]/30 text-[#F3D77D] hover:bg-[#D4AF37]/20 transition-colors cursor-pointer"
                     >
                       {ref}
