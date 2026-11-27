@@ -517,8 +517,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "First Angel",
         summary: "The pre-advent investigative judgment announced in Daniel 7 and 8 has commenced in the heavenly sanctuary.",
         sectionIndex: 0,
-        x: 300,
-        y: 165,
+        x: 215,
+        y: 95,
         connectedTo: ["ta-hub", "ta-creator"],
         anchorRefs: ["Revelation 14:7", "Daniel 7:9-10"]
       },
@@ -528,8 +528,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Sabbath Call",
         summary: "Echoing the fourth commandment word-for-word, calling humanity back to authentic Creator worship.",
         sectionIndex: 0,
-        x: 705,
-        y: 170,
+        x: 785,
+        y: 95,
         connectedTo: ["ta-hub", "ta-judgment", "ta-seal"],
         anchorRefs: ["Revelation 14:7", "Exodus 20:11"]
       },
@@ -539,8 +539,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Second Angel",
         summary: "Exposing spiritual confusion and counterfeit traditions that replace Sola Scriptura with human dogma.",
         sectionIndex: 1,
-        x: 245,
-        y: 390,
+        x: 170,
+        y: 440,
         connectedTo: ["ta-hub", "ta-remnant"],
         anchorRefs: ["Revelation 14:8", "Revelation 18:2-4"]
       },
@@ -550,8 +550,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Third Angel",
         summary: "The final cosmic loyalty test contrasting the Seal of the living God with forced counterfeit worship.",
         sectionIndex: 2,
-        x: 750,
-        y: 390,
+        x: 830,
+        y: 440,
         connectedTo: ["ta-hub", "ta-creator", "ta-remnant"],
         anchorRefs: ["Revelation 14:9-11", "Ezekiel 20:12"]
       },
@@ -562,7 +562,7 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         summary: "The enduring remnant who keep all the commandments of God and hold fast the living faith of Jesus.",
         sectionIndex: 2,
         x: 500,
-        y: 485,
+        y: 620,
         connectedTo: ["ta-hub", "ta-babylon", "ta-seal"],
         anchorRefs: ["Revelation 14:12", "Revelation 12:17"]
       }
@@ -573,32 +573,32 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         reference: "Revelation 14:6",
         verseText: "And I saw another angel fly in the midst of heaven, having the everlasting gospel to preach unto them that dwell on the earth.",
         parentNodeId: "ta-judgment",
-        x: 145,
-        y: 110
+        x: 20,
+        y: 10
       },
       {
         id: "ta-s2",
         reference: "Revelation 14:7",
         verseText: "Fear God, and give glory to him; for the hour of his judgment is come: and worship him that made heaven, and earth, and the sea.",
         parentNodeId: "ta-creator",
-        x: 855,
-        y: 115
+        x: 980,
+        y: 10
       },
       {
         id: "ta-s3",
         reference: "Revelation 14:8",
         verseText: "Babylon is fallen, is fallen, that great city, because she made all nations drink of the wine of the wrath of her fornication.",
         parentNodeId: "ta-babylon",
-        x: 105,
-        y: 455
+        x: -20,
+        y: 540
       },
       {
         id: "ta-s4",
         reference: "Revelation 14:12",
         verseText: "Here is the patience of the saints: here are they that keep the commandments of God, and the faith of Jesus.",
         parentNodeId: "ta-remnant",
-        x: 685,
-        y: 530
+        x: 740,
+        y: 690
       }
     ],
     portalNodes: [
@@ -609,7 +609,7 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         fromNodeId: "ta-judgment",
         relationTag: "Hour of Judgment",
         x: 500,
-        y: 72
+        y: -140
       },
       {
         id: "ta-p-beliefs",
@@ -617,8 +617,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "fundamental-beliefs",
         fromNodeId: "ta-remnant",
         relationTag: "Full System",
-        x: 300,
-        y: 535
+        x: 220,
+        y: 740
       },
       {
         id: "ta-p-covenant",
@@ -626,8 +626,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "priority-doctrines",
         fromNodeId: "ta-seal",
         relationTag: "Sabbath Seal",
-        x: 895,
-        y: 440
+        x: 1060,
+        y: 520
       }
     ]
   },
@@ -665,8 +665,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Justification",
         summary: "The bronze altar points to Christ's substitutionary death on Calvary; the laver signifies cleansing and new birth.",
         sectionIndex: 0,
-        x: 285,
-        y: 175,
+        x: 205,
+        y: 100,
         connectedTo: ["sn-hub", "sn-holy"],
         anchorRefs: ["John 1:29", "Titus 3:5"]
       },
@@ -676,8 +676,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Sanctification",
         summary: "The candlestick, showbread, and incense reveal the Spirit, the Word, and Christ's continuous intercession.",
         sectionIndex: 1,
-        x: 715,
-        y: 175,
+        x: 795,
+        y: 100,
         connectedTo: ["sn-hub", "sn-courtyard", "sn-mostholy"],
         anchorRefs: ["Hebrews 7:25", "Revelation 8:3-4"]
       },
@@ -687,8 +687,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Daniel 8:14",
         summary: "The longest prophetic timeline in Scripture, pointing to 1844 and the antitypical Day of Atonement in heaven.",
         sectionIndex: 2,
-        x: 255,
-        y: 410,
+        x: 175,
+        y: 455,
         connectedTo: ["sn-hub", "sn-mostholy"],
         anchorRefs: ["Daniel 8:14", "Daniel 9:24-27"]
       },
@@ -698,8 +698,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Cleansing",
         summary: "The final phase of Christ's ministry—blotting out confessed sin and vindicating God's character before the universe.",
         sectionIndex: 2,
-        x: 740,
-        y: 410,
+        x: 825,
+        y: 455,
         connectedTo: ["sn-hub", "sn-holy", "sn-ark"],
         anchorRefs: ["Leviticus 16:30", "Hebrews 9:23"]
       },
@@ -710,7 +710,7 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         summary: "Justice and mercy meet at the golden mercy seat resting directly above the immutable Ten Commandments.",
         sectionIndex: 1,
         x: 500,
-        y: 485,
+        y: 625,
         connectedTo: ["sn-hub", "sn-mostholy", "sn-2300"],
         anchorRefs: ["Revelation 11:19", "Psalm 85:10"]
       }
@@ -721,32 +721,32 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         reference: "Exodus 25:8",
         verseText: "And let them make me a sanctuary; that I may dwell among them.",
         parentNodeId: "sn-courtyard",
-        x: 135,
-        y: 120
+        x: 10,
+        y: 10
       },
       {
         id: "sn-s2",
         reference: "Hebrews 7:25",
         verseText: "Wherefore he is able also to save them to the uttermost that come unto God by him, seeing he ever liveth to make intercession for them.",
         parentNodeId: "sn-holy",
-        x: 860,
-        y: 120
+        x: 990,
+        y: 10
       },
       {
         id: "sn-s3",
         reference: "Daniel 8:14",
         verseText: "And he said unto me, Unto two thousand and three hundred days; then shall the sanctuary be cleansed.",
         parentNodeId: "sn-2300",
-        x: 110,
-        y: 470
+        x: -20,
+        y: 550
       },
       {
         id: "sn-s4",
         reference: "Revelation 11:19",
         verseText: "And the temple of God was opened in heaven, and there was seen in his temple the ark of his testament.",
         parentNodeId: "sn-ark",
-        x: 685,
-        y: 530
+        x: 740,
+        y: 695
       }
     ],
     portalNodes: [
@@ -757,7 +757,7 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         fromNodeId: "sn-2300",
         relationTag: "1844 Proclamation",
         x: 500,
-        y: 72
+        y: -140
       },
       {
         id: "sn-p-beliefs",
@@ -765,8 +765,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "fundamental-beliefs",
         fromNodeId: "sn-ark",
         relationTag: "Core System",
-        x: 310,
-        y: 535
+        x: 225,
+        y: 745
       },
       {
         id: "sn-p-scrolls",
@@ -774,8 +774,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "book-by-book",
         fromNodeId: "sn-mostholy",
         relationTag: "Daniel & Hebrews",
-        x: 895,
-        y: 445
+        x: 1060,
+        y: 525
       }
     ]
   },
@@ -813,8 +813,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Prophetic Timeline",
         summary: "Empires rise and fall under God's sovereign hand until the everlasting kingdom of the Son of Man is established.",
         sectionIndex: 0,
-        x: 300,
-        y: 170,
+        x: 210,
+        y: 100,
         connectedTo: ["bb-hub", "bb-revelation"],
         anchorRefs: ["Daniel 2:44", "Daniel 8:14"]
       },
@@ -824,8 +824,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Gospel Architecture",
         summary: "Paul's systematic exposition of justification by faith, victory over sin, and presenting our bodies as a living sacrifice.",
         sectionIndex: 1,
-        x: 705,
-        y: 170,
+        x: 790,
+        y: 100,
         connectedTo: ["bb-hub", "bb-hebrews"],
         anchorRefs: ["Romans 12:1-2", "Romans 8:1"]
       },
@@ -835,8 +835,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Sanctuary Devotion",
         summary: "Inspired songs and proverbs revealing the way of God in the sanctuary and the pursuit of heavenly wisdom.",
         sectionIndex: 0,
-        x: 255,
-        y: 410,
+        x: 175,
+        y: 455,
         connectedTo: ["bb-hub", "bb-daniel"],
         anchorRefs: ["Psalm 77:13", "Proverbs 2:2-5"]
       },
@@ -846,8 +846,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Better Covenant",
         summary: "Demonstrating Christ's superior priesthood, superior sacrifice, and living intercession in the heavenly sanctuary.",
         sectionIndex: 2,
-        x: 745,
-        y: 410,
+        x: 825,
+        y: 455,
         connectedTo: ["bb-hub", "bb-romans", "bb-revelation"],
         anchorRefs: ["Hebrews 8:1-2", "Hebrews 4:16"]
       },
@@ -858,7 +858,7 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         summary: "The unveiling of Jesus Christ—tracing church history, the Three Angels' Messages, and the New Jerusalem.",
         sectionIndex: 2,
         x: 500,
-        y: 485,
+        y: 625,
         connectedTo: ["bb-hub", "bb-daniel", "bb-hebrews"],
         anchorRefs: ["Revelation 1:1-3", "Revelation 21:1-4"]
       }
@@ -869,32 +869,32 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         reference: "Luke 24:27",
         verseText: "And beginning at Moses and all the prophets, he expounded unto them in all the scriptures the things concerning himself.",
         parentNodeId: "bb-daniel",
-        x: 145,
-        y: 115
+        x: 10,
+        y: 10
       },
       {
         id: "bb-s2",
         reference: "Romans 12:1-2",
         verseText: "I beseech you therefore, brethren, by the mercies of God, that ye present your bodies a living sacrifice, holy, acceptable unto God.",
         parentNodeId: "bb-romans",
-        x: 855,
-        y: 115
+        x: 990,
+        y: 10
       },
       {
         id: "bb-s3",
         reference: "Psalm 77:13",
         verseText: "Thy way, O God, is in the sanctuary: who is so great a God as our God?",
         parentNodeId: "bb-psalms",
-        x: 115,
-        y: 470
+        x: -20,
+        y: 550
       },
       {
         id: "bb-s4",
         reference: "Revelation 1:3",
         verseText: "Blessed is he that readeth, and they that hear the words of this prophecy, and keep those things which are written therein.",
         parentNodeId: "bb-revelation",
-        x: 685,
-        y: 530
+        x: 740,
+        y: 695
       }
     ],
     portalNodes: [
@@ -904,8 +904,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "sanctuary-doctrine",
         fromNodeId: "bb-hebrews",
         relationTag: "Hebrews Blueprint",
-        x: 895,
-        y: 455
+        x: 1060,
+        y: 525
       },
       {
         id: "bb-p-angels",
@@ -913,8 +913,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "three-angels",
         fromNodeId: "bb-revelation",
         relationTag: "Revelation 14",
-        x: 310,
-        y: 535
+        x: 225,
+        y: 745
       },
       {
         id: "bb-p-beliefs",
@@ -923,7 +923,7 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         fromNodeId: "bb-daniel",
         relationTag: "Systematic Truth",
         x: 500,
-        y: 72
+        y: -140
       }
     ]
   },
@@ -961,10 +961,10 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "New Birth",
         summary: "Salvation is by grace alone through faith, producing joyful, Spirit-empowered obedience to God's commandments.",
         sectionIndex: 0,
-        x: 295,
-        y: 170,
+        x: 205,
+        y: 95,
         connectedTo: ["pd-hub", "pd-sabbath"],
-        anchorRefs: ["Ephesians 2:8-10", "John 14:15"]
+        anchorRefs: ["Ephesians 2:8-10", "John 14:15", "Romans 3:31"]
       },
       {
         id: "pd-sabbath",
@@ -972,10 +972,10 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Memorial of Creation",
         summary: "A weekly sanctuary in time—celebrating God as Creator, Redeemer, and Sanctifier from sundown Friday to sundown Saturday.",
         sectionIndex: 1,
-        x: 710,
-        y: 170,
+        x: 795,
+        y: 95,
         connectedTo: ["pd-hub", "pd-grace", "pd-advent"],
-        anchorRefs: ["Exodus 20:8-11", "Isaiah 58:13-14"]
+        anchorRefs: ["Exodus 20:8-11", "Isaiah 58:13-14", "Mark 2:27-28"]
       },
       {
         id: "pd-state",
@@ -983,10 +983,10 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Resurrection Hope",
         summary: "Death is an unconscious sleep until the Lifegiver returns and calls the righteous to immortality.",
         sectionIndex: 2,
-        x: 255,
-        y: 410,
+        x: 175,
+        y: 455,
         connectedTo: ["pd-hub", "pd-advent"],
-        anchorRefs: ["Ecclesiastes 9:5", "1 Thessalonians 4:16"]
+        anchorRefs: ["Ecclesiastes 9:5", "1 Thessalonians 4:16", "John 11:11-14"]
       },
       {
         id: "pd-stewardship",
@@ -994,10 +994,10 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Whole-Person Care",
         summary: "Honoring God in body, mind, and spirit as the living temple of the Holy Spirit.",
         sectionIndex: 1,
-        x: 745,
-        y: 410,
+        x: 825,
+        y: 455,
         connectedTo: ["pd-hub", "pd-sabbath"],
-        anchorRefs: ["1 Corinthians 6:19-20", "3 John 1:2"]
+        anchorRefs: ["1 Corinthians 6:19-20", "3 John 1:2", "Romans 12:1-2"]
       },
       {
         id: "pd-advent",
@@ -1006,9 +1006,9 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         summary: "The literal, visible, audible, worldwide return of Jesus Christ to gather His redeemed people home.",
         sectionIndex: 2,
         x: 500,
-        y: 485,
+        y: 625,
         connectedTo: ["pd-hub", "pd-state", "pd-sabbath"],
-        anchorRefs: ["John 14:1-3", "Acts 1:11"]
+        anchorRefs: ["John 14:1-3", "Acts 1:11", "Revelation 1:7"]
       }
     ],
     scriptureNodes: [
@@ -1017,32 +1017,32 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         reference: "Ephesians 2:8-9",
         verseText: "For by grace are ye saved through faith; and that not of yourselves: it is the gift of God: Not of works, lest any man should boast.",
         parentNodeId: "pd-grace",
-        x: 140,
-        y: 115
+        x: 10,
+        y: 10
       },
       {
         id: "pd-s2",
         reference: "Exodus 20:8",
         verseText: "Remember the sabbath day, to keep it holy.",
         parentNodeId: "pd-sabbath",
-        x: 860,
-        y: 115
+        x: 990,
+        y: 10
       },
       {
         id: "pd-s3",
         reference: "Ecclesiastes 9:5",
         verseText: "For the living know that they shall die: but the dead know not any thing.",
         parentNodeId: "pd-state",
-        x: 115,
-        y: 470
+        x: -20,
+        y: 550
       },
       {
         id: "pd-s4",
         reference: "John 14:3",
         verseText: "And if I go and prepare a place for you, I will come again, and receive you unto myself; that where I am, there ye may be also.",
         parentNodeId: "pd-advent",
-        x: 685,
-        y: 530
+        x: 740,
+        y: 695
       }
     ],
     portalNodes: [
@@ -1053,7 +1053,7 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         fromNodeId: "pd-grace",
         relationTag: "Full Pillar Map",
         x: 500,
-        y: 72
+        y: -140
       },
       {
         id: "pd-p-angels",
@@ -1061,8 +1061,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "three-angels",
         fromNodeId: "pd-sabbath",
         relationTag: "Creator's Seal",
-        x: 895,
-        y: 300
+        x: 1060,
+        y: 260
       },
       {
         id: "pd-p-zoom",
@@ -1070,8 +1070,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "zoom-studies",
         fromNodeId: "pd-advent",
         relationTag: "Small-Group Guide",
-        x: 310,
-        y: 535
+        x: 225,
+        y: 745
       }
     ]
   },
@@ -1109,8 +1109,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Prophetic Series",
         summary: "Tracing historicist prophetic milestones from Babylon to the final triumph of Christ's kingdom.",
         sectionIndex: 0,
-        x: 300,
-        y: 185,
+        x: 215,
+        y: 105,
         connectedTo: ["zm-hub", "zm-sanctuary"],
         anchorRefs: ["2 Peter 1:19", "Daniel 2:28"]
       },
@@ -1120,8 +1120,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Redemption Series",
         summary: "Connecting every piece of tabernacle furniture directly to Christ's saving work for believers today.",
         sectionIndex: 1,
-        x: 705,
-        y: 185,
+        x: 785,
+        y: 105,
         connectedTo: ["zm-hub", "zm-prophecy", "zm-gospel"],
         anchorRefs: ["Hebrews 9:12", "Psalm 77:13"]
       },
@@ -1131,8 +1131,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Righteousness",
         summary: "Practical studies on prayer, surrender, victory over temptation, and abiding daily in Christ.",
         sectionIndex: 1,
-        x: 700,
-        y: 420,
+        x: 785,
+        y: 495,
         connectedTo: ["zm-hub", "zm-sanctuary", "zm-discipleship"],
         anchorRefs: ["John 15:5", "Galatians 2:20"]
       },
@@ -1142,8 +1142,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         shortTag: "Great Commission",
         summary: "Training everyday believers to lead clear, gracious, Christ-centered Bible studies in homes and online.",
         sectionIndex: 2,
-        x: 300,
-        y: 420,
+        x: 215,
+        y: 495,
         connectedTo: ["zm-hub", "zm-gospel"],
         anchorRefs: ["2 Timothy 2:2", "Matthew 28:19-20"]
       }
@@ -1154,24 +1154,24 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         reference: "Acts 17:11",
         verseText: "These were more noble than those in Thessalonica, in that they received the word with all readiness of mind, and searched the scriptures daily.",
         parentNodeId: "zm-prophecy",
-        x: 145,
-        y: 125
+        x: 20,
+        y: 20
       },
       {
         id: "zm-s2",
         reference: "2 Timothy 2:15",
         verseText: "Study to shew thyself approved unto God, a workman that needeth not to be ashamed, rightly dividing the word of truth.",
         parentNodeId: "zm-sanctuary",
-        x: 855,
-        y: 125
+        x: 980,
+        y: 20
       },
       {
         id: "zm-s3",
         reference: "2 Timothy 2:2",
         verseText: "And the things that thou hast heard of me among many witnesses, the same commit thou to faithful men, who shall be able to teach others also.",
         parentNodeId: "zm-discipleship",
-        x: 145,
-        y: 475
+        x: 20,
+        y: 590
       }
     ],
     portalNodes: [
@@ -1182,7 +1182,7 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         fromNodeId: "zm-prophecy",
         relationTag: "Doctrinal Core",
         x: 500,
-        y: 72
+        y: -140
       },
       {
         id: "zm-p-sanctuary",
@@ -1190,8 +1190,8 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         targetTrackId: "sanctuary-doctrine",
         fromNodeId: "zm-sanctuary",
         relationTag: "Tabernacle Blueprint",
-        x: 880,
-        y: 460
+        x: 1055,
+        y: 525
       },
       {
         id: "zm-p-covenant",
@@ -1200,7 +1200,7 @@ export const TRACK_BLUEPRINTS: Record<string, TrackBlueprintSpec> = {
         fromNodeId: "zm-gospel",
         relationTag: "Grace & Obedience",
         x: 500,
-        y: 540
+        y: 710
       }
     ]
   }

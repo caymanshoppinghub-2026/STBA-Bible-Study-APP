@@ -256,18 +256,62 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     return QUICK_KJV[refStr.toLowerCase()] || `Loading ${refStr} (KJV)…`;
   };
 
-  // Dynamically compute ONLY the currently focused node's specific anchor scriptures in a wide, non-overlapping orbit!
+  // Helper: pick angular slots that stay cleanly in the open gaps BETWEEN outgoing doctrine connector lines
+  const pickClearAngles = (node: ConstellationDoctrineNode, count: number, baseOffset = 0): number[] => {
+    const blocked: number[] = [];
+    for (const targetId of node.connectedTo) {
+      const target = activeSpec.nodes.find((n) => n.id === targetId);
+      if (target) {
+        blocked.push(Math.atan2(target.y - node.y, target.x - node.x));
+      }
+    }
+    const norm = (a: number) => {
+      let x = a % (Math.PI * 2);
+      if (x < 0) x += Math.PI * 2;
+      return x;
+    };
+    const sorted = blocked.map(norm).sort((a, b) => a - b);
+    // Find open gaps between outgoing lines and place satellites at gap midpoints (avoiding lines completely!)
+    if (sorted.length >= 2) {
+      const gaps: { mid: number; size: number }[] = [];
+      for (let i = 0; i < sorted.length; i++) {
+        const a = sorted[i];
+        const b = i + 1 < sorted.length ? sorted[i + 1] : sorted[0] + Math.PI * 2;
+        const size = b - a;
+        if (size > 0.35) {
+          gaps.push({ mid: norm(a + size / 2 + baseOffset), size });
+        }
+      }
+      gaps.sort((g1, g2) => g2.size - g1.size);
+      if (gaps.length > 0 && count <= gaps.length) {
+        return gaps.slice(0, count).map((g) => g.mid);
+      }
+      if (gaps.length > 0) {
+        // Distribute across the largest open gaps
+        const res: number[] = [];
+        for (let i = 0; i < count; i++) {
+          const g = gaps[i % gaps.length];
+          const slot = Math.floor(i / gaps.length);
+          const jitter = slot === 0 ? 0 : (slot % 2 === 1 ? 0.24 : -0.24) * Math.ceil(slot / 2);
+          res.push(norm(g.mid + jitter));
+        }
+        return res;
+      }
+    }
+    // Fallback balanced circle avoiding straight diagonals
+    return Array.from({ length: count }, (_, idx) => -Math.PI / 2 + baseOffset + (idx / count) * Math.PI * 2);
+  };
+
+  // Dynamically compute ONLY the currently focused node's specific anchor scriptures in open gaps between lines!
   const focusedScriptureSatellites = useMemo<ConstellationScriptureNode[]>(() => {
     if (focusStep < 1 || !focusedNodeId) return [];
     const node = activeSpec.nodes.find((n) => n.id === focusedNodeId);
     if (!node || !node.anchorRefs || node.anchorRefs.length === 0) return [];
     const count = node.anchorRefs.length;
-    const radius = count >= 7 ? 195 : count >= 5 ? 172 : count >= 4 ? 156 : 138;
+    const radius = count >= 7 ? 185 : count >= 5 ? 168 : count >= 4 ? 156 : 148;
+    const angles = pickClearAngles(node, count, 0);
     return node.anchorRefs.map((ref, idx) => {
-      const angle =
-        count >= 4
-          ? -Math.PI / 2 + (idx / count) * (Math.PI * 2)
-          : -Math.PI * 0.8 + (count === 1 ? Math.PI * 0.3 : (idx / (count - 1)) * (Math.PI * 0.6));
+      const angle = angles[idx];
       return {
         id: `sat-${node.id}-${idx}`,
         reference: ref,
@@ -721,9 +765,22 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                           strokeWidth={isSelectedRef ? 2.4 : 1.6}
                           filter="url(#goldSoftGlow)"
                         />
+                        {/* Crisp Royal Navy pill backing so scripture text is NEVER hidden behind lines */}
+                        <rect
+                          x={sn.x - Math.max(46, sn.reference.length * 3.7 + 12)}
+                          y={sn.y - 30}
+                          width={Math.max(92, sn.reference.length * 7.4 + 24)}
+                          height={20}
+                          rx={6}
+                          fill="#050D1E"
+                          fillOpacity="0.92"
+                          stroke="#D4AF37"
+                          strokeOpacity={isSelectedRef ? 0.9 : 0.4}
+                          strokeWidth={1}
+                        />
                         <text
                           x={sn.x}
-                          y={sn.y - 14}
+                          y={sn.y - 17}
                           textAnchor="middle"
                           fill="#FDF0BE"
                           fontSize="10.5"
