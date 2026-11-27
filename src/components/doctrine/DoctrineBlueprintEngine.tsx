@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Compass,
@@ -170,6 +171,28 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     setPortalTransitionLabel(null);
     setBreadcrumbPath((prev) => (prev.length > 1 && stage === "constellation" ? [activeSpec.shortTitle, hub?.label || ""] : [activeSpec.shortTitle]));
   }, [selectedTrackId]);
+
+  // Lock body scroll & allow ESC to exit dedicated full-screen Stage 2 constellation
+  React.useEffect(() => {
+    if (stage !== "constellation") return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (previewScripture) {
+          setPreviewScripture(null);
+        } else {
+          setStage("overview");
+          setBreadcrumbPath([activeSpec.shortTitle]);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [stage, previewScripture, activeSpec.shortTitle]);
 
   const handleResetViewport = () => {
     setZoom(1);
@@ -563,32 +586,63 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
               )}
 
               {/* ===================================================================== */}
-              {/* STAGE 2: INTERACTIVE SVG CONSTELLATION (DOCTRINE NODE NETWORK)        */}
+              {/* STAGE 2: DEDICATED FULL-SCREEN INTERACTIVE SVG CONSTELLATION          */}
               {/* ===================================================================== */}
-              {stage === "constellation" && (
+              {stage === "constellation" && typeof document !== "undefined" && createPortal(
                 <motion.div
-                  key={`constellation-${selectedTrackId}`}
+                  key={`constellation-fullscreen-${selectedTrackId}`}
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ duration: 0.25 }}
-                  className="flex-1 flex flex-col gap-4"
+                  className="fixed inset-0 z-[9999] flex flex-col text-[#F4EFE4] overflow-hidden"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 75% 18%, rgba(212,175,55,0.16) 0%, transparent 40%), radial-gradient(circle at 18% 82%, rgba(180,120,45,0.14) 0%, transparent 45%), linear-gradient(160deg, #040914 0%, #09152B 50%, #050E20 100%)"
+                  }}
                 >
-                  {/* Constellation SVG Viewport with Progressive Revelation, Pan/Zoom & Cross-Doctrine Portals */}
-                  <div className="relative rounded-2xl border border-[#D4AF37]/25 bg-[#050D1E]/80 overflow-hidden">
-                    {/* Top Left Progressive Revelation HUD & Belief Counter */}
-                    <div className="absolute top-3 left-4 z-10 flex items-center gap-2 text-[11px] font-mono text-[#B7C5DE] bg-[#071328]/85 px-3 py-1.5 rounded-full border border-[#D4AF37]/30 backdrop-blur-xs">
-                      <Sparkles className="w-3.5 h-3.5 text-[#E5C158] shrink-0" />
-                      <span className="text-[#FDF0BE] font-bold">
-                        {visibleNodeCount}/{activeSpec.nodes.length}
-                      </span>
-                      <span className="hidden md:inline">
-                        {revealRing === 0
-                          ? `Click ${activeSpec.nodes[0]?.label || "Core Pillar"} to begin progressive revelation`
-                          : revealRing < maxRing
-                            ? `Click ${activeSpec.nodes[0]?.label} again to build Ring ${revealRing + 1} (${maxRing} rings total)`
-                            : "Full network revealed • Click teal bridge portals to jump to linked doctrines"}
-                      </span>
+                  {/* Full-screen starfield texture */}
+                  <div
+                    className="pointer-events-none absolute inset-0 opacity-40"
+                    style={{
+                      backgroundImage:
+                        "radial-gradient(1.5px 1.5px at 14% 22%, #F6E29B 50%, transparent 100%), radial-gradient(1px 1px at 32% 74%, #FFFFFF 50%, transparent 100%), radial-gradient(1.5px 1.5px at 68% 18%, #F6E29B 50%, transparent 100%), radial-gradient(1px 1px at 84% 46%, #FFFFFF 50%, transparent 100%), radial-gradient(1.2px 1.2px at 54% 86%, #E5C158 50%, transparent 100%), radial-gradient(1px 1px at 22% 48%, #FFFFFF 50%, transparent 100%), radial-gradient(1.5px 1.5px at 90% 15%, #F6E29B 50%, transparent 100%)"
+                    }}
+                  />
+
+                  {/* Full-Viewport Constellation SVG Canvas */}
+                  <div className="relative flex-1 w-full h-full overflow-hidden">
+                    {/* Floating Top-Left: Exit Full-Screen + Breadcrumb + Progressive Counter HUD */}
+                    <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2 max-w-[calc(100%-240px)]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStage("overview");
+                          setBreadcrumbPath([activeSpec.shortTitle]);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#071328]/90 border border-[#D4AF37]/40 text-xs font-semibold text-[#FDF0BE] hover:bg-[#D4AF37]/20 transition-colors cursor-pointer shadow-lg backdrop-blur-md"
+                      >
+                        <ChevronLeft className="w-4 h-4 text-[#E5C158]" />
+                        <span>Exit Map</span>
+                      </button>
+
+                      <div className="flex items-center gap-2 text-[11px] font-mono text-[#B7C5DE] bg-[#071328]/85 px-3.5 py-2 rounded-xl border border-[#D4AF37]/30 backdrop-blur-md shadow-lg">
+                        <Sparkles className="w-3.5 h-3.5 text-[#E5C158] shrink-0" />
+                        <span className="text-[#FDF0BE] font-bold">
+                          {activeSpec.shortTitle}
+                        </span>
+                        <span className="text-[#D4AF37]/50">•</span>
+                        <span className="text-[#F3D77D] font-bold">
+                          {visibleNodeCount}/{activeSpec.nodes.length}
+                        </span>
+                        <span className="hidden lg:inline text-[#9FB0CD]">
+                          {revealRing === 0
+                            ? `— Click ${activeSpec.nodes[0]?.label || "Core Pillar"} to radiate truths outward`
+                            : revealRing < maxRing
+                              ? `— Click ${activeSpec.nodes[0]?.label} again for Ring ${revealRing + 1}/${maxRing}`
+                              : "— Drag to pan • Scroll to zoom • Click teal portals to cross doctrines"}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Portal Zoom-and-Recenter Transition Overlay */}
@@ -607,8 +661,8 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                       )}
                     </AnimatePresence>
 
-                    {/* Top Right Pan & Zoom + Progressive Ring Build Controls */}
-                    <div className="absolute top-3 right-3 z-20 flex items-center gap-1 bg-[#071328]/90 border border-[#D4AF37]/30 rounded-xl p-1 shadow-lg backdrop-blur-md">
+                    {/* Isolated Floating Top-Right Pan & Zoom + Progressive Ring Build Controls */}
+                    <div className="absolute top-4 right-4 z-20 flex items-center gap-1 bg-[#071328]/90 border border-[#D4AF37]/35 rounded-xl p-1.5 shadow-xl backdrop-blur-md">
                       <button
                         type="button"
                         onClick={() => setRevealRing((r) => (r < maxRing ? maxRing : 0))}
@@ -627,9 +681,9 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                         title="Zoom In"
                         className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
                       >
-                        <ZoomIn className="w-3.5 h-3.5" />
+                        <ZoomIn className="w-4 h-4" />
                       </button>
-                      <span className="text-[10px] font-mono text-[#9FB0CD] px-1 min-w-[36px] text-center">
+                      <span className="text-[11px] font-mono text-[#9FB0CD] px-1 min-w-[40px] text-center">
                         {Math.round(zoom * 100)}%
                       </span>
                       <button
@@ -638,7 +692,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                         title="Zoom Out"
                         className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
                       >
-                        <ZoomOut className="w-3.5 h-3.5" />
+                        <ZoomOut className="w-4 h-4" />
                       </button>
                       <button
                         type="button"
@@ -646,20 +700,21 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                         title="Reset Pan & Zoom"
                         className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
                       >
-                        <RotateCcw className="w-3.5 h-3.5" />
+                        <RotateCcw className="w-4 h-4" />
                       </button>
                     </div>
 
                     <svg
                       viewBox="0 0 1000 600"
+                      preserveAspectRatio="xMidYMid meet"
                       onWheel={handleWheelZoom}
                       onPointerDown={handlePointerDownCanvas}
                       onPointerMove={handlePointerMoveCanvas}
                       onPointerUp={handlePointerUpCanvas}
                       onPointerLeave={handlePointerUpCanvas}
-                      className={`w-full h-[430px] md:h-[490px] select-none touch-none ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+                      className={`w-full h-full select-none touch-none ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
                       role="img"
-                      aria-label={`${activeSpec.shortTitle} Interactive Doctrine Constellation`}
+                      aria-label={`${activeSpec.shortTitle} Full-Screen Interactive Doctrine Constellation`}
                     >
                       <defs>
                         <radialGradient id="hubGlow" cx="50%" cy="50%" r="50%">
@@ -963,9 +1018,9 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                     </AnimatePresence>
                   </div>
 
-                  {/* Focused Doctrine Inspector Bar (includes Fundamental Beliefs pills when traversing all 28 Beliefs) */}
-                  <div className="p-4 md:p-5 rounded-xl bg-[#091833]/90 border border-[#D4AF37]/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-2 max-w-2xl">
+                  {/* Floating Bottom Focused Doctrine Inspector Dock */}
+                  <div className="relative z-20 mx-4 mb-4 p-4 rounded-2xl bg-[#07152E]/92 border border-[#D4AF37]/35 backdrop-blur-md shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1.5 max-w-2xl">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-[#D4AF37]/15 border border-[#D4AF37]/40 text-[#F6E29B]">
                           {focusedNode.shortTag}
@@ -1021,7 +1076,8 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                       </button>
                     </div>
                   </div>
-                </motion.div>
+                </motion.div>,
+                document.body
               )}
 
               {/* ===================================================================== */}
