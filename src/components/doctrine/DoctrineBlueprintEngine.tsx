@@ -322,8 +322,498 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
     return list;
   }, [activeSpec]);
 
+  // Dedicated Full-Screen Stage 2 Constellation Portal (rendered outside AnimatePresence so portals mount cleanly)
+  const fullScreenConstellationOverlay =
+    stage === "constellation" && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            key={`constellation-fullscreen-${selectedTrackId}`}
+            className="fixed inset-0 z-[9999] flex flex-col text-[#F4EFE4] overflow-hidden"
+            style={{
+              width: "100vw",
+              height: "100vh",
+              background:
+                "radial-gradient(circle at 75% 18%, rgba(212,175,55,0.16) 0%, transparent 40%), radial-gradient(circle at 18% 82%, rgba(180,120,45,0.14) 0%, transparent 45%), linear-gradient(160deg, #040914 0%, #09152B 50%, #050E20 100%)"
+            }}
+          >
+            {/* Full-screen starfield texture */}
+            <div
+              className="pointer-events-none absolute inset-0 opacity-40"
+              style={{
+                backgroundImage:
+                  "radial-gradient(1.5px 1.5px at 14% 22%, #F6E29B 50%, transparent 100%), radial-gradient(1px 1px at 32% 74%, #FFFFFF 50%, transparent 100%), radial-gradient(1.5px 1.5px at 68% 18%, #F6E29B 50%, transparent 100%), radial-gradient(1px 1px at 84% 46%, #FFFFFF 50%, transparent 100%), radial-gradient(1.2px 1.2px at 54% 86%, #E5C158 50%, transparent 100%), radial-gradient(1px 1px at 22% 48%, #FFFFFF 50%, transparent 100%), radial-gradient(1.5px 1.5px at 90% 15%, #F6E29B 50%, transparent 100%)"
+              }}
+            />
+
+            {/* Full-Viewport Constellation SVG Canvas */}
+            <div className="relative flex-1 min-h-0 w-full overflow-hidden">
+              {/* Floating Top-Left: Exit Full-Screen + Breadcrumb + Progressive Counter HUD */}
+              <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2 max-w-[calc(100%-260px)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStage("overview");
+                    setBreadcrumbPath([activeSpec.shortTitle]);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#071328]/90 border border-[#D4AF37]/40 text-xs font-semibold text-[#FDF0BE] hover:bg-[#D4AF37]/20 transition-colors cursor-pointer shadow-lg backdrop-blur-md"
+                >
+                  <ChevronLeft className="w-4 h-4 text-[#E5C158]" />
+                  <span>Exit Map</span>
+                </button>
+
+                <div className="flex items-center gap-2 text-[11px] font-mono text-[#B7C5DE] bg-[#071328]/85 px-3.5 py-2 rounded-xl border border-[#D4AF37]/30 backdrop-blur-md shadow-lg">
+                  <Sparkles className="w-3.5 h-3.5 text-[#E5C158] shrink-0" />
+                  <span className="text-[#FDF0BE] font-bold">{activeSpec.shortTitle}</span>
+                  <span className="text-[#D4AF37]/50">•</span>
+                  <span className="text-[#F3D77D] font-bold">
+                    {visibleNodeCount}/{activeSpec.nodes.length}
+                  </span>
+                  <span className="hidden lg:inline text-[#9FB0CD]">
+                    {revealRing === 0
+                      ? `— Click ${activeSpec.nodes[0]?.label || "Core Pillar"} to radiate truths outward`
+                      : revealRing < maxRing
+                        ? `— Click ${activeSpec.nodes[0]?.label} again for Ring ${revealRing + 1}/${maxRing}`
+                        : "— Drag to pan • Scroll to zoom • Click teal portals to cross doctrines"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Portal Zoom-and-Recenter Transition Overlay */}
+              <AnimatePresence>
+                {portalTransitionLabel && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 z-30 flex items-center justify-center bg-[#040B1A]/60 backdrop-blur-xs pointer-events-none"
+                  >
+                    <div className="px-5 py-2.5 rounded-full bg-[#091F36]/95 border border-[#5EEAD4]/60 text-[#99F6E4] font-mono text-xs tracking-wider shadow-[0_0_25px_rgba(45,212,191,0.35)]">
+                      Entering Portal → {portalTransitionLabel}…
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Isolated Floating Top-Right Pan & Zoom + Progressive Ring Build Controls */}
+              <div className="absolute top-4 right-4 z-20 flex items-center gap-1 bg-[#071328]/90 border border-[#D4AF37]/35 rounded-xl p-1.5 shadow-xl backdrop-blur-md">
+                <button
+                  type="button"
+                  onClick={() => setRevealRing((r) => (r < maxRing ? maxRing : 0))}
+                  title={revealRing < maxRing ? `Reveal All ${activeSpec.nodes.length} Nodes` : "Collapse to Core Pillar"}
+                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-semibold text-[#F6E29B] hover:bg-[#D4AF37]/20 transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  {revealRing < maxRing ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+                  <span className="hidden sm:inline">
+                    {revealRing < maxRing ? `Build All (${activeSpec.nodes.length})` : "Core"}
+                  </span>
+                </button>
+                <div className="w-px h-4 bg-[#D4AF37]/25" />
+                <button
+                  type="button"
+                  onClick={() => setZoom((z) => Math.min(2.2, Number((z + 0.2).toFixed(2))))}
+                  title="Zoom In"
+                  className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <span className="text-[11px] font-mono text-[#9FB0CD] px-1 min-w-[40px] text-center">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setZoom((z) => Math.max(0.55, Number((z - 0.2).toFixed(2))))}
+                  title="Zoom Out"
+                  className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetViewport}
+                  title="Reset Pan & Zoom"
+                  className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
+
+              <svg
+                viewBox="0 0 1000 600"
+                preserveAspectRatio="xMidYMid meet"
+                onWheel={handleWheelZoom}
+                onPointerDown={handlePointerDownCanvas}
+                onPointerMove={handlePointerMoveCanvas}
+                onPointerUp={handlePointerUpCanvas}
+                onPointerLeave={handlePointerUpCanvas}
+                className={`w-full h-full block select-none touch-none ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+                role="img"
+                aria-label={`${activeSpec.shortTitle} Full-Screen Interactive Doctrine Constellation`}
+              >
+                <defs>
+                  <radialGradient id="hubGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#FFF5C8" stopOpacity="1" />
+                    <stop offset="40%" stopColor="#E5C158" stopOpacity="0.9" />
+                    <stop offset="75%" stopColor="#C9973A" stopOpacity="0.28" />
+                    <stop offset="100%" stopColor="#C9973A" stopOpacity="0" />
+                  </radialGradient>
+                  <radialGradient id="portalGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#99F6E4" stopOpacity="0.95" />
+                    <stop offset="50%" stopColor="#2DD4BF" stopOpacity="0.45" />
+                    <stop offset="100%" stopColor="#2DD4BF" stopOpacity="0" />
+                  </radialGradient>
+                  <filter id="goldSoftGlow" x="-40%" y="-40%" width="180%" height="180%">
+                    <feGaussianBlur stdDeviation="4" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+
+                {/* Interactive Pan & Zoom Group */}
+                <g
+                  transform={`translate(${500 + pan.x}, ${300 + pan.y}) scale(${zoom}) translate(-500, -300)`}
+                  style={{ transition: isPanning ? "none" : "transform 340ms cubic-bezier(0.22, 1, 0.36, 1)" }}
+                >
+                  {/* Concentric astrolabe rings */}
+                  <circle cx="500" cy="300" r="135" fill="none" stroke="#D4AF37" strokeOpacity="0.12" strokeDasharray="4 6" />
+                  <circle cx="500" cy="300" r="240" fill="none" stroke="#D4AF37" strokeOpacity="0.09" strokeDasharray="3 8" />
+                  <circle cx="500" cy="300" r="345" fill="none" stroke="#D4AF37" strokeOpacity="0.07" strokeDasharray="2 10" />
+
+                  {/* 1. Doctrine-to-Doctrine Connectors */}
+                  {doctrineEdges
+                    .filter(({ from, to }) => isNodeVisible(from) && isNodeVisible(to))
+                    .map(({ from, to, key }) => {
+                      const highlighted = isEdgeHighlighted(from.id, to.id);
+                      return (
+                        <motion.line
+                          key={key}
+                          initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
+                          animate={{ x1: from.x, y1: from.y, x2: to.x, y2: to.y, opacity: highlighted ? 0.95 : 0.38 }}
+                          transition={{ type: "spring", stiffness: 120, damping: 18 }}
+                          stroke={highlighted ? "#F3D77D" : "#5D7499"}
+                          strokeWidth={highlighted ? 2.2 : 1.1}
+                          filter={highlighted ? "url(#goldSoftGlow)" : undefined}
+                        />
+                      );
+                    })}
+
+                  {/* 2. Outer Scripture Anchor Connectors */}
+                  {activeSpec.scriptureNodes.map((sn) => {
+                    const parent = activeSpec.nodes.find((n) => n.id === sn.parentNodeId);
+                    if (!parent || !isNodeVisible(parent)) return null;
+                    const highlighted = activeHighlightId === parent.id || previewScripture?.id === sn.id;
+                    return (
+                      <motion.line
+                        key={`edge-${sn.id}`}
+                        initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
+                        animate={{ x1: parent.x, y1: parent.y, x2: sn.x, y2: sn.y, opacity: highlighted ? 0.92 : 0.38 }}
+                        transition={{ type: "spring", stiffness: 110, damping: 18, delay: 0.08 }}
+                        stroke={highlighted ? "#E5C158" : "#4A6187"}
+                        strokeWidth={highlighted ? 1.8 : 1}
+                        strokeDasharray="4 4"
+                      />
+                    );
+                  })}
+
+                  {/* 3. Outer Perimeter Cross-Doctrine Portal Bridge Edges (Dashed Teal) */}
+                  {(activeSpec.portalNodes || []).map((portal) => {
+                    const parent = activeSpec.nodes.find((n) => n.id === portal.fromNodeId);
+                    if (!parent || !isNodeVisible(parent)) return null;
+                    const highlighted = activeHighlightId === parent.id;
+                    return (
+                      <motion.line
+                        key={`portal-edge-${portal.id}`}
+                        initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
+                        animate={{ x1: parent.x, y1: parent.y, x2: portal.x, y2: portal.y, opacity: highlighted ? 0.95 : 0.65 }}
+                        transition={{ type: "spring", stiffness: 100, damping: 18, delay: 0.14 }}
+                        stroke="#2DD4BF"
+                        strokeWidth={highlighted ? 2.2 : 1.4}
+                        strokeDasharray="6 5"
+                      />
+                    );
+                  })}
+
+                  {/* 4. Outer Scripture Anchor Nodes */}
+                  {activeSpec.scriptureNodes.map((sn) => {
+                    const parent = activeSpec.nodes.find((n) => n.id === sn.parentNodeId);
+                    if (!parent || !isNodeVisible(parent)) return null;
+                    const isSelectedRef = previewScripture?.id === sn.id;
+                    const parentHighlighted = activeHighlightId === sn.parentNodeId;
+                    return (
+                      <motion.g
+                        key={sn.id}
+                        data-constellation-node="true"
+                        initial={{ x: 500 - sn.x, y: 300 - sn.y, opacity: 0, scale: 0.4 }}
+                        animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                        transition={{ type: "spring", stiffness: 120, damping: 16, delay: 0.1 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewScripture(sn);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <circle
+                          cx={sn.x}
+                          cy={sn.y}
+                          r={isSelectedRef ? 10 : 7}
+                          fill={isSelectedRef || parentHighlighted ? "#E5C158" : "#15294A"}
+                          stroke="#F3D77D"
+                          strokeWidth={isSelectedRef ? 2.2 : 1.3}
+                          filter={isSelectedRef ? "url(#goldSoftGlow)" : undefined}
+                        />
+                        <text
+                          x={sn.x}
+                          y={sn.y + 21}
+                          textAnchor="middle"
+                          fill={isSelectedRef || parentHighlighted ? "#FDF0BE" : "#A7B8D4"}
+                          fontSize="10.5"
+                          fontFamily="monospace"
+                          fontWeight={isSelectedRef ? "700" : "500"}
+                        >
+                          {sn.reference}
+                        </text>
+                      </motion.g>
+                    );
+                  })}
+
+                  {/* 5. Outer Perimeter Cross-Doctrine Portal Nodes */}
+                  {(activeSpec.portalNodes || []).map((portal) => {
+                    const parent = activeSpec.nodes.find((n) => n.id === portal.fromNodeId);
+                    if (!parent || !isNodeVisible(parent)) return null;
+                    return (
+                      <motion.g
+                        key={portal.id}
+                        data-constellation-node="true"
+                        initial={{ x: 500 - portal.x, y: 300 - portal.y, opacity: 0, scale: 0.4 }}
+                        animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                        transition={{ type: "spring", stiffness: 110, damping: 16, delay: 0.16 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePortalTransition(portal);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <circle cx={portal.x} cy={portal.y} r="22" fill="url(#portalGlow)" opacity="0.55" />
+                        <polygon
+                          points={`${portal.x},${portal.y - 11} ${portal.x + 11},${portal.y} ${portal.x},${portal.y + 11} ${portal.x - 11},${portal.y}`}
+                          fill="#0B2A3A"
+                          stroke="#5EEAD4"
+                          strokeWidth="2"
+                        />
+                        <circle cx={portal.x} cy={portal.y} r="3.2" fill="#F3D77D" />
+                        <text
+                          x={portal.x}
+                          y={portal.y + 24}
+                          textAnchor="middle"
+                          fill="#99F6E4"
+                          fontSize="10.5"
+                          fontWeight="700"
+                        >
+                          ↗ {portal.label}
+                        </text>
+                        <text
+                          x={portal.x}
+                          y={portal.y + 36}
+                          textAnchor="middle"
+                          fill="#5EEAD4"
+                          fillOpacity="0.8"
+                          fontSize="9"
+                          fontFamily="monospace"
+                        >
+                          {portal.relationTag}
+                        </text>
+                      </motion.g>
+                    );
+                  })}
+
+                  {/* 6. Primary Doctrine Nodes & Central Core Hub */}
+                  {activeSpec.nodes.map((node) => {
+                    if (!isNodeVisible(node)) return null;
+                    const isFocused = focusedNodeId === node.id;
+                    const isConnected = isNodeConnectedToHighlight(node.id);
+                    const isDense = activeSpec.nodes.length > 10;
+                    const radius = node.isHub
+                      ? constellationExpanded
+                        ? isDense
+                          ? 20
+                          : 24
+                        : 32
+                      : isFocused
+                        ? isDense
+                          ? 14
+                          : 18
+                        : isDense
+                          ? 10.5
+                          : 14;
+                    return (
+                      <motion.g
+                        key={node.id}
+                        data-constellation-node="true"
+                        initial={node.isHub ? { opacity: 1, scale: 1 } : { x: 500 - node.x, y: 300 - node.y, opacity: 0, scale: 0.35 }}
+                        animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                        transition={{ type: "spring", stiffness: 130, damping: 17 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConstellationNodeClick(node);
+                        }}
+                        onMouseEnter={() => setHoveredNodeId(node.id)}
+                        onMouseLeave={() => setHoveredNodeId(null)}
+                        className="cursor-pointer"
+                      >
+                        {(node.isHub || isFocused) && (
+                          <circle
+                            cx={node.x}
+                            cy={node.y}
+                            r={node.isHub ? (constellationExpanded ? 44 : 72) : isDense ? 26 : 34}
+                            fill="url(#hubGlow)"
+                            opacity={isFocused ? 0.95 : 0.7}
+                          />
+                        )}
+                        {node.isHub && revealRing < maxRing && (
+                          <circle
+                            cx={node.x}
+                            cy={node.y}
+                            r={constellationExpanded ? 32 : 46}
+                            fill="none"
+                            stroke="#F3D77D"
+                            strokeWidth="1.5"
+                            strokeOpacity="0.65"
+                            strokeDasharray="5 5"
+                          />
+                        )}
+                        <circle
+                          cx={node.x}
+                          cy={node.y}
+                          r={radius}
+                          fill={node.isHub || isFocused ? "#E5C158" : isConnected ? "#19345F" : "#0D1E3B"}
+                          stroke={isFocused || isConnected || node.isHub ? "#FDF0BE" : "#4A6187"}
+                          strokeWidth={isFocused || node.isHub ? 2.4 : 1.4}
+                          filter={isFocused || node.isHub ? "url(#goldSoftGlow)" : undefined}
+                        />
+                        <text
+                          x={node.x}
+                          y={node.y + (node.isHub ? (constellationExpanded ? 36 : 54) : isDense ? 24 : 32)}
+                          textAnchor="middle"
+                          fill={isFocused || node.isHub ? "#FDF0BE" : isConnected ? "#FFFFFF" : "#B7C5DE"}
+                          fontSize={node.isHub ? (constellationExpanded ? (isDense ? "13" : "15") : "18") : isDense ? "10.5" : "13"}
+                          fontWeight={isFocused || node.isHub ? "700" : "600"}
+                        >
+                          {node.label}
+                        </text>
+                        <text
+                          x={node.x}
+                          y={node.y + (node.isHub ? (constellationExpanded ? 49 : 72) : isDense ? 35 : 46)}
+                          textAnchor="middle"
+                          fill={node.isHub && revealRing < maxRing ? "#F3D77D" : "#8FA2C2"}
+                          fontSize={node.isHub && !constellationExpanded ? "11.5" : isDense ? "8.5" : "10"}
+                          fontFamily="monospace"
+                        >
+                          {node.isHub && revealRing < maxRing
+                            ? revealRing === 0
+                              ? "Click to Reveal Ring 1"
+                              : `Click to Build Ring ${revealRing + 1}/${maxRing}`
+                            : node.shortTag}
+                        </text>
+                      </motion.g>
+                    );
+                  })}
+                </g>
+              </svg>
+
+              {/* Inline KJV Scripture Preview Pop-up */}
+              <AnimatePresence>
+                {previewScripture && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute bottom-4 right-4 left-4 sm:left-auto sm:w-96 p-4 rounded-xl bg-[#07152E]/95 border border-[#E5C158]/60 shadow-2xl backdrop-blur-md z-20"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-[#F3D77D]">
+                        <Bookmark className="w-3.5 h-3.5" />
+                        {previewScripture.reference} (KJV)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewScripture(null)}
+                        className="text-[#8FA2C2] hover:text-white cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-xs sm:text-sm text-[#EFE9DC] leading-relaxed italic border-l-2 border-[#D4AF37] pl-3 my-2">
+                      “{previewScripture.verseText}”
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onLaunchBibleStudy(previewScripture.reference, activeSpec.shortTitle)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#081326] bg-[#E5C158] hover:bg-[#F3D77D] px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Open in Split Bible Study</span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Floating Bottom Focused Doctrine Inspector Dock */}
+            <div className="relative z-20 mx-4 mb-4 p-4 rounded-2xl bg-[#07152E]/92 border border-[#D4AF37]/35 backdrop-blur-md shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+              <div className="space-y-1.5 max-w-2xl">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-[#D4AF37]/15 border border-[#D4AF37]/40 text-[#F6E29B]">
+                    {focusedNode.shortTag}
+                  </span>
+                  <h3 className="font-serif text-lg font-bold text-[#FDF0BE]">{focusedNode.label}</h3>
+                </div>
+                <p className="text-sm text-[#CFD9EC] leading-relaxed">{focusedNode.summary}</p>
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {focusedNode.anchorRefs.map((ref) => (
+                    <button
+                      key={ref}
+                      type="button"
+                      onClick={() => onLaunchBibleStudy(ref, focusedNode.label)}
+                      className="text-[11px] font-mono px-2.5 py-0.5 rounded-md bg-white/5 border border-[#D4AF37]/30 text-[#F3D77D] hover:bg-[#D4AF37]/20 transition-colors cursor-pointer"
+                    >
+                      {ref}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStage("overview");
+                    setBreadcrumbPath([activeSpec.shortTitle]);
+                  }}
+                  className="px-3.5 py-2.5 rounded-xl text-xs font-semibold border border-[#D4AF37]/30 text-[#CFD9EC] hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                >
+                  Back to Guide
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenBlueprint}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider text-[#081326] shadow-[0_6px_20px_rgba(212,175,55,0.35)] hover:brightness-110 transition-all cursor-pointer"
+                  style={{ background: "linear-gradient(180deg, #F1D37A 0%, #D4AF37 100%)" }}
+                >
+                  <span>Open Architectural Blueprint</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
-    <div
+    <>
+      {fullScreenConstellationOverlay}
+      <div
       className="relative rounded-2xl overflow-hidden border border-[#D4AF37]/30 shadow-[0_24px_70px_rgba(4,10,24,0.65)] text-[#F4EFE4]"
       style={{
         background:
@@ -585,500 +1075,7 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
                 </motion.div>
               )}
 
-              {/* ===================================================================== */}
-              {/* STAGE 2: DEDICATED FULL-SCREEN INTERACTIVE SVG CONSTELLATION          */}
-              {/* ===================================================================== */}
-              {stage === "constellation" && typeof document !== "undefined" && createPortal(
-                <motion.div
-                  key={`constellation-fullscreen-${selectedTrackId}`}
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  transition={{ duration: 0.25 }}
-                  className="fixed inset-0 z-[9999] flex flex-col text-[#F4EFE4] overflow-hidden"
-                  style={{
-                    background:
-                      "radial-gradient(circle at 75% 18%, rgba(212,175,55,0.16) 0%, transparent 40%), radial-gradient(circle at 18% 82%, rgba(180,120,45,0.14) 0%, transparent 45%), linear-gradient(160deg, #040914 0%, #09152B 50%, #050E20 100%)"
-                  }}
-                >
-                  {/* Full-screen starfield texture */}
-                  <div
-                    className="pointer-events-none absolute inset-0 opacity-40"
-                    style={{
-                      backgroundImage:
-                        "radial-gradient(1.5px 1.5px at 14% 22%, #F6E29B 50%, transparent 100%), radial-gradient(1px 1px at 32% 74%, #FFFFFF 50%, transparent 100%), radial-gradient(1.5px 1.5px at 68% 18%, #F6E29B 50%, transparent 100%), radial-gradient(1px 1px at 84% 46%, #FFFFFF 50%, transparent 100%), radial-gradient(1.2px 1.2px at 54% 86%, #E5C158 50%, transparent 100%), radial-gradient(1px 1px at 22% 48%, #FFFFFF 50%, transparent 100%), radial-gradient(1.5px 1.5px at 90% 15%, #F6E29B 50%, transparent 100%)"
-                    }}
-                  />
-
-                  {/* Full-Viewport Constellation SVG Canvas */}
-                  <div className="relative flex-1 w-full h-full overflow-hidden">
-                    {/* Floating Top-Left: Exit Full-Screen + Breadcrumb + Progressive Counter HUD */}
-                    <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2 max-w-[calc(100%-240px)]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStage("overview");
-                          setBreadcrumbPath([activeSpec.shortTitle]);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#071328]/90 border border-[#D4AF37]/40 text-xs font-semibold text-[#FDF0BE] hover:bg-[#D4AF37]/20 transition-colors cursor-pointer shadow-lg backdrop-blur-md"
-                      >
-                        <ChevronLeft className="w-4 h-4 text-[#E5C158]" />
-                        <span>Exit Map</span>
-                      </button>
-
-                      <div className="flex items-center gap-2 text-[11px] font-mono text-[#B7C5DE] bg-[#071328]/85 px-3.5 py-2 rounded-xl border border-[#D4AF37]/30 backdrop-blur-md shadow-lg">
-                        <Sparkles className="w-3.5 h-3.5 text-[#E5C158] shrink-0" />
-                        <span className="text-[#FDF0BE] font-bold">
-                          {activeSpec.shortTitle}
-                        </span>
-                        <span className="text-[#D4AF37]/50">•</span>
-                        <span className="text-[#F3D77D] font-bold">
-                          {visibleNodeCount}/{activeSpec.nodes.length}
-                        </span>
-                        <span className="hidden lg:inline text-[#9FB0CD]">
-                          {revealRing === 0
-                            ? `— Click ${activeSpec.nodes[0]?.label || "Core Pillar"} to radiate truths outward`
-                            : revealRing < maxRing
-                              ? `— Click ${activeSpec.nodes[0]?.label} again for Ring ${revealRing + 1}/${maxRing}`
-                              : "— Drag to pan • Scroll to zoom • Click teal portals to cross doctrines"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Portal Zoom-and-Recenter Transition Overlay */}
-                    <AnimatePresence>
-                      {portalTransitionLabel && (
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          className="absolute inset-0 z-30 flex items-center justify-center bg-[#040B1A]/60 backdrop-blur-xs pointer-events-none"
-                        >
-                          <div className="px-5 py-2.5 rounded-full bg-[#091F36]/95 border border-[#5EEAD4]/60 text-[#99F6E4] font-mono text-xs tracking-wider shadow-[0_0_25px_rgba(45,212,191,0.35)]">
-                            Entering Portal → {portalTransitionLabel}…
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {/* Isolated Floating Top-Right Pan & Zoom + Progressive Ring Build Controls */}
-                    <div className="absolute top-4 right-4 z-20 flex items-center gap-1 bg-[#071328]/90 border border-[#D4AF37]/35 rounded-xl p-1.5 shadow-xl backdrop-blur-md">
-                      <button
-                        type="button"
-                        onClick={() => setRevealRing((r) => (r < maxRing ? maxRing : 0))}
-                        title={revealRing < maxRing ? `Reveal All ${activeSpec.nodes.length} Nodes` : "Collapse to Core Pillar"}
-                        className="px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-semibold text-[#F6E29B] hover:bg-[#D4AF37]/20 transition-colors cursor-pointer flex items-center gap-1"
-                      >
-                        {revealRing < maxRing ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-                        <span className="hidden sm:inline">
-                          {revealRing < maxRing ? `Build All (${activeSpec.nodes.length})` : "Core"}
-                        </span>
-                      </button>
-                      <div className="w-px h-4 bg-[#D4AF37]/25" />
-                      <button
-                        type="button"
-                        onClick={() => setZoom((z) => Math.min(2.2, Number((z + 0.2).toFixed(2))))}
-                        title="Zoom In"
-                        className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
-                      >
-                        <ZoomIn className="w-4 h-4" />
-                      </button>
-                      <span className="text-[11px] font-mono text-[#9FB0CD] px-1 min-w-[40px] text-center">
-                        {Math.round(zoom * 100)}%
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setZoom((z) => Math.max(0.55, Number((z - 0.2).toFixed(2))))}
-                        title="Zoom Out"
-                        className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
-                      >
-                        <ZoomOut className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleResetViewport}
-                        title="Reset Pan & Zoom"
-                        className="p-1.5 rounded-lg text-[#CFD9EC] hover:text-[#FDF0BE] hover:bg-white/10 transition-colors cursor-pointer"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <svg
-                      viewBox="0 0 1000 600"
-                      preserveAspectRatio="xMidYMid meet"
-                      onWheel={handleWheelZoom}
-                      onPointerDown={handlePointerDownCanvas}
-                      onPointerMove={handlePointerMoveCanvas}
-                      onPointerUp={handlePointerUpCanvas}
-                      onPointerLeave={handlePointerUpCanvas}
-                      className={`w-full h-full select-none touch-none ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
-                      role="img"
-                      aria-label={`${activeSpec.shortTitle} Full-Screen Interactive Doctrine Constellation`}
-                    >
-                      <defs>
-                        <radialGradient id="hubGlow" cx="50%" cy="50%" r="50%">
-                          <stop offset="0%" stopColor="#FFF5C8" stopOpacity="1" />
-                          <stop offset="40%" stopColor="#E5C158" stopOpacity="0.9" />
-                          <stop offset="75%" stopColor="#C9973A" stopOpacity="0.28" />
-                          <stop offset="100%" stopColor="#C9973A" stopOpacity="0" />
-                        </radialGradient>
-                        <radialGradient id="portalGlow" cx="50%" cy="50%" r="50%">
-                          <stop offset="0%" stopColor="#99F6E4" stopOpacity="0.95" />
-                          <stop offset="50%" stopColor="#2DD4BF" stopOpacity="0.45" />
-                          <stop offset="100%" stopColor="#2DD4BF" stopOpacity="0" />
-                        </radialGradient>
-                        <filter id="goldSoftGlow" x="-40%" y="-40%" width="180%" height="180%">
-                          <feGaussianBlur stdDeviation="4" result="blur" />
-                          <feMerge>
-                            <feMergeNode in="blur" />
-                            <feMergeNode in="SourceGraphic" />
-                          </feMerge>
-                        </filter>
-                      </defs>
-
-                      {/* Interactive Pan & Zoom Group (smooth CSS transform transition during portal zoom-and-recenter) */}
-                      <g
-                        transform={`translate(${500 + pan.x}, ${300 + pan.y}) scale(${zoom}) translate(-500, -300)`}
-                        style={{ transition: isPanning ? "none" : "transform 340ms cubic-bezier(0.22, 1, 0.36, 1)" }}
-                      >
-                        {/* Subtle concentric astrolabe rings */}
-                        <circle cx="500" cy="300" r="135" fill="none" stroke="#D4AF37" strokeOpacity="0.1" strokeDasharray="4 6" />
-                        <circle cx="500" cy="300" r="240" fill="none" stroke="#D4AF37" strokeOpacity="0.08" strokeDasharray="3 8" />
-                        <circle cx="500" cy="300" r="345" fill="none" stroke="#D4AF37" strokeOpacity="0.06" strokeDasharray="2 10" />
-
-                        {/* 1. Doctrine-to-Doctrine Connectors (progressively built as rings reveal) */}
-                        {doctrineEdges
-                          .filter(({ from, to }) => isNodeVisible(from) && isNodeVisible(to))
-                          .map(({ from, to, key }) => {
-                            const highlighted = isEdgeHighlighted(from.id, to.id);
-                            return (
-                              <motion.line
-                                key={key}
-                                initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
-                                animate={{ x1: from.x, y1: from.y, x2: to.x, y2: to.y, opacity: highlighted ? 0.95 : 0.34 }}
-                                transition={{ type: "spring", stiffness: 120, damping: 18 }}
-                                stroke={highlighted ? "#F3D77D" : "#5D7499"}
-                                strokeWidth={highlighted ? 2.2 : 1}
-                                filter={highlighted ? "url(#goldSoftGlow)" : undefined}
-                              />
-                            );
-                          })}
-
-                        {/* 2. Outer Scripture Anchor Connectors (visible once parent node is revealed) */}
-                        {activeSpec.scriptureNodes.map((sn) => {
-                          const parent = activeSpec.nodes.find((n) => n.id === sn.parentNodeId);
-                          if (!parent || !isNodeVisible(parent)) return null;
-                          const highlighted = activeHighlightId === parent.id || previewScripture?.id === sn.id;
-                          return (
-                            <motion.line
-                              key={`edge-${sn.id}`}
-                              initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
-                              animate={{ x1: parent.x, y1: parent.y, x2: sn.x, y2: sn.y, opacity: highlighted ? 0.92 : 0.35 }}
-                              transition={{ type: "spring", stiffness: 110, damping: 18, delay: 0.08 }}
-                              stroke={highlighted ? "#E5C158" : "#4A6187"}
-                              strokeWidth={highlighted ? 1.8 : 1}
-                              strokeDasharray="4 4"
-                            />
-                          );
-                        })}
-
-                        {/* 3. Outer Perimeter Cross-Doctrine Portal Bridge Edges (Dashed Teal-Tinted Links) */}
-                        {(activeSpec.portalNodes || []).map((portal) => {
-                          const parent = activeSpec.nodes.find((n) => n.id === portal.fromNodeId);
-                          if (!parent || !isNodeVisible(parent)) return null;
-                          const highlighted = activeHighlightId === parent.id;
-                          return (
-                            <motion.line
-                              key={`portal-edge-${portal.id}`}
-                              initial={{ x1: 500, y1: 300, x2: 500, y2: 300, opacity: 0 }}
-                              animate={{ x1: parent.x, y1: parent.y, x2: portal.x, y2: portal.y, opacity: highlighted ? 0.95 : 0.6 }}
-                              transition={{ type: "spring", stiffness: 100, damping: 18, delay: 0.14 }}
-                              stroke="#2DD4BF"
-                              strokeWidth={highlighted ? 2.2 : 1.4}
-                              strokeDasharray="6 5"
-                            />
-                          );
-                        })}
-
-                        {/* 4. Outer Scripture Anchor Nodes (Click to trigger inline KJV Scripture Pop-up) */}
-                        {activeSpec.scriptureNodes.map((sn) => {
-                          const parent = activeSpec.nodes.find((n) => n.id === sn.parentNodeId);
-                          if (!parent || !isNodeVisible(parent)) return null;
-                          const isSelectedRef = previewScripture?.id === sn.id;
-                          const parentHighlighted = activeHighlightId === sn.parentNodeId;
-                          return (
-                            <motion.g
-                              key={sn.id}
-                              data-constellation-node="true"
-                              initial={{ x: 500 - sn.x, y: 300 - sn.y, opacity: 0, scale: 0.4 }}
-                              animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-                              transition={{ type: "spring", stiffness: 120, damping: 16, delay: 0.1 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPreviewScripture(sn);
-                              }}
-                              className="cursor-pointer"
-                            >
-                              <circle
-                                cx={sn.x}
-                                cy={sn.y}
-                                r={isSelectedRef ? 10 : 7}
-                                fill={isSelectedRef || parentHighlighted ? "#E5C158" : "#15294A"}
-                                stroke="#F3D77D"
-                                strokeWidth={isSelectedRef ? 2.2 : 1.3}
-                                filter={isSelectedRef ? "url(#goldSoftGlow)" : undefined}
-                              />
-                              <text
-                                x={sn.x}
-                                y={sn.y + 21}
-                                textAnchor="middle"
-                                fill={isSelectedRef || parentHighlighted ? "#FDF0BE" : "#A7B8D4"}
-                                fontSize="10.5"
-                                fontFamily="monospace"
-                                fontWeight={isSelectedRef ? "700" : "500"}
-                              >
-                                {sn.reference}
-                              </text>
-                            </motion.g>
-                          );
-                        })}
-
-                        {/* 5. Distinct Outer Perimeter Cross-Doctrine Portal Nodes */}
-                        {(activeSpec.portalNodes || []).map((portal) => {
-                          const parent = activeSpec.nodes.find((n) => n.id === portal.fromNodeId);
-                          if (!parent || !isNodeVisible(parent)) return null;
-                          return (
-                            <motion.g
-                              key={portal.id}
-                              data-constellation-node="true"
-                              initial={{ x: 500 - portal.x, y: 300 - portal.y, opacity: 0, scale: 0.4 }}
-                              animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-                              transition={{ type: "spring", stiffness: 110, damping: 16, delay: 0.16 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handlePortalTransition(portal);
-                              }}
-                              className="cursor-pointer group"
-                            >
-                              <circle cx={portal.x} cy={portal.y} r="22" fill="url(#portalGlow)" opacity="0.55" />
-                              <polygon
-                                points={`${portal.x},${portal.y - 11} ${portal.x + 11},${portal.y} ${portal.x},${portal.y + 11} ${portal.x - 11},${portal.y}`}
-                                fill="#0B2A3A"
-                                stroke="#5EEAD4"
-                                strokeWidth="2"
-                              />
-                              <circle cx={portal.x} cy={portal.y} r="3.2" fill="#F3D77D" />
-                              <text
-                                x={portal.x}
-                                y={portal.y + 24}
-                                textAnchor="middle"
-                                fill="#99F6E4"
-                                fontSize="10.5"
-                                fontWeight="700"
-                              >
-                                ↗ {portal.label}
-                              </text>
-                              <text
-                                x={portal.x}
-                                y={portal.y + 36}
-                                textAnchor="middle"
-                                fill="#5EEAD4"
-                                fillOpacity="0.8"
-                                fontSize="9"
-                                fontFamily="monospace"
-                              >
-                                {portal.relationTag}
-                              </text>
-                            </motion.g>
-                          );
-                        })}
-
-                        {/* 6. Primary Doctrine Nodes (Progressively built ring-by-ring until all 28 Beliefs appear) & Central Core Hub */}
-                        {activeSpec.nodes.map((node) => {
-                          if (!isNodeVisible(node)) return null;
-                          const isFocused = focusedNodeId === node.id;
-                          const isConnected = isNodeConnectedToHighlight(node.id);
-                          const isDense = activeSpec.nodes.length > 10;
-                          const radius = node.isHub
-                            ? (constellationExpanded ? (isDense ? 20 : 24) : 32)
-                            : isFocused
-                              ? (isDense ? 14 : 18)
-                              : (isDense ? 10.5 : 14);
-                          return (
-                            <motion.g
-                              key={node.id}
-                              data-constellation-node="true"
-                              initial={node.isHub ? { opacity: 1, scale: 1 } : { x: 500 - node.x, y: 300 - node.y, opacity: 0, scale: 0.35 }}
-                              animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-                              transition={{ type: "spring", stiffness: 130, damping: 17 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleConstellationNodeClick(node);
-                              }}
-                              onMouseEnter={() => setHoveredNodeId(node.id)}
-                              onMouseLeave={() => setHoveredNodeId(null)}
-                              className="cursor-pointer"
-                            >
-                              {(node.isHub || isFocused) && (
-                                <circle
-                                  cx={node.x}
-                                  cy={node.y}
-                                  r={node.isHub ? (constellationExpanded ? 44 : 72) : (isDense ? 26 : 34)}
-                                  fill="url(#hubGlow)"
-                                  opacity={isFocused ? 0.95 : 0.7}
-                                />
-                              )}
-                              {node.isHub && revealRing < maxRing && (
-                                <circle
-                                  cx={node.x}
-                                  cy={node.y}
-                                  r={constellationExpanded ? 32 : 46}
-                                  fill="none"
-                                  stroke="#F3D77D"
-                                  strokeWidth="1.5"
-                                  strokeOpacity="0.65"
-                                  strokeDasharray="5 5"
-                                />
-                              )}
-                              <circle
-                                cx={node.x}
-                                cy={node.y}
-                                r={radius}
-                                fill={node.isHub || isFocused ? "#E5C158" : isConnected ? "#19345F" : "#0D1E3B"}
-                                stroke={isFocused || isConnected || node.isHub ? "#FDF0BE" : "#4A6187"}
-                                strokeWidth={isFocused || node.isHub ? 2.4 : 1.4}
-                                filter={isFocused || node.isHub ? "url(#goldSoftGlow)" : undefined}
-                              />
-                              <text
-                                x={node.x}
-                                y={node.y + (node.isHub ? (constellationExpanded ? 36 : 54) : (isDense ? 24 : 32))}
-                                textAnchor="middle"
-                                fill={isFocused || node.isHub ? "#FDF0BE" : isConnected ? "#FFFFFF" : "#B7C5DE"}
-                                fontSize={node.isHub ? (constellationExpanded ? (isDense ? "13" : "15") : "18") : (isDense ? "10.5" : "13")}
-                                fontWeight={isFocused || node.isHub ? "700" : "600"}
-                              >
-                                {node.label}
-                              </text>
-                              <text
-                                x={node.x}
-                                y={node.y + (node.isHub ? (constellationExpanded ? 49 : 72) : (isDense ? 35 : 46))}
-                                textAnchor="middle"
-                                fill={node.isHub && revealRing < maxRing ? "#F3D77D" : "#8FA2C2"}
-                                fontSize={node.isHub && !constellationExpanded ? "11.5" : (isDense ? "8.5" : "10")}
-                                fontFamily="monospace"
-                              >
-                                {node.isHub && revealRing < maxRing
-                                  ? revealRing === 0
-                                    ? "Click to Reveal Ring 1"
-                                    : `Click to Build Ring ${revealRing + 1}/${maxRing}`
-                                  : node.shortTag}
-                              </text>
-                            </motion.g>
-                          );
-                        })}
-                      </g>
-                    </svg>
-
-                    {/* Inline KJV Scripture Preview Pop-up when an outer Scripture node is clicked */}
-                    <AnimatePresence>
-                      {previewScripture && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 10 }}
-                          className="absolute bottom-4 right-4 left-4 sm:left-auto sm:w-96 p-4 rounded-xl bg-[#07152E]/95 border border-[#E5C158]/60 shadow-2xl backdrop-blur-md z-20"
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-[#F3D77D]">
-                              <Bookmark className="w-3.5 h-3.5" />
-                              {previewScripture.reference} (KJV)
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setPreviewScripture(null)}
-                              className="text-[#8FA2C2] hover:text-white cursor-pointer"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                          <p className="text-xs sm:text-sm text-[#EFE9DC] leading-relaxed italic border-l-2 border-[#D4AF37] pl-3 my-2">
-                            “{previewScripture.verseText}”
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => onLaunchBibleStudy(previewScripture.reference, activeSpec.shortTitle)}
-                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#081326] bg-[#E5C158] hover:bg-[#F3D77D] px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            <span>Open in Split Bible Study</span>
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  {/* Floating Bottom Focused Doctrine Inspector Dock */}
-                  <div className="relative z-20 mx-4 mb-4 p-4 rounded-2xl bg-[#07152E]/92 border border-[#D4AF37]/35 backdrop-blur-md shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1.5 max-w-2xl">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-[#D4AF37]/15 border border-[#D4AF37]/40 text-[#F6E29B]">
-                          {focusedNode.shortTag}
-                        </span>
-                        <h3 className="font-serif text-lg font-bold text-[#FDF0BE]">{focusedNode.label}</h3>
-                      </div>
-                      <p className="text-sm text-[#CFD9EC] leading-relaxed">{focusedNode.summary}</p>
-                      {focusedNode.beliefsIncluded && focusedNode.beliefsIncluded.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-0.5">
-                          {focusedNode.beliefsIncluded.map((b) => (
-                            <span
-                              key={b}
-                              className="text-[11px] px-2 py-0.5 rounded-md bg-[#0D2144] border border-[#D4AF37]/25 text-[#E5C158]"
-                            >
-                              {b}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                        {focusedNode.anchorRefs.map((ref) => (
-                          <button
-                            key={ref}
-                            type="button"
-                            onClick={() => onLaunchBibleStudy(ref, focusedNode.label)}
-                            className="text-[11px] font-mono px-2.5 py-0.5 rounded-md bg-white/5 border border-[#D4AF37]/30 text-[#F3D77D] hover:bg-[#D4AF37]/20 transition-colors cursor-pointer"
-                          >
-                            {ref}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStage("overview");
-                          setBreadcrumbPath([activeSpec.shortTitle]);
-                        }}
-                        className="px-3.5 py-2.5 rounded-xl text-xs font-semibold border border-[#D4AF37]/30 text-[#CFD9EC] hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-                      >
-                        Back to Guide
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleOpenBlueprint}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider text-[#081326] shadow-[0_6px_20px_rgba(212,175,55,0.35)] hover:brightness-110 transition-all cursor-pointer"
-                        style={{ background: "linear-gradient(180deg, #F1D37A 0%, #D4AF37 100%)" }}
-                      >
-                        <span>Open Architectural Blueprint</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>,
-                document.body
-              )}
+              {/* Stage 2 renders via fullScreenConstellationOverlay outside AnimatePresence */}
 
               {/* ===================================================================== */}
               {/* STAGE 3: STRUCTURED ARCHITECTURAL BLUEPRINT (FOUNDATION FOR PHASE 2)  */}
@@ -1166,5 +1163,6 @@ export const DoctrineBlueprintEngine: React.FC<DoctrineBlueprintEngineProps> = (
         </div>
       </div>
     </div>
+    </>
   );
 };
